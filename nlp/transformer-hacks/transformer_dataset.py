@@ -1,31 +1,11 @@
-import glob
-from torch.utils.data import DataLoader, Dataset
-from optimization_playground_shared.nlp.SimpleVocab import splitter
 import os
 import torch
 import random
-from typing import Union
+import glob
+from torch.utils.data import DataLoader, Dataset
+from optimization_playground_shared.nlp.SimpleVocab import splitter
 from abc import ABC, abstractmethod
-
-
-class SimpleTextEncoder:
-    def __init__(self):
-        self.vocab_idx = {}
-        self.idx_vocab = {}
-        self.is_locked = False
-        self.padding_index = self.add_word("<PADDING>")
-
-    def add_word(self, word):
-        if word not in self.vocab_idx:
-            idx = len(self.vocab_idx)
-            self.vocab_idx[word] = idx
-            self.idx_vocab[idx] = word
-        return self.vocab_idx[word]
-
-    def decode_idx(self, word_idx: Union[torch.Tensor, int]):
-        word_idx = word_idx.item() if isinstance(word_idx, torch.Tensor) else word_idx
-        return self.idx_vocab[word_idx]
-
+from dataset_tokenizer import SimpleTextEncoder
 
 class TransformerDataset(ABC):
     @property
@@ -57,6 +37,8 @@ class TransformerDataset(ABC):
         pass
 
     def __getitem__(self, index):
+        if isinstance(self.X[index], torch.Tensor):
+            return self.X[index], self.y[index]
         return torch.tensor(self.X[index]), torch.tensor(self.y[index])
 
     def __len__(self):
@@ -68,7 +50,7 @@ class TransformerDataset(ABC):
     def sample(self, n):
         return list(
             map(
-                lambda idx: [torch.tensor(self.X[idx]), torch.tensor(self.y[idx])],
+                lambda idx: [*self.__getitem__(idx)],
                 random.sample(range(len(self.X)), k=n),
             )
         )
@@ -150,34 +132,33 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         return TransformerTextDataset._from_documents(documents, sequence_length)
 
     @classmethod
-    def from_file(cls, txt, sequence_length):
+    def from_file(cls, tokenizer, txt, sequence_length):
         documents = []
         with open(txt, "rb") as file:
-            documents.append(splitter(file.read()))
+            documents.append(file.read())
         assert len(documents) > 0
-        return TransformerTextDataset._from_documents(documents, sequence_length)
+        return TransformerTextDataset._from_documents(tokenizer, documents, sequence_length)
 
     @classmethod
-    def _from_documents(self, documents, sequence_length):
-        documents = documents
-        encoder = SimpleTextEncoder()
+    def _from_documents(self, tokenizer: SimpleTextEncoder, documents, sequence_length):
         X, y = [], []
+        tokenizer.is_locked = True
 
         for doc in documents:
+            doc = tokenizer.split(doc)
             space = sequence_length * 2
-            for index, vocab in enumerate(doc[:-space]):
-                encoder.add_word(vocab)
+            for index, _ in enumerate(doc[:-space]):
                 n_tokens_forward = index + sequence_length
-                X.append([encoder.add_word(v) for v in doc[index:n_tokens_forward]])
+                X.append([tokenizer.add_word(v) for v in doc[index:n_tokens_forward]])
                 y.append(
                     [
-                        encoder.add_word(v)
+                        tokenizer.add_word(v)
                         for v in doc[
-                            n_tokens_forward : n_tokens_forward + sequence_length + 1
+                            n_tokens_forward : n_tokens_forward + sequence_length 
                         ]
                     ]
                 )
-        return TransformerTextDataset(X, y, encoder, sequence_length)
+        return TransformerTextDataset(X, y, tokenizer, sequence_length)
 
     def decode(self, word_idx):
         return self.encoder.decode_idx(word_idx)

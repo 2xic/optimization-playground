@@ -1,4 +1,4 @@
-from model import Model, Config
+from model import Model, Config, DEVICE
 from transformer_dataset import TransformerDataset, TransformerTextDataset
 import torch
 import torch.optim as optim
@@ -6,7 +6,15 @@ from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
 from typing import Callable
+from dataset_tokenizer import SimpleTextEncoder
 
+DEBUG = False
+
+print(DEVICE)
+
+def debug_print(*args):
+    if DEBUG:
+        print(*args)
 
 def create_config(vocab_size, padding_index, sequence_length):
     return Config(
@@ -29,7 +37,7 @@ def train(
         sequence_length=dataset.sequence_size,
     )
     config = override(config)
-    model = create_model(config)
+    model = create_model(config).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loader = dataset.iter(
         batch_size=32,
@@ -42,7 +50,9 @@ def train(
         accuracy = 0
         rows = 0
         for X, y in loader:
+            X, y = X.to(DEVICE), y.to(DEVICE)
             y_predicted = model(X)
+
             loss = torch.nn.functional.cross_entropy(
                 y_predicted.view(-1, config.vocab_size),
                 y.view(-1),
@@ -64,26 +74,32 @@ def train(
         epochs_loss.append(loss.item())
         epochs.append(i)
         assert acc <= 100, acc
-        print(f"epoch: {i}, loss: {sum_loss}, accuracy {acc}")
+        debug_print(f"epoch: {i}, loss: {sum_loss}, accuracy {acc}")
 
-        rows = dataset.sample(n=2)
-        for i, j in rows:
-            i = i.reshape((1, -1))
-            predicted = model(i)[0]
-            word_idx = temperature_sampling(predicted)
+        with torch.no_grad():
+            rows = dataset.sample(n=2)
+            for i, j in rows:
+                i, j = i.to(DEVICE), j.to(DEVICE)
+                i = i.reshape((1, -1))
+                predicted = model(i)[0]
+                word_idx = temperature_sampling(predicted)
 
-            next_word_idx = word_idx[-1]
-            expected_word_idx = j[-1]
-            context = "".join([dataset.decode(idx) for idx in i[0]])
-            print(f"\tcontext: {context}")
-            word = dataset.decode(next_word_idx)
-            expected = dataset.decode(expected_word_idx.item())
-            print(f"\tnext token: '{word}'")
-            print(f"\texpected token: '{expected}'")
-            print("")
+                next_word_idx = word_idx[-1]
+                expected_word_idx = j[-1]
+                context = "".join([dataset.decode(idx) for idx in i[0]])
+                debug_print(f"\tcontext: {context}")
+
+                word = dataset.decode(next_word_idx)
+                expected = dataset.decode(expected_word_idx.item())
+                debug_print(f"\tnext token: '{word}'")
+                debug_print(f"\texpected token: '{expected}'")
+                debug_print("")
     return (epochs, epochs_accuracy, epochs_loss)
 
 
 if __name__ == "__main__":
-    text_dataset = TransformerTextDataset.from_file("example.text", sequence_length=4)
+    tokenizer = SimpleTextEncoder("example").build_from_files([
+        "example.text"
+    ])
+    text_dataset = TransformerTextDataset.from_file(tokenizer, "example.text", sequence_length=4)
     train(text_dataset)

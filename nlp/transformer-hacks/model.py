@@ -7,7 +7,7 @@ from optimization_playground_shared.nlp.PositionalEncoding import (
 )
 from enum import Enum
 import torch.nn.functional as F
-from layers import SimpleGQA, MultiheadAttention, DyT, MultiHeadLatentAttention
+from layers import SimpleGQA, MultiheadAttention, DyT, MultiHeadLatentAttention, DEVICE
 
 
 class PositionalEmbeddingType(Enum):
@@ -221,7 +221,7 @@ class SimpleTransformerLayer(nn.Module):
             attn_output, _ = self.self_attention(X, X, X, attn_mask=mask)
             return attn_output
         elif self.configs.transformer_layer == TransformerLayerType.SIMPLE_NO_ATTENTION:
-            return torch.zeros_like(X)
+            return torch.zeros_like(X, device=DEVICE)
         else:
             raise Exception(f"Unknown attention type {self.configs.attention_type}")
 
@@ -322,7 +322,7 @@ class Model(nn.Module):
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
         mask = torch.triu(
-            torch.ones(self.config.sequence_length, self.config.sequence_length),
+            torch.ones(self.config.sequence_length, self.config.sequence_length, device=DEVICE),
             diagonal=1,
         ).bool()
         for layer in self.transformer_layers:

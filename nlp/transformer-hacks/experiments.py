@@ -82,6 +82,7 @@ def transformer_layer():
         TransformerLayerType.SIMPLE,
         TransformerLayerType.SIMPLE_NO_ATTENTION,
     ]:
+        print(f"Testing {transformer_layer}")
         epochs_accuracy = MinMaxArray()
         epochs_loss = MinMaxArray()
         for _ in range(SAMPLE_SIZE):
@@ -117,6 +118,7 @@ def normalization_layer():
         NormalizationLayerType.LAYER_NORM,
         NormalizationLayerType.DyT,
     ]:
+        print(f"Testing {normalization_layer}")
         epochs_accuracy = MinMaxArray()
         epochs_loss = MinMaxArray()
         for _ in range(SAMPLE_SIZE):
@@ -142,6 +144,7 @@ def mixture_of_expert_model_vs_standard():
         ((lambda x: Model(x), "normal")),
         ((lambda x: MoE(x), "moe"))
     ]:
+        print(f"Testing {name}")
         epochs_accuracy = MinMaxArray()
         epochs_loss = MinMaxArray()
         for _ in range(SAMPLE_SIZE):
@@ -166,12 +169,12 @@ def test_pass():
             transformer_layer=TransformerLayerType.DEEPSEEK,
         ),
     )
-    print(f"Accuracy {accuracy}, Loss: {loss}")
+#    print(f"Accuracy {accuracy}, Loss: {loss}")
 
 
 if __name__ == "__main__":
     test_pass()
     mixture_of_expert_model_vs_standard()
-  #  positional_embeddings()
- #   transformer_layer()
-#    normalization_layer()
+    positional_embeddings()
+    transformer_layer()
+    normalization_layer()

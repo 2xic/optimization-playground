@@ -45,7 +45,6 @@ class MinMaxArray:
         min = list(map(lambda x: x.min, self.min_max_avg))
         max = list(map(lambda x: x.max, self.min_max_avg))
         avg = list(map(lambda x: x.avg, self.min_max_avg))
-        print(len(self.min_max_avg))
         return min, max, avg
 
 

@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
 
 class MultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_query_heads, num_groups=None):
@@ -165,9 +167,9 @@ class MultiHeadLatentAttention(nn.Module):
 class DyT(nn.Module):
     def __init__(self, C, init_α=0.5):
         super().__init__()
-        self.α = nn.Parameter(torch.ones(1) * init_α)
-        self.γ = nn.Parameter(torch.ones(C))
-        self.β = nn.Parameter(torch.zeros(C))
+        self.α = nn.Parameter(torch.ones(1, device=DEVICE) * init_α)
+        self.γ = nn.Parameter(torch.ones(C, device=DEVICE))
+        self.β = nn.Parameter(torch.zeros(C, device=DEVICE))
 
     def forward(self, x):
         x = F.tanh(self.α * x)
