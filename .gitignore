@@ -1,0 +1,5 @@
+notes.txt
+data
+__pycache__
+.pytest_cache
+path
