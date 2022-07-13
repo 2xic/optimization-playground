@@ -9,13 +9,15 @@ from torch.utils.data import DataLoader
 from transformers import FSMTTokenizer
 
 class Wmt16Dataloader(Dataset):
-    def __init__(self, train):
+    def __init__(self, train=True):
         builder = load_dataset_builder(
             "wmt16",
             "de-en",
         )
         mname = "allenai/wmt16-en-de-dist-12-1"
-        self.tokenizer = FSMTTokenizer.from_pretrained(mname)
+        self.tokenizer: FSMTTokenizer = FSMTTokenizer.from_pretrained(mname)
+        self.beginning_token = self.tokenizer.eos_token_id
+        self.end_token = self.tokenizer.bos_token_id
 
         # Standard version
         builder.download_and_prepare()
