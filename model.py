@@ -4,45 +4,54 @@ import torch.nn as nn
 from attention import AttentionLayer
 
 class EncoderModel(torch.nn.Module):
-    def __init__(self, input_size):
+    def __init__(self, input_size, vocab_size):
         super(EncoderModel, self).__init__()
 
-        self.hidden_size = input_size #// 2
+        self.input_size = input_size
+        self.vocab_size = vocab_size
+        self.block_size = vocab_size // 32
+        self.hidden_size = input_size // 32
         
-        self.embedding = nn.Embedding(input_size, self.hidden_size)
-        self.gru = nn.GRU(input_size * self.hidden_size, input_size)
+        self.embedding = nn.Embedding(vocab_size, self.hidden_size)
+        self.gru = nn.GRU(self.input_size * self.hidden_size, self.block_size)
 
         self.blocks = [
-            AttentionLayer(input_size, input_size),
-            torch.nn.Linear(input_size, input_size)
+            AttentionLayer(self.block_size, self.block_size),
+            torch.nn.Linear(self.block_size, self.block_size)
         ] * 3
+        self.last_bock = torch.nn.Linear(self.block_size, vocab_size)
 
     def forward(self, x, hidden=None):
         hidden = self.get_empty_hidden() if hidden is None else hidden
-        embedded = self.embedding(x).view(1, 1, -1)
-        output = embedded
-        output, hidden = self.gru(output, hidden)
-        x = output.view(1, -1)
+
+        x = self.embedding(x).view(1, 1, -1)
+        x, hidden = self.gru(x, hidden)
+        x = x.view(1, -1)
         for i in self.blocks:
             x = torch.nn.functional.normalize(i(x) + x)
-        return output, hidden
+        x = self.last_bock(x)
+        return x, hidden
 
     def get_empty_hidden(self):
-        return torch.zeros(1, 1, self.hidden_size)
+        return torch.zeros(1, 1, self.block_size)
 
 class DecoderModel(torch.nn.Module):
-    def __init__(self, input_size):
+    def __init__(self, input_size, vocab_size):
         super(DecoderModel, self).__init__()
 
-        self.hidden_size = input_size #// 2
-        
-        self.embedding = nn.Embedding(input_size, self.hidden_size)
-        self.gru = nn.GRU(input_size * self.hidden_size, input_size)
+        self.input_size = input_size
+        self.vocab_size = vocab_size
+        self.hidden_size = input_size // 32
+        self.block_size = vocab_size // 32
 
+        self.embedding = nn.Embedding(vocab_size, self.hidden_size)
+        self.gru = nn.GRU(self.input_size * self.hidden_size, self.block_size)
+        
         self.blocks = [
-            AttentionLayer(input_size, input_size),
-            torch.nn.Linear(input_size, input_size)
+            AttentionLayer(self.block_size, self.block_size),
+            torch.nn.Linear(self.block_size, self.block_size)
         ] * 3
+        self.last_bock = torch.nn.Linear(self.block_size, vocab_size)
 
     def forward(self, x, hidden=None):
         hidden = self.get_empty_hidden() if hidden is None else hidden
@@ -51,12 +60,12 @@ class DecoderModel(torch.nn.Module):
         hidden = hidden.type(torch.float)
     
         output, hidden = self.gru(output, hidden)
-    
         x = output.view(1, -1)
         for i in self.blocks:
             x = torch.nn.functional.normalize(i(x) + x)
-        return output, hidden
+        x = self.last_bock(x)
+        return x, hidden
 
     def get_empty_hidden(self):
-        return torch.zeros(1, 1, self.hidden_size)
+        return torch.zeros(1, 1, self.block_size)
 

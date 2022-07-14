@@ -16,8 +16,9 @@ class Wmt16Dataloader(Dataset):
         )
         mname = "allenai/wmt16-en-de-dist-12-1"
         self.tokenizer: FSMTTokenizer = FSMTTokenizer.from_pretrained(mname)
-        self.beginning_token = self.tokenizer.eos_token_id
+        self.beginning_token = self.tokenizer.sep_token_id
         self.end_token = self.tokenizer.bos_token_id
+        self.vocab_size = self.tokenizer.vocab_size + 1
 
         # Standard version
         builder.download_and_prepare()
