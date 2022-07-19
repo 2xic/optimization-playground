@@ -7,8 +7,8 @@ class TestLayerForward(unittest.TestCase):
     def test_iterate(self):
         rows = 1
         input_size = 10
-        encoder = EncoderModel(input_size)
-        decoder = DecoderModel(input_size)
+        encoder = EncoderModel(input_size, 100)
+        decoder = DecoderModel(input_size, 100)
         iterate = Iterator(
             encoder,
             decoder,
@@ -22,6 +22,8 @@ class TestLayerForward(unittest.TestCase):
             input_tensor,
             output_tensor,
         )
+        assert 10 == iterate.encoder_loop_iterations
+        assert 10 == iterate.decoder_loop_iterations
 
 if __name__ == '__main__':
     unittest.main()

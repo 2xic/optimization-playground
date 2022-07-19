@@ -13,13 +13,13 @@ class EncoderModel(torch.nn.Module):
         self.hidden_size = input_size // 32
         
         self.embedding = nn.Embedding(vocab_size, self.hidden_size)
-        self.gru = nn.GRU(self.input_size * self.hidden_size, self.block_size)
+        self.gru = nn.GRU(self.hidden_size, self.block_size)
 
-        self.blocks = [
+        self.blocks = nn.Sequential(*[
             AttentionLayer(self.block_size, self.block_size),
             torch.nn.Linear(self.block_size, self.block_size)
-        ] * 3
-        self.last_bock = torch.nn.Linear(self.block_size, vocab_size)
+        ] * 3)
+     #   self.last_bock = torch.nn.Linear(self.block_size, vocab_size)
 
     def forward(self, x, hidden=None):
         hidden = self.get_empty_hidden() if hidden is None else hidden
@@ -27,9 +27,8 @@ class EncoderModel(torch.nn.Module):
         x = self.embedding(x).view(1, 1, -1)
         x, hidden = self.gru(x, hidden)
         x = x.view(1, -1)
-        for i in self.blocks:
+        for i in self.blocks.children():
             x = torch.nn.functional.normalize(i(x) + x)
-        x = self.last_bock(x)
         return x, hidden
 
     def get_empty_hidden(self):
@@ -45,15 +44,15 @@ class DecoderModel(torch.nn.Module):
         self.block_size = vocab_size // 32
 
         self.embedding = nn.Embedding(vocab_size, self.hidden_size)
-        self.gru = nn.GRU(self.input_size * self.hidden_size, self.block_size)
+        self.gru = nn.GRU(self.hidden_size, self.block_size)
         
-        self.blocks = [
+        self.blocks = nn.Sequential(*[
             AttentionLayer(self.block_size, self.block_size),
             torch.nn.Linear(self.block_size, self.block_size)
-        ] * 3
+        ] * 3)
         self.last_bock = torch.nn.Linear(self.block_size, vocab_size)
 
-    def forward(self, x, hidden=None):
+    def forward(self, x, encoder, hidden=None):
         hidden = self.get_empty_hidden() if hidden is None else hidden
         embedded = self.embedding(x).view(1, 1, -1)
         output = embedded.type(torch.float)
@@ -61,10 +60,15 @@ class DecoderModel(torch.nn.Module):
     
         output, hidden = self.gru(output, hidden)
         x = output.view(1, -1)
-        for i in self.blocks:
-            x = torch.nn.functional.normalize(i(x) + x)
+#        for i in self.blocks:
+        for index, i in enumerate(self.blocks.children()):
+            if index == 1:
+                x = torch.nn.functional.normalize(i(x) + x + encoder[0])
+            else:
+                x = torch.nn.functional.normalize(i(x) + x)
+
         x = self.last_bock(x)
-        return x, hidden
+        return torch.softmax(x, dim=1), hidden
 
     def get_empty_hidden(self):
         return torch.zeros(1, 1, self.block_size)

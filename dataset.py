@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 from transformers import FSMTTokenizer
 
 class Wmt16Dataloader(Dataset):
-    def __init__(self, train=True):
+    def __init__(self, train=True, try_to_overfit=False):
         builder = load_dataset_builder(
             "wmt16",
             "de-en",
@@ -24,8 +24,14 @@ class Wmt16Dataloader(Dataset):
         builder.download_and_prepare()
         self.ds = builder.as_dataset()
         self.data = self.ds["train"] if train else self.ds["test"]
+        self.try_to_overfit = try_to_overfit
+
+    def decode(self, token_ids):
+        return self.tokenizer.decode(token_ids)
 
     def __len__(self):
+        if self.try_to_overfit:
+            return 3
         return len(self.data)
 
     def __getitem__(self, idx):
