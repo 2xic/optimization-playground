@@ -9,8 +9,8 @@ class AttentionLayer(nn.Module):
     def __init__(self, size_in, size_out):
         super().__init__()
         self.size_in, self.size_out = size_in, size_out
-        channel_size = 4
-        channel_size_2 = 11
+        channel_size = 32
+        channel_size_2 = 64
 
         self.q = nn.Linear(channel_size, size_out, bias=False)
         self.k = nn.Linear(channel_size, channel_size_2, bias=False)
