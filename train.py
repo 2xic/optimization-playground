@@ -1,10 +1,21 @@
 
 from dataloader import Cifar10Dataloader
-from model import Net, SimpleModel
+from model import Net, Projection, SimpleModel
 from torch.utils.data import  DataLoader
 import pytorch_lightning as pl
 
-model = SimpleModel(Net())
+"""
+base model that we are comparing against.
+"""
+
+
+base_encoder = Net()
+projection = Projection()
+
+model = SimpleModel(
+    base_encoder,
+    projection
+)
 
 train_loader = DataLoader(Cifar10Dataloader(), batch_size=4,
                         shuffle=True, num_workers=4)
