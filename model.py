@@ -34,11 +34,12 @@ class Projection(nn.Module):
     def __init__(self):
         super().__init__()
         self.projection_in = nn.Linear(100, 64)
-        self.projection_out = nn.Linear(64, 32)
+        self.projection_out = nn.Linear(64, 2)
 
     def forward(self, x):
+        x = F.relu(x)
         x = F.relu(self.projection_in(x))
-        x = self.projection_out(x)
+        x = torch.sigmoid(self.projection_out(x))
         return x
 
 class SimClrModel(pl.LightningModule):
@@ -56,23 +57,45 @@ class SimClrModel(pl.LightningModule):
         z_k_1 = self.projection(self.model(x))
         z_k_2 = self.projection(self.model(y))
 
-        N = len(batch)
+        N = (x.shape[0])
 
-        z = sum([(z_k_1[i], z_k_2[i]) for i in range(N)], ())
+        z = []
+        for i in range(N):
+          #  print(z_k_1.shape)
+         #   print(i)
+            z.append(z_k_1[i])
+            z.append(z_k_2[i])
+  #      print(z)
+        #sum([(z_k_1[i], z_k_2[i]) for i in range(N)], ())
         assert len(z) == 2*N
+#        print(z)
+ #       print(z_k_1)
+   #     exit(0)
+
+        assert torch.allclose(z_k_1, z_k_2) == False, "Most likely something wrong"
+        assert (z_k_1).isnan().any() == False, z_k_1 
+        assert (z_k_2.isnan()).any() == False, z_k_2
 
         s = torch.zeros((2*N, 2*N))
+        total_sim = torch.zeros(1)
         for i in range(N * 2):
             for j in range(2*N):
-                results: torch.Tensor = (
-                    z[i].T * z[j]) / (torch.norm(z[i]) * torch.norm(z[j]))
-                s[i][j] = results.sum(dim=-1)
+                results: torch.Tensor = (z[i].T @ z[j]) / (torch.norm(z[i]) * torch.norm(z[j]))
+                # ^ this always output a value that is the same
+                # most likely something buggy with the implementation I wrote :)
+                # print(pairwise_cosine_similarity(z[i].reshape(1, -1), z[j].reshape(1, -1)))
+                # or maybe not, I get the same results as pairwise_cosine_similarity
+              #  print(results.mean(dim=-1))
 
+                # me testing a more "stable" loss
+                s[i][j] = torch.relu((z[i] - z[j])).sum(dim=-1)
+
+                total_sim += results.sum(dim=-1)
         temperature = 0.5
 
         def loss(i, j):
-            return torch.log(
-                torch.exp(s[i][j]) / temperature
+            return -torch.log(
+                torch.exp(s[i][j] / temperature)
             ) / (
                 torch.sum(
                     torch.tensor([
@@ -87,8 +110,13 @@ class SimClrModel(pl.LightningModule):
                 loss_value = loss(2 * k - 1, 2*k) + loss(2*k, 2 * k - 1)
             else:
                 loss_value += loss(2 * k - 1, 2*k) + loss(2*k, 2 * k - 1)
+        
+        loss_value *= 1 / 2 * N
 
         self.log("train_loss", loss_value)
+        self.log("total_sim", total_sim)
+        self.log("total_sim_avg", total_sim / 4 * N)
+
         return loss_value
 
     def configure_optimizers(self):

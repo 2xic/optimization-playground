@@ -37,7 +37,7 @@ class SimClrCifar100Dataloader(Dataset):
                                                           download=True, transform=transform)
 
         transforms_seq_1 = torch.nn.Sequential(
-            transforms.CenterCrop(10),
+            torchvision.transforms.GaussianBlur(3),
             torchvision.transforms.ColorJitter(),
             transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
         )
@@ -48,8 +48,10 @@ class SimClrCifar100Dataloader(Dataset):
 
         self.transformations = [
             torchvision.transforms.RandomRotation(180),
+            torchvision.transforms.RandomRotation(90),
+            torchvision.transforms.RandomRotation(270),
             torchvision.transforms.ColorJitter(),
-          #  transforms_seq_1,
+            transforms_seq_1,
             transforms_seq_2,
         ]
 
