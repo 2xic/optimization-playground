@@ -26,6 +26,7 @@ def test_model(model):
 if __name__ == "__main__":
     model = Net()
     projection = Projection()
+    path = "checkpoints/lightning_logs/version_30/checkpoints/epoch=27-step=14000.ckpt"
     loaded_checkpoint = SimClrModel.load_from_checkpoint(
-        checkpoint_path="checkpoints/lightning_logs/version_5/checkpoints/epoch=99-step=50000.ckpt", model=model, projection=projection)
+        checkpoint_path=path, model=model, projection=projection)
     test_model(model)

@@ -15,12 +15,15 @@ model = SimClrModel(
     projection
 )
 
-train_loader = DataLoader(SimClrCifar100Dataloader(), batch_size=32,
-                          shuffle=True, num_workers=4)
+train_loader = DataLoader(SimClrCifar100Dataloader(),
+                          batch_size=64,
+                          shuffle=True, 
+                          num_workers=8)
 
 trainer = pl.Trainer(
-    limit_train_batches=100,
-    max_epochs=5, #30,
+    accelerator="gpu",
+    limit_train_batches=500,
+    max_epochs=30,  # 30,
     enable_checkpointing=True,
     default_root_dir="./checkpoints"
 )
@@ -43,12 +46,16 @@ Okay, I guess something is wrong with the simclr logic.
     - retraining with 10 epochs for simclr + 30 for feature model
     - now the loss is stuck even more. 
     - 10 % acc
+- tried to do some changes to the loss because it get's stuck
+    - low accuracy (0.12 %)
 - found a bug with the wait the Z was constructed. Looked at the batch input size (X,y )    
     instead of the shape batch tensor size. Ops
     - retraing now.
     - loss is decreasing, and I trained for a few epochs.
     - accuaracy 0.18%
 - will try again tomorrow to train for a longer time period, and see what happens :)
-    
+    - Does not work. It's clearly something more wrong with the loss, or some
+        other adjustments that have to be done to make it happy.
+- need to optimize the cosine similiarty function, it slows down the gpu training
 """
 test_model(model=model)

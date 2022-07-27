@@ -1,12 +1,20 @@
-from regex import P
 from torch import optim, nn
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchmetrics.functional import pairwise_cosine_similarity
+import time
 
 # just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
+
+DEBUG = False
+
+
+def debug_assert(condition):
+    if DEBUG:
+        return condition
+    return True
 
 
 class Net(nn.Module):
@@ -26,7 +34,6 @@ class Net(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
-#        x = F.softmax(self.fc3(x), dim=1)
         return x
 
 
@@ -34,53 +41,60 @@ class Projection(nn.Module):
     def __init__(self):
         super().__init__()
         self.projection_in = nn.Linear(100, 64)
-        self.projection_out = nn.Linear(64, 2)
+        self.projection_out = nn.Linear(64, 100)
 
     def forward(self, x):
-        x = F.relu(x)
         x = F.relu(self.projection_in(x))
-        x = torch.sigmoid(self.projection_out(x))
+        x = self.projection_out(x)
         return x
 
+
 class SimClrModel(pl.LightningModule):
-    def __init__(self, model, projection):
+    def __init__(self, model, projection, debug=False):
         super().__init__()
         self.model = model
         self.projection = projection
+        self.debug = debug
 
     def forward(self, X):
-        return self.model(X)
+        return self.projection(self.model(X))
 
     def training_step(self, batch, batch_idx):
-        x, y = batch
+        x, y = batch    
 
-        z_k_1 = self.projection(self.model(x))
-        z_k_2 = self.projection(self.model(y))
+        print(x.device)
+
+        self.timer_start()
+        z_k_1 = self.forward(x)
+        z_k_2 = self.forward(y)
+        self.timer_end("Forward")
 
         N = (x.shape[0])
 
         z = []
         for i in range(N):
-          #  print(z_k_1.shape)
-         #   print(i)
             z.append(z_k_1[i])
             z.append(z_k_2[i])
-  #      print(z)
-        #sum([(z_k_1[i], z_k_2[i]) for i in range(N)], ())
+
         assert len(z) == 2*N
-#        print(z)
- #       print(z_k_1)
-   #     exit(0)
+        assert debug_assert(torch.allclose(z_k_1, z_k_2) ==
+                            False), "Most likely something wrong"
+        assert debug_assert((z_k_1).isnan().any() == False), z_k_1
+        assert debug_assert((z_k_2.isnan()).any() == False), z_k_2
 
-        assert torch.allclose(z_k_1, z_k_2) == False, "Most likely something wrong"
-        assert (z_k_1).isnan().any() == False, z_k_1 
-        assert (z_k_2.isnan()).any() == False, z_k_2
+        s = torch.zeros((2*N, 2*N)).type_as(x)
+        total_sim = torch.zeros(1).type_as(x)
 
-        s = torch.zeros((2*N, 2*N))
-        total_sim = torch.zeros(1)
-        for i in range(N * 2):
+
+        cos = lambda m: F.normalize(m) @ F.normalize(m).t()
+          # [32, 100, 100]
+#        print(torch.nn.functional.cosine_similarity(z[:,:,None], z.t()[None,:,:]))
+
+        self.timer_start()
+        for i in range(2 * N):
             for j in range(2*N):
-                results: torch.Tensor = (z[i].T @ z[j]) / (torch.norm(z[i]) * torch.norm(z[j]))
+                results: torch.Tensor = (
+                    z[i].T @ z[j]) / (torch.norm(z[i]) * torch.norm(z[j]))
                 # ^ this always output a value that is the same
                 # most likely something buggy with the implementation I wrote :)
                 # print(pairwise_cosine_similarity(z[i].reshape(1, -1), z[j].reshape(1, -1)))
@@ -88,29 +102,36 @@ class SimClrModel(pl.LightningModule):
               #  print(results.mean(dim=-1))
 
                 # me testing a more "stable" loss
-                s[i][j] = torch.relu((z[i] - z[j])).sum(dim=-1)
+#                s[i][j] = torch.relu((z[i] - z[j])).sum(dim=-1)
+                s[i][j] = results.mean(dim=-1)
 
                 total_sim += results.sum(dim=-1)
-        temperature = 0.5
+        self.timer_end("SIm array")
 
+        temperature = 0.5
         def loss(i, j):
             return -torch.log(
                 torch.exp(s[i][j] / temperature)
             ) / (
-                torch.sum(
-                    torch.tensor([
-                        torch.exp(s[i][k] / temperature) for k in range(N) if k != i
-                    ])
-                )
+                (torch.sum(
+                 torch.exp(s[i] / temperature)
+                 # torch.tensor([
+                 #    torch.exp(s[i] / temperature) for k in range(N) if k != i
+                    # ])
+                 )
+                 - torch.exp(s[i][i] / temperature)
+                 )
             )
 
-        loss_value = None
-        for k in range(1, N):
-            if loss_value is None:
-                loss_value = loss(2 * k - 1, 2*k) + loss(2*k, 2 * k - 1)
-            else:
-                loss_value += loss(2 * k - 1, 2*k) + loss(2*k, 2 * k - 1)
-        
+        def loss_compute(k): return loss(2 * k - 1, 2*k) + loss(2*k, 2 * k - 1)
+
+        self.timer_start()
+        loss_value = loss_compute(1).type_as(x)
+        for k in range(2, N):
+            loss_value += loss_compute(k).type_as(x)
+
+        self.timer_end("Loss calculation")
+
         loss_value *= 1 / 2 * N
 
         self.log("train_loss", loss_value)
@@ -123,6 +144,11 @@ class SimClrModel(pl.LightningModule):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
 
+    def timer_start(self):
+        self.start = time.time()
+
+    def timer_end(self, action):
+        print(action + " : " + str(time.time() - self.start))
 
 
 class SimpleModel(pl.LightningModule):
@@ -144,7 +170,7 @@ class SimpleModel(pl.LightningModule):
         x, y = batch
         z = self.model(x)
         loss = nn.functional.cross_entropy(z, y)
-        batch_size = x.shape[0] 
+        batch_size = x.shape[0]
         predictions = torch.argmax(z, dim=1)
         # if all are non zero accuracy = batch size
         accuracy = batch_size - torch.count_nonzero(predictions - y)
@@ -155,7 +181,3 @@ class SimpleModel(pl.LightningModule):
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)
         return optimizer
-
-
-
-
