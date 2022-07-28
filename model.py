@@ -71,26 +71,31 @@ class SimClrModel(pl.LightningModule):
 
         N = (x.shape[0])
 
-        z = []
-        for i in range(N):
-            z.append(z_k_1[i])
-            z.append(z_k_2[i])
+#        z = []
+#        for i in range(N):
+#            z.append(z_k_1[i])
+#            z.append(z_k_2[i])
 
-        assert len(z) == 2*N
+        z_fast = torch.zeros(N * 2, z_k_1.shape[-1])
+        z_fast[::2, :] = z_k_1 
+        z_fast[1::2, :] = z_k_2
+
+#        assert len(z) == 2*N
         assert debug_assert(torch.allclose(z_k_1, z_k_2) ==
                             False), "Most likely something wrong"
         assert debug_assert((z_k_1).isnan().any() == False), z_k_1
         assert debug_assert((z_k_2.isnan()).any() == False), z_k_2
 
-        s = torch.zeros((2*N, 2*N)).type_as(x)
+#        s = torch.zeros((2*N, 2*N)).type_as(x)
         total_sim = torch.zeros(1).type_as(x)
-
-
-        cos = lambda m: F.normalize(m) @ F.normalize(m).t()
-          # [32, 100, 100]
-#        print(torch.nn.functional.cosine_similarity(z[:,:,None], z.t()[None,:,:]))
-
         self.timer_start()
+        def fast_sim(Z):
+            z_norm = Z / Z.norm(dim=1)[:, None]
+            z_norm = Z / Z.norm(dim=1)[:, None]
+            res = torch.mm(z_norm, z_norm.transpose(0,1))
+            return res
+        s = fast_sim(z_fast)
+        """
         for i in range(2 * N):
             for j in range(2*N):
                 results: torch.Tensor = (
@@ -102,10 +107,11 @@ class SimClrModel(pl.LightningModule):
               #  print(results.mean(dim=-1))
 
                 # me testing a more "stable" loss
-#                s[i][j] = torch.relu((z[i] - z[j])).sum(dim=-1)
+                #                s[i][j] = torch.relu((z[i] - z[j])).sum(dim=-1)
                 s[i][j] = results.mean(dim=-1)
 
                 total_sim += results.sum(dim=-1)
+        """
         self.timer_end("SIm array")
 
         temperature = 0.5
