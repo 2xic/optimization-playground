@@ -4,7 +4,7 @@ from model import Net, Projection, SimClrModel
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 
-from test_simclr import test_model
+from transfer_trained_simclr import test_model
 
 
 base_encoder = Net()
@@ -52,10 +52,10 @@ Okay, I guess something is wrong with the simclr logic.
     instead of the shape batch tensor size. Ops
     - retraing now.
     - loss is decreasing, and I trained for a few epochs.
-    - accuaracy 0.18%
+    - accuracy 0.18%
 - will try again tomorrow to train for a longer time period, and see what happens :)
     - Does not work. It's clearly something more wrong with the loss, or some
         other adjustments that have to be done to make it happy.
-- need to optimize the cosine similiarty function, it slows down the gpu training
+- need to optimize the cosine similarly function, it slows down the gpu training
 """
 test_model(model=model)
