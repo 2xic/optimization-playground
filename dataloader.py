@@ -61,11 +61,11 @@ class SimClrCifar100Dataloader(Dataset):
     def __getitem__(self, idx):
         X, _ = self.dataset[idx]
         
-        state = torch.get_rng_state()
+      #  state = torch.get_rng_state()
         transformation = self.transformations[random.randint(0, len(self.transformations) - 1)]
 
         t_x = transformation(X)
-        torch.set_rng_state(state)
+     #   torch.set_rng_state(state)
         t_y  = transformation(X)
 
         return t_x, t_y
