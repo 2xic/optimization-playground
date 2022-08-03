@@ -1,12 +1,10 @@
-
-from torch import maximum
 from max_item import MaxItem
-from mock_model import MockModel
+from model import Model
 
 
 class Q_valuePlanning:
     def __init__(self, model) -> None:
-        self.model = model
+        self.model: Model = model
         self.b_actions = 2
         self.action_size = 4
         self.depth = 4
@@ -14,7 +12,7 @@ class Q_valuePlanning:
     def rollout(self, state):
         maxItem = MaxItem()
         for i in range(self.action_size):
-            encoded_state = self.model.transition(state, i)
+            encoded_state = self.model.encode(state)
             maxItem.max(
                 self._planning(encoded_state, i, self.depth),
                 i

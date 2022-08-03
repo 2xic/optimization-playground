@@ -1,7 +1,7 @@
 import torch
+from model import Model
 
-
-class MockModel:
+class MockModel(Model):
     def __init__(self) -> None:
         pass
 
@@ -21,3 +21,6 @@ class MockModel:
 
     def value(self, _state):
         return torch.rand(1)
+
+    def encode(self, _state):
+        return torch.rand(3)
