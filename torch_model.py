@@ -65,7 +65,6 @@ class TorchModel(Model):
         return self.model.value(state)
     
     def encode(self, state):
-        print(state)
         assert state.shape[-1] == 2
         state = self._reshape(state)
         return self.model.encode(state)

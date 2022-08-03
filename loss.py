@@ -15,9 +15,9 @@ class Loss:
 
     def iterate(self, model: Model):
         self.K = 3
+        loss = torch.zeros(1)
         for index in range(len(self.trajectory) - self.K):
             model_state = None
-            loss = torch.zeros(1)
             Reward = torch.zeros(1)
             for k in range(self.K):                
                 (state, action, reward, gamma) = self.trajectory[index + k]
@@ -49,7 +49,7 @@ class Loss:
                     )
                 )
                 self.iterations += 1
-            
+        return loss            
 
     def loss(self, value: Prediction, reward: Prediction, gamma: Prediction):
         return (
