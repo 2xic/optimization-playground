@@ -4,6 +4,7 @@ from enum import Enum
 class RockPaperScissor:
     def __init__(self) -> None:
         # rock, paper, scissor
+        # optimal policy
         self.policy = [
             0.4, 0.4, 0.2
         ]
@@ -31,6 +32,10 @@ class Gesture:
         self.gesture = self.mapping[action] 
 
     def winner(self, gesture):
+        """
+            There is an error here
+            In the paper they give double the reward / loss for scissor 
+        """
         if (self.gesture == gesture.gesture):
             return 0 
         elif self.gesture == self.PAPER and gesture.gesture == gesture.ROCK:
