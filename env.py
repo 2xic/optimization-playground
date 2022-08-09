@@ -1,6 +1,12 @@
 import numpy as np
 from enum import Enum
 
+
+"""
+Should be a version of 
+Rock-paper-scissors +
+"""
+
 class RockPaperScissor:
     def __init__(self) -> None:
         # rock, paper, scissor
