@@ -7,3 +7,8 @@
     - 
 """
 
+from pbs import PBS
+from rebel import Rebel
+
+Rebel(None, None).linear(PBS())
+

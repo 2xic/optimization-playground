@@ -42,19 +42,23 @@ class Gesture:
             There is an error here
             In the paper they give double the reward / loss for scissor 
         """
+        amplifier = 2 if (
+            gesture.gesture == gesture.SCISSOR
+            or self.gesture == gesture.SCISSOR
+        ) else 1
         if (self.gesture == gesture.gesture):
             return 0 
         elif self.gesture == self.PAPER and gesture.gesture == gesture.ROCK:
             # we win 
-            return 1
+            return 1 * amplifier
         elif self.gesture == self.SCISSOR and gesture.gesture == gesture.PAPER:
             # we win 
-            return 1
+            return 1 * amplifier
         elif self.gesture == self.ROCK and gesture.gesture == gesture.SCISSOR:
             # we win 
-            return 1
+            return 1 * amplifier
         else:
-            return -1
+            return -1 * amplifier
 
 class Actions(Enum):
     ROCK = 0

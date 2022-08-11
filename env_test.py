@@ -25,3 +25,16 @@ class TestEnv(unittest.TestCase):
         ).winner(
             Gesture(Actions.PAPER.value)
         ) == 0
+
+        assert Gesture(
+            Actions.SCISSOR.value
+        ).winner(
+            Gesture(Actions.PAPER.value)
+        ) == 2
+
+        assert Gesture(
+            Actions.PAPER.value
+        ).winner(
+            Gesture(Actions.SCISSOR.value)
+        ) == -2
+

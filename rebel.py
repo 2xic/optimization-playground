@@ -1,6 +1,8 @@
 import random
+from tracemalloc import take_snapshot
 from dataset import Dataset
 import numpy as np
+from fake_policy import FakePolicy
 from pbs import PBS
 
 """
@@ -8,10 +10,11 @@ Algorithm 2
 """
 
 class Rebel:
-    def __init__(self, model) -> None:
-        self.model = model
+    def __init__(self, policy, value) -> None:
+        self.policy = policy
+        self.value = value
         self.dataset = Dataset()
-
+        self.count = 0
     """
     So the way I understand this is the following.
     - PBS is basically a state distribution encoded by a model with the current state.
@@ -31,45 +34,68 @@ class Rebel:
             
             # initialize a policy given the sub game, and policy
             # *paper sets pi, pi^t_warm here
-            policy, policy_t = None, None
+            policy, policy_t = FakePolicy()(None), FakePolicy()(None)
 
             # Set the leaf nodes from the nn
             G = self.set_leaf_values(
                 pbs,
-                self.model.policy,
-                self.model.value
+                self.policy,
+                self.value
             )
-            value = None # compute ev based on the policy and current sub game
+            value = self.compute_evg(G, policy_t) # compute ev based on the policy and current sub game
 
             T = 10 # where is this set ?
-            t_sample = random.randint(0, T) # linear sampling to T
+            t_sample = random.randint(1, T - 1) # linear sampling to T
 
             visited_pbs = []
             random_pbs = None
             for t in range(1, T):
+                #print(t, t_sample)
                 if t == t_sample:
                     """
                     sample a leaf from the sub game
                     """
-                    random_pbs = None 
+                    random_pbs = self.sample_leaf(G, policy)
 
+                
+                # Update policy 
                 # update policy -> This should use cfr (I think ?)
                 #                   ^ or is this the model, and EV the CFR ? 
                 #                   No in the paper they write "On each iteration t, CFR-D determines a policy profile πin the subgame."
-                policy_t = None 
+                policy_t = FakePolicy()(pbs) 
+
                 policy = (t / (t + 2)) * policy + (2 / (t + 2)) * policy_t
 
                 # outputs new policy
                 G = self.set_leaf_values(
                     pbs,
                     policy_t,
-                    self.model.value
-                ) 
+                    self.value
+                )
+
+                value = (t / (t+2)) *  value + (2 / (t + 2)) * self.compute_evg(G, policy_t)
+                visited_pbs.append(pbs)
+
+            # Add to value net training data
             self.dataset.add_value_net(pbs, value)
 
             for i in visited_pbs:
-                self.dataset.add_policy_net(i, policy(i))
+                self.dataset.add_policy_net(i, FakePolicy()(i))
+
+            if random_pbs is None:
+                raise Exception("This should not happened")
+
             pbs = random_pbs
+
+            self.count += 1
+        self.count = 0
+
+    def  is_terminal(self):
+        return not (self.count < 10)
+
+    def compute_evg(self, game, policy):
+        # TODO: should ofc not be static
+        return 10
 
     def construct_subgame(self, pbs):
         """
@@ -79,7 +105,7 @@ class Rebel:
 
         Basically do a rollout
         """
-        pass
+        return pbs
 
     def set_leaf_values(self, pbs: PBS, policy, value):
         """
@@ -91,8 +117,7 @@ class Rebel:
                 # <- need to look at notion in section 3
                 # look at section 5.1 also.
                 #pass
-                i.state = None # v(s_i | pbs, policy)
-            # 
+                i.state_value = self.value(i.state) # v(s_i | pbs, policy)
         else:
             for action in pbs.actions():
                 self.set_leaf_values(
@@ -105,6 +130,7 @@ class Rebel:
                     policy,
                     value
                 )
+        return pbs
 
     def sample_leaf(self, subGame, policy, epsilon=.025):
         search_index = random.randint(0, 1)
@@ -122,10 +148,5 @@ class Rebel:
                     pass
             h = transition(h, a)
         return h
-
-    def is_terminal(self):
-        return False
-
-
 
     
