@@ -118,11 +118,14 @@ Some notes from video https://www.youtube.com/watch?v=mCldyXOYNok
         - stop CFR at random iteration and assume beliefs from that iteration
     - 
 
+## Notes from blogpost 
+- https://towardsdatascience.com/understanding-facebooks-rebel-a-noteworthy-step-in-artificial-general-intelligence-57740917d92f
+  - Okay based on this I initialize the pbs to uniform
+  - 
 
-
-
-
-
+- https://ai.facebook.com/blog/rebel-a-general-game-playing-ai-bot-that-excels-at-poker-and-more/
+  - "This is why public belief states, or PBSs, are crucial. We need to change the definition of a state so that it is not defined simply by a sequence of actions but also includes the probability that different sequences of actions occurred."
+  - 
 
 
 

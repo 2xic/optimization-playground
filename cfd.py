@@ -5,6 +5,7 @@ import numpy as np
 
 class CFD:
     def __init__(self) -> None:
+        # TODO: Should probably make it generic.
         self.ROCK = 0
         self.PAPER = 1
         self.SCISSORS = 2
@@ -13,7 +14,6 @@ class CFD:
         self.regret_sum = np.zeros(self.NUM_ACTIONS)
         self.strategy = np.zeros(self.NUM_ACTIONS)
         self.strategy_sum = np.zeros(self.NUM_ACTIONS)
-        #self.opp_strategy = np.array([0.4, 0.3, 0.3])
 
     def get_strategy(self):
         normalizing_sum = 0
