@@ -4,8 +4,7 @@ from epsilon import Epsilon
 from loss import Loss
 from model import Model
 from q_value_planning import Q_valuePlanning
-from simple_env import SimpleEnv
-
+from optimization_utils.envs.SimpleEnv import SimpleEnv
 
 def play(player: Model, epsilon: Epsilon):
     env = SimpleEnv()
