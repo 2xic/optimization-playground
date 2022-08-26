@@ -14,7 +14,7 @@ class FixMatch:
         prediction_weak = self.get_psuedo_label(model(weak))
         prediction_strong = model(strong)
 
-        return torch.nn.CrossEntropyLoss()(prediction_strong, prediction_weak)
+        return torch.nn.CrossEntropyLoss()(torch.sigmoid(prediction_strong), torch.sigmoid(prediction_weak))
 
     def get_psuedo_label(self, prediction_weak: torch.Tensor):
         indices = torch.argmax(prediction_weak, dim=-1)

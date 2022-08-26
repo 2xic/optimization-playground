@@ -34,28 +34,36 @@ class FixMatchModel(pl.LightningModule):
         self.model = model
         self.fix_match_loss = FixMatch()
 
+        self.unlabeled_size = 7
+        self.unlabeled_loss_weight = 10
+
     def forward(self, X):
         return self.model(X)
 
     def training_step(self, batch):
         x, y, unlabeled = batch    
 
+        x = x[:self.unlabeled_size]
+        y = y[:self.unlabeled_size]
         y_pred = self.forward(x)
         supervised = torch.nn.CrossEntropyLoss()(y_pred, y)
         unsupervised = self.fix_match_loss.loss(self, unlabeled)
 
-        print((supervised, unsupervised))
-
-        return supervised + unsupervised
+        return supervised + unsupervised * self.unlabeled_loss_weight
 
     def test_step(self, batch, _):
         x, y = batch
-        z = self.forward(x)
 
         batch_size = x.shape[0]
-        predictions = torch.argmax(z, dim=1)
+        predictions = self.get_class_predictions(x)
         accuracy = batch_size - torch.count_nonzero(predictions - y)
         self.log("test_accuracy", accuracy / float(batch_size))
+
+
+    def get_class_predictions(self, X):
+        z = self.forward(X)
+        predictions = torch.argmax(z, dim=1)
+        return predictions
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=1e-3)

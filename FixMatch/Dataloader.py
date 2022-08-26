@@ -17,7 +17,7 @@ class Cifar10Dataloader(Dataset):
 
     def filter(self):
         dataset = self.dataset
-        max_class_count = 10
+        max_class_count = 30
         class_distribution = defaultdict(int)
         labeled = []
         unlabeled = []
@@ -44,5 +44,5 @@ class Cifar10Dataloader(Dataset):
         if self.test:
             return torchvision.transforms.ToTensor()(X), y,
 
-        unlabeled_x = self.unlabeled[idx]
+        unlabeled_x = self.unlabeled[random.randint(0, len(self.unlabeled)-1)]
         return torchvision.transforms.ToTensor()(X), y, torchvision.transforms.ToTensor()(unlabeled_x),
