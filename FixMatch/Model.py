@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torchmetrics.functional import pairwise_cosine_similarity
 import time
 from fixmatch import FixMatch
+from Parameters import loss_reduction, output_reduction, warm_epoch, supervised_size_ratio
 
 
 # just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
@@ -15,41 +16,31 @@ class Net(nn.Module):
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc2 = nn.Linear(120, 84)
-        self.fc3 = nn.Linear(84, 10)
+        self.fc1 = nn.Linear(16 * 5 * 5, 256)
+        self.fc2 = nn.Linear(256, 128)
+        self.fc3 = nn.Linear(128, 10)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1)
+        x = F.dropout(x, p=0.1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
+        x = torch.sigmoid(x)
         return x
 
-class FixMatchModel(pl.LightningModule):
+class SimpleModel(pl.LightningModule):
     def __init__(self, model):
         super().__init__()
         self.model = model
         self.fix_match_loss = FixMatch()
-
-        self.unlabeled_size = 7
-        self.unlabeled_loss_weight = 10
+        self.unlabeled_loss_weight = 1
+        self.labeled_loss_weight = 1
 
     def forward(self, X):
         return self.model(X)
-
-    def training_step(self, batch):
-        x, y, unlabeled = batch    
-
-        x = x[:self.unlabeled_size]
-        y = y[:self.unlabeled_size]
-        y_pred = self.forward(x)
-        supervised = torch.nn.CrossEntropyLoss()(y_pred, y)
-        unsupervised = self.fix_match_loss.loss(self, unlabeled)
-
-        return supervised + unsupervised * self.unlabeled_loss_weight
 
     def test_step(self, batch, _):
         x, y = batch
@@ -75,3 +66,27 @@ class FixMatchModel(pl.LightningModule):
     def timer_end(self, action):
         print(action + " : " + str(time.time() - self.start))
 
+    def training_step(self, batch):
+        x, y, _ = batch    
+        y_pred = self.forward(x)
+        supervised = torch.nn.CrossEntropyLoss(reduction=loss_reduction)(output_reduction(y_pred), y)
+        return supervised
+
+class FixMatchModel(SimpleModel):
+    def __init__(self, model):
+        super().__init__(model)
+
+    def training_step(self, batch):
+        x, y, unlabeled = batch    
+
+        x = x[:int(x.shape[0] * supervised_size_ratio)]
+        y = y[:int(y.shape[0] * supervised_size_ratio)]
+        y_pred = self.forward(x)
+
+        #if self.current_epoch % warm_epoch == 0:
+        #    self.unlabeled_loss_weight += 0.25
+
+        supervised = torch.nn.CrossEntropyLoss(reduction=loss_reduction)(output_reduction(y_pred), y)
+        unsupervised = self.fix_match_loss.loss(self, unlabeled)
+
+        return supervised * self.labeled_loss_weight + unsupervised * self.unlabeled_loss_weight

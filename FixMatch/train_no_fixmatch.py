@@ -1,4 +1,4 @@
-from Model import FixMatchModel, Net
+from Model import SimpleModel, Net
 from Dataloader import Cifar10Dataloader
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -10,7 +10,7 @@ train_loader = DataLoader(Cifar10Dataloader(),
                           shuffle=True,
                           num_workers=8)
 
-model = FixMatchModel(Net())
+model = SimpleModel(Net())
 dataloader = Cifar10Dataloader()
 
 

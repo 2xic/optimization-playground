@@ -17,8 +17,9 @@ class Cifar10Dataloader(Dataset):
 
     def filter(self):
         dataset = self.dataset
-        max_class_count = 30
+        labels_per_class = 300
         class_distribution = defaultdict(int)
+        total_class_distribution = defaultdict(int)
         labeled = []
         unlabeled = []
 
@@ -26,12 +27,14 @@ class Cifar10Dataloader(Dataset):
 
         for index in range(val_index):
             (X, y) = dataset[index]
-            if class_distribution[y] > max_class_count:
+            if class_distribution[y] > labels_per_class:
                 if random.randint(0, 5) < 3:
                     unlabeled.append(X)
             else:
                 class_distribution[y] += 1
                 labeled.append((X, y))
+            total_class_distribution[y] += 1
+      #  print(total_class_distribution)
 
         self.dataset = labeled
         self.unlabeled = unlabeled
