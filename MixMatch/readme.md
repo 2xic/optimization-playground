@@ -12,4 +12,6 @@ By taking the average of `K` predictions of `K` various image augmentation. You 
       - Guess a label for `u` by doing an average predictions
         - Sharpe this by doing algorithm 7
       - 
-    - 
+    - MixUp 
+      - https://paperswithcode.com/method/mixup
+      - 

@@ -25,9 +25,9 @@ class FixMatch:
         if len(rows_to_pseudo):
             mask = torch.zeros(prediction_weak.shape)
             mask[rows_to_pseudo[0], pseudo_label] = 1
-            prediction_weak = prediction_weak * mask
-#            prediction_weak[rows_to_pseudo] = 0
-#            prediction_weak[rows_to_pseudo[0], pseudo_label] = 1
+#            prediction_weak = prediction_weak * mask
+            prediction_weak[rows_to_pseudo] = 0
+            prediction_weak[rows_to_pseudo[0], pseudo_label] = 1
         return prediction_weak#.detach()
 
 
