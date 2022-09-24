@@ -1,0 +1,3 @@
+MNIST
+*.pyc
+lightning_logs
