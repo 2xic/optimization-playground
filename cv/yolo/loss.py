@@ -112,143 +112,22 @@ def yolo_loss(predicted, truth, constants: Constants):
                         math.sqrt(predicted_first_boundary[4]) -
                             math.sqrt(predicted_truth_boundary[4])
                     ) ** 2
+
     # if object does not appear.
     for i in range(constants.GRID_SIZE):
         for j in range(constants.GRID_SIZE):
-            if len(predicted_first_boundary) < (5 + constants.CLASSES):
-                raise Exception("Wrong prediction array")
-
             predicted_grid = predicted[i][j]
             truth_grid = truth[i][j]
 
-            if len(predicted_grid) > 0 and len(truth_grid) > 0:
-                truth_class_id = truth_grid[0][0]
-                first_prediction_grid = predicted_grid[0]
+            if len(predicted_grid) > 0:
+                truth_class_id = truth_grid[0][0] if len(truth_grid) > 0 else None
+                first_prediction_grid = predicted_grid[0] 
 
-                for (index, p_i) in enumerate(first_prediction_grid[5:]):
-                    if index == truth_class_id:
-                        loss += (1 - p_i) ** 2
-                    else:
-                        loss += (p_i) ** 2                    
+                if first_prediction_grid is not None:
+                    for (index, p_i) in enumerate(first_prediction_grid[5:]):
+                        if index == truth_class_id:
+                            loss += (1 - p_i) ** 2
+                        else:
+                            loss += (p_i) ** 2
+                        
     return loss
-
-
-def test_1():
-    coco2Yolo = Coco2Yolo()
-    constants = Constants()
-    p = [0, ] * constants.CLASSES
-    p[4] = 1
-    grid_box = prediction_2_grid(
-        [
-            [4, ] +
-            list(coco2Yolo.coco2yolo(
-                width=640,
-                height=247,
-                bounding_boxes=[199.84, 200.46, 77.71, 70.88]
-            ))
-            + p
-        ],
-        constants
-    )
-    grid_box_truth = prediction_2_grid(
-        [
-            [4, ] +
-            list(coco2Yolo.coco2yolo(
-                width=640,
-                height=247,
-                bounding_boxes=[199.84, 200.46, 77.71, 70.88]
-            ))
-
-        ],
-        constants
-    )
-
-    assert yolo_loss(
-        grid_box,
-        grid_box_truth,
-        constants
-    ) == 0
-
-
-def test_2():
-    coco2Yolo = Coco2Yolo()
-    constants = Constants()
-
-    p = [0, ] * constants.CLASSES
-    p[4] = 1
-
-    grid_box = prediction_2_grid(
-        [
-            [4, ] +
-            list(coco2Yolo.coco2yolo(
-                width=640,
-                height=247,
-                # SMALL ADJUSTMENT TO BOUNDING BOX
-                bounding_boxes=[198.84, 18.46, 77.71, 70.88]
-            ))
-            + p
-        ],
-        constants
-    )
-    grid_box_truth = prediction_2_grid(
-        [
-            [4, ] +
-            list(coco2Yolo.coco2yolo(
-                width=640,
-                height=247,
-                bounding_boxes=[199.84, 200.46, 77.71, 70.88]
-            ))
-
-        ],
-        constants
-    )
-
-    assert yolo_loss(
-        grid_box,
-        grid_box_truth,
-        constants
-    ) != 0
-
-def test_3():
-    coco2Yolo = Coco2Yolo()
-    constants = Constants()
-
-    p = [0, ] * constants.CLASSES
-    p[5] = 1
-
-    grid_box = prediction_2_grid(
-        [
-            [4, ] +
-            list(coco2Yolo.coco2yolo(
-                width=640,
-                height=247,
-                # SMALL ADJUSTMENT TO BOUNDING BOX
-                bounding_boxes=[198.84, 18.46, 77.71, 70.88]
-            ))
-            + p
-        ],
-        constants
-    )
-    grid_box_truth = prediction_2_grid(
-        [
-            [4, ] +
-            list(coco2Yolo.coco2yolo(
-                width=640,
-                height=247,
-                bounding_boxes=[199.84, 200.46, 77.71, 70.88]
-            ))
-
-        ],
-        constants
-    )
-
-    assert yolo_loss(
-        grid_box,
-        grid_box_truth,
-        constants
-    ) != 0
-
-
-if __name__ == "__main__":
-    test_1()
-    test_2()

@@ -3,7 +3,7 @@ import json
 from unicodedata import category
 from PIL import Image
 from typing import List
-
+from torchvision import transforms
 from helpers import get_local_dir
 
 
@@ -35,26 +35,34 @@ class Coco2Yolo:
                 'category_id': i['category_id'],
                 'bbox': i['bbox']
             })
+        return self
 
     def load(self, image_name):
         yolo_bounding_boxes = []
 
+        if image_name not in self.image_bbox:
+            print(self.image_bbox.keys())
+            raise Exception("image not in image bbox")
+
         for i in self.image_bbox[image_name]:
-            image = Image.open(image_name)
+            image = Image.open(
+                get_local_dir("train2017/" + image_name)
+            )
             (width, height) = image.size
             bounding_boxes = i['bbox']
             category_id = i['category_id']
 
             yolo_bounding_boxes.append(
-                [category_id, ] + self.coco2yolo(
+                [category_id, ] + list(self.coco2yolo(
                     width=width,
                     height=height,
                     bounding_boxes=bounding_boxes
-                )
+                ))
             )
+
         return {
             "yolo_bounding_boxes": yolo_bounding_boxes,
-            "image": image_name
+            "image": transforms.ToTensor()(Image.open(get_local_dir("train2017/" + image_name)))
         }
 
     def coco2yolo(self, width, height, bounding_boxes: List[int]):

@@ -15,7 +15,7 @@ class Yolo(nn.Module):
 
         # first block
         self.conv_1 = nn.Sequential(*[
-            nn.Conv2d(64, 192, (7, 7), stride=(1, 1)),
+            nn.Conv2d(3, 192, (7, 7), stride=(1, 1)),
             nn.MaxPool2d((2, 2), stride=2)
         ])
 
@@ -79,7 +79,7 @@ class Yolo(nn.Module):
         ])
 
         self.linear = nn.Sequential(*[
-            nn.Linear(102400, 512),
+            nn.Linear(122880, 512),
             nn.Linear(512, 4096),
             nn.Linear(4096, OUTPUT),
         ])

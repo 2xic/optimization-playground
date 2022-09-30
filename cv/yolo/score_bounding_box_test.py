@@ -12,6 +12,7 @@ class TestScoreBoundingBox(unittest.TestCase):
             constants.GRID_SIZE * constants.GRID_SIZE *
             (constants.BOUNDING_BOX_COUNT * 5 + constants.CLASSES)
         ))
+        
 
         output = get_coordinates_of_tensor(tensor, constants)
 
