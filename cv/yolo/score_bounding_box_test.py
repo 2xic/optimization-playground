@@ -1,24 +1,21 @@
 import unittest
 from score_bounding_box import get_coordinates_of_tensor
 import torch
+from constants import Constants
 
 
 class TestScoreBoundingBox(unittest.TestCase):
     def test_should_execute(self):
-        GRID_SIZE = 7
-        BOUNDING_BOX_COUNT = 2
-        CLASSES = 20
+        constants = Constants()
 
         tensor = torch.zeros((
-            GRID_SIZE * GRID_SIZE * (BOUNDING_BOX_COUNT * 5 + CLASSES)
+            constants.GRID_SIZE * constants.GRID_SIZE *
+            (constants.BOUNDING_BOX_COUNT * 5 + constants.CLASSES)
         ))
-        output = get_coordinates_of_tensor(tensor,
-                                           GRID_SIZE,
-                                           BOUNDING_BOX_COUNT,
-                                           CLASSES
-        )
 
-        assert output is not None
+        output = get_coordinates_of_tensor(tensor, constants)
+
+        assert len(output) > 0
 
 
 if __name__ == '__main__':

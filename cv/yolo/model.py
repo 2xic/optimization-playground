@@ -1,17 +1,18 @@
+from typing import Container
 from torch import optim, nn
 import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from constants import Constants
+
 
 class Yolo(nn.Module):
-    def __init__(self):
+    def __init__(self, constants: Constants):
         super().__init__()
-        GRID_SIZE = 7 
-        BOUNDING_BOX_COUNT = 2
-        CLASSES = 20
 
-        OUTPUT = GRID_SIZE * GRID_SIZE + (BOUNDING_BOX_COUNT * 5 + CLASSES)
+        OUTPUT = constants.GRID_SIZE * constants.GRID_SIZE + \
+            (constants.BOUNDING_BOX_COUNT * 5 + constants.CLASSES)
 
         # first block
         self.conv_1 = nn.Sequential(*[
@@ -20,9 +21,9 @@ class Yolo(nn.Module):
         ])
 
         # second block
-        self.conv_2 = nn.Sequential(*[ 
+        self.conv_2 = nn.Sequential(*[
             nn.Conv2d(192, 128, (3, 3), stride=(1, 1)),
-            nn.MaxPool2d((2, 2), stride=2) 
+            nn.MaxPool2d((2, 2), stride=2)
         ])
 
         # third block
@@ -73,7 +74,7 @@ class Yolo(nn.Module):
 
         # sixth block
         self.conv_5 = nn.Sequential(*[
-            # TODO: I think this should be 1024 also ? 
+            # TODO: I think this should be 1024 also ?
             nn.Conv2d(512, 1024, (3, 3), stride=(1, 1)),
             nn.Conv2d(1024, 1024, (3, 3), stride=(2, 2)),
         ])
@@ -85,7 +86,6 @@ class Yolo(nn.Module):
         ])
 
         # TODO: add leaky relu between layers
-
 
     def forward(self, x):
         x = self.conv_1(x)
@@ -106,4 +106,4 @@ class Yolo(nn.Module):
     # ^ loss has special configuration
     #   - "increase the loss from bounding box coordinate predictions and decrease the loss from confidence predictions for boxes that don’t contain objects"
     #    - see full loss on page 4
-    #   
+    #
