@@ -11,8 +11,7 @@ class Yolo(nn.Module):
     def __init__(self, constants: Constants):
         super().__init__()
 
-        OUTPUT = constants.GRID_SIZE * constants.GRID_SIZE + \
-            (constants.BOUNDING_BOX_COUNT * 5 + constants.CLASSES)
+        OUTPUT = constants.tensor_grid_size
 
         # first block
         self.conv_1 = nn.Sequential(*[

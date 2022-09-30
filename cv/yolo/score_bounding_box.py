@@ -20,8 +20,6 @@ def get_coordinates_of_tensor(tensor, constants: Constants):
     # grid
     bounding_boxes = []
 
-
-
     grid = tensor.reshape((constants.GRID_SIZE, constants.GRID_SIZE, (5 * constants.BOUNDING_BOX_COUNT + constants.CLASSES)))
     for i in range(constants.GRID_SIZE):
         for j in range(constants.GRID_SIZE):
