@@ -2,6 +2,7 @@
 """
 Bounding box score
 """
+from typing import List
 from constants import Constants
 import torch
 
@@ -14,7 +15,7 @@ class GridBox:
         # TODO: Fix this bounding box last item problem
         return torch.cat((self.bounding_boxes[-1], self.p), 0)
 
-def get_coordinates_of_tensor(tensor, constants: Constants):
+def get_coordinates_of_tensor(tensor, constants: Constants, confidence_threshold=0) -> List[GridBox]:
     """
     For each grid -> S x S
     There will be B bounding box predictions, and C class predictions.
@@ -31,6 +32,7 @@ def get_coordinates_of_tensor(tensor, constants: Constants):
             first_grid_cell = grid[i][j]
 
             bounding_boxes = [
+                # x, y, w, h, confidence
                 first_grid_cell[i*5:i*5+5] for i in range(0, constants.BOUNDING_BOX_COUNT)
             ]
             assert len(bounding_boxes) == constants.BOUNDING_BOX_COUNT
@@ -39,11 +41,14 @@ def get_coordinates_of_tensor(tensor, constants: Constants):
 
             assert class_score.shape[-1] == constants.CLASSES
 
-            collected_bounding_boxes.append(GridBox(
-                bounding_boxes,
-                class_score
-            ))
-
+            bounding_boxes = [
+                i for i in bounding_boxes if i[-1] > confidence_threshold
+            ]
+            if len(bounding_boxes) > 0:
+                collected_bounding_boxes.append(GridBox(
+                    bounding_boxes,
+                    class_score
+                ))
     """
     TODO:
         Add the IOU threshold

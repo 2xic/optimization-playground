@@ -2,7 +2,6 @@ from lib2to3.pytree import convert
 import unittest
 from coco2yolo import Coco2Yolo
 from bounding_box import ImageBoundingBox
-from score_bounding_box import get_coordinates_of_tensor
 from constants import Constants
 
 

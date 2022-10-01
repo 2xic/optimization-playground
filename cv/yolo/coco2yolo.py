@@ -39,6 +39,7 @@ class Coco2Yolo:
 
     def load(self, image_name):
         yolo_bounding_boxes = []
+        classes = []
 
         if image_name not in self.image_bbox:
             print(self.image_bbox.keys())
@@ -53,15 +54,20 @@ class Coco2Yolo:
             category_id = i['category_id']
 
             yolo_bounding_boxes.append(
-                [category_id, ] + list(self.coco2yolo(
+                list(self.coco2yolo(
                     width=width,
                     height=height,
                     bounding_boxes=bounding_boxes
                 ))
             )
+            classes.append(
+                category_id
+            )
 
         return {
+            "path": get_local_dir("train2017/" + image_name),
             "yolo_bounding_boxes": yolo_bounding_boxes,
+            "classes": classes,
             "image": transforms.ToTensor()(Image.open(get_local_dir("train2017/" + image_name)))
         }
 

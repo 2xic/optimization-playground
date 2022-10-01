@@ -27,6 +27,7 @@ class ImageBoundingBox:
         _, ax = plt.subplots()
         ax.imshow(self.image)
         for (x_b, y_b, x_t, y_t) in self.bounding_box:
+            print((x_b, y_b, x_t, y_t))
             rect = patches.Rectangle(
                 (x_b, y_b), x_t - x_b, y_t - y_b, linewidth=1, edgecolor='r', facecolor='none')
         ax.add_patch(rect)
@@ -59,6 +60,9 @@ class ImageBoundingBox:
         )
         cords = (
             image_x_bottom, image_y_bottom, image_x_top, image_y_top)
+        print(cords)
+        #if 0 <= image_x_bottom and 0 <= image_y_bottom:
+        #    if image_x_top <= image_x and image_y_top <= image_y:
         self.bounding_box.append(cords)
         return self
 
