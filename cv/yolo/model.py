@@ -107,7 +107,7 @@ class Yolo(nn.Module):
         ])
 
         self.linear = nn.Sequential(*[
-            nn.Linear(122880, 512),
+            nn.Linear(102400, 512),
             nn.LeakyReLU(),
             nn.Linear(512, 4096),
             nn.LeakyReLU(),

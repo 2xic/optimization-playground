@@ -18,6 +18,13 @@ class GridEntry:
         self.class_p = p
         self.p_class_id = torch.tensor(self.class_p).argmax()
 
+    def __str__(self) -> str:
+        return f"({self.x}, {self.y}, {self.w}, {self.h})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
 class GridEntryTruth(GridEntry):
     def __init__(self, i, class_id) -> None:
         self.x = i[0]
@@ -25,6 +32,12 @@ class GridEntryTruth(GridEntry):
         self.w = i[2]
         self.h = i[3]
         self.class_id = class_id
+
+    def __str__(self) -> str:
+        return f"({self.x}, {self.y}, {self.w}, {self.h})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 def prediction_2_grid(yolo_bounding_boxes, constants: Constants, class_id=None) -> List[GridEntry]:
@@ -154,23 +167,10 @@ def yolo_loss(predicted: List[GridEntry], truth: List[GridEntryTruth], constants
                     math.sqrt(predicted_first_boundary.h) -
                     math.sqrt(truth_boundary.h)
                 ) ** 2
-            """
-            elif len(predicted_grid) > 0:
-                for predicted_first_boundary in predicted_grid:
-                    coordinate_loss += (
-                        predicted_first_boundary.x
-                    ) ** 2 \
-                        + (
-                        predicted_first_boundary.y
-                    ) ** 2
 
-                    coordinate_loss += (
-                        math.sqrt(predicted_first_boundary.w)
-                    ) ** 2 \
-                        + (
-                        math.sqrt(predicted_first_boundary.h)
-                    ) ** 2
-            """
+                coordinate_loss += (predicted_first_boundary.p_class_id -
+                                    truth_boundary.class_id) ** 2
+
     # if object does not appear.
     no_obj_loss = torch.zeros(1)
 
@@ -194,14 +194,82 @@ def yolo_loss(predicted: List[GridEntry], truth: List[GridEntryTruth], constants
                     if truth_class_id is not None:
                         no_obj_loss += (first_prediction_grid.p_class_id -
                                         truth_class_id) ** 2
+                        # ^ this is wrong, should be IOU loss
 
     lambda_cord = 5
-    lambda_no_obj = 0.5
+    lambda_no_obj = 3
     print((
         "loss",
         coordinate_loss,
         no_obj_loss
     ))
     loss = lambda_cord * coordinate_loss + lambda_no_obj * no_obj_loss
+
+    return loss
+
+
+def simple_yolo_loss(predicted, truth, constants):
+    """
+    Okay, I think I misunderstood something regarding the grid.
+
+    The output from yolo is based on the actual grid format ...
+    So no need to reallocate them, but you need to do it with the truth data.
+    """
+    predicted_grid = predicted.reshape((constants.GRID_SIZE, constants.GRID_SIZE,
+                                        (5 * constants.BOUNDING_BOX_COUNT + constants.CLASSES)))
+
+    truth = prediction_2_grid(truth, constants, class_id=[1, ] * 20)
+
+    loss = torch.zeros(1)
+    lambda_cord = 15
+    lambda_no_obj = 0.5
+
+    for i in range(constants.GRID_SIZE):
+        for j in range(constants.GRID_SIZE):
+            if 0 < len(truth[i][j]):
+                x, y, w, h, confidence = predicted_grid[i][j][:5]
+                label = truth[i][j][0]
+
+                print((x.item(), y.item(), w.item(), h.item()))
+                print((label.x, label.y, label.w, label.h))
+                print("")
+
+                loss += lambda_cord * (
+                    (
+                        x -
+                        label.x
+                    ) ** 2
+                    + (
+                        y -
+                        label.y
+                    ) ** 2
+                    + (
+                        math.sqrt(w) -
+                        math.sqrt(label.w)
+                    ) ** 2
+                    + (
+                        math.sqrt(h) -
+                        math.sqrt(label.h)
+                    ) ** 2
+                )
+                """
+
+                loss +=  (
+                    1 - predicted_grid[i][j][5]
+                ) ** 2
+                """
+
+           # else:
+            #    loss += lambda_no_obj * (
+             #       1 - predicted_grid[i][j][5]
+              #  ) ** 2
+
+#    print(truth)
+#    print(predicted_grid)
+#    print(truth)
+
+#    print(predicted_grid[0][0])
+
+    print(loss)
 
     return loss

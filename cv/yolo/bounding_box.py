@@ -1,6 +1,8 @@
 from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from constants import Constants
+from helpers import convert_image
 
 
 class ImageBoundingBox:
@@ -9,8 +11,8 @@ class ImageBoundingBox:
 
         ]
 
-    def load_image(self, image_path):
-        self.image = Image.open(image_path)
+    def load_image(self, image_path, constants: Constants):
+        self.image = convert_image(image_path, constants)
         return self
 
     def open(self, image_path, label_path):

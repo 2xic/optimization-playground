@@ -12,6 +12,7 @@ class GridBox:
         self.p = p
 
     def raw(self):
+        #print(torch.cat((self.bounding_boxes[-1], self.p), 0))
         # TODO: Fix this bounding box last item problem
         return torch.cat((self.bounding_boxes[-1], self.p), 0)
 

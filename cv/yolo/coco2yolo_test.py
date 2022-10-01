@@ -7,7 +7,7 @@ from constants import Constants
 
 class Coco2YoloTest(unittest.TestCase):
     def test_should_execute(self):
-        coco2Yolo = Coco2Yolo()
+        coco2Yolo = Coco2Yolo(Constants())
         convert_results = coco2Yolo.coco2yolo(
             width=640,
             height=247,

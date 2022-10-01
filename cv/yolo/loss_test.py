@@ -8,8 +8,8 @@ from loss import prediction_2_grid
 
 class loss_test(unittest.TestCase):
     def test_1(self):
-        coco2Yolo = Coco2Yolo()
         constants = Constants()
+        coco2Yolo = Coco2Yolo(constants)
         p = [0, ] * constants.CLASSES
         p[4] = 1
         grid_box = prediction_2_grid(
@@ -41,8 +41,8 @@ class loss_test(unittest.TestCase):
         ) == 0
 
     def test_2(self):
-        coco2Yolo = Coco2Yolo()
         constants = Constants()
+        coco2Yolo = Coco2Yolo(constants)
 
         p = [0, ] * constants.CLASSES
         p[4] = 1
@@ -79,8 +79,8 @@ class loss_test(unittest.TestCase):
         ) != 0
 
     def test_3(self):
-        coco2Yolo = Coco2Yolo()
         constants = Constants()
+        coco2Yolo = Coco2Yolo(constants)
 
         p = [0, ] * constants.CLASSES
         p[5] = 1

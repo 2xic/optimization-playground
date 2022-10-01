@@ -1,15 +1,17 @@
 from collections import defaultdict
 import json
 from unicodedata import category
+from unittest import result
 from PIL import Image
 from typing import List
 from torchvision import transforms
-from helpers import get_local_dir
+from constants import Constants
+from helpers import convert_image, get_local_dir
 
 
 class Coco2Yolo:
-    def __init__(self) -> None:
-        pass
+    def __init__(self, constants: Constants) -> None:
+        self.constants = constants
 
     def load_annotations(self):
         self.annotations = open(
@@ -37,6 +39,10 @@ class Coco2Yolo:
             })
         return self
 
+    def iter(self):
+        for i in self.image_bbox:
+            yield self.load(i)
+
     def load(self, image_name):
         yolo_bounding_boxes = []
         classes = []
@@ -46,10 +52,9 @@ class Coco2Yolo:
             raise Exception("image not in image bbox")
 
         for i in self.image_bbox[image_name]:
-            image = Image.open(
-                get_local_dir("train2017/" + image_name)
-            )
-            (width, height) = image.size
+            result = convert_image(image_name, self.constants)
+
+            (width, height) = result.size
             bounding_boxes = i['bbox']
             category_id = i['category_id']
 
@@ -63,12 +68,15 @@ class Coco2Yolo:
             classes.append(
                 category_id
             )
-
+        image = transforms.ToTensor()(
+            convert_image(image_name, self.constants)
+        )
         return {
+            "name": image_name,
             "path": get_local_dir("train2017/" + image_name),
             "yolo_bounding_boxes": yolo_bounding_boxes,
             "classes": classes,
-            "image": transforms.ToTensor()(Image.open(get_local_dir("train2017/" + image_name)))
+            "image": image
         }
 
     def coco2yolo(self, width, height, bounding_boxes: List[int]):
