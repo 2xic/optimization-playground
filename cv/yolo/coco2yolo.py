@@ -1,8 +1,5 @@
 from collections import defaultdict
 import json
-from unicodedata import category
-from unittest import result
-from PIL import Image
 from typing import List
 from torchvision import transforms
 from constants import Constants
@@ -39,8 +36,8 @@ class Coco2Yolo:
             })
         return self
 
-    def iter(self):
-        for i in self.image_bbox:
+    def iter(self, samples=-1):
+        for i in list(self.image_bbox.keys())[:samples]:
             yield self.load(i)
 
     def load(self, image_name):

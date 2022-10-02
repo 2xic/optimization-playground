@@ -234,6 +234,8 @@ def simple_yolo_loss(predicted, truth, constants):
                 print((label.x, label.y, label.w, label.h))
                 print("")
 
+                normalize_size = lambda x: x # math.sqrt(x)
+                 
                 loss += lambda_cord * (
                     (
                         x -
@@ -244,31 +246,21 @@ def simple_yolo_loss(predicted, truth, constants):
                         label.y
                     ) ** 2
                     + (
-                        math.sqrt(w) -
-                        math.sqrt(label.w)
+                        normalize_size(w) -
+                        normalize_size(label.w)
                     ) ** 2
                     + (
-                        math.sqrt(h) -
-                        math.sqrt(label.h)
+                        normalize_size(h) -
+                        normalize_size(label.h)
                     ) ** 2
-                )
-                """
-
-                loss +=  (
+                ) 
+                loss += (
                     1 - predicted_grid[i][j][5]
                 ) ** 2
-                """
-
-           # else:
-            #    loss += lambda_no_obj * (
-             #       1 - predicted_grid[i][j][5]
-              #  ) ** 2
-
-#    print(truth)
-#    print(predicted_grid)
-#    print(truth)
-
-#    print(predicted_grid[0][0])
+            else:
+                loss += lambda_no_obj * (
+                    predicted_grid[i][j][5]
+                ) ** 2
 
     print(loss)
 
