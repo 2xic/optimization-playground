@@ -2,3 +2,6 @@ MNIST
 *.pyc
 lightning_logs
 *.zip
+data
+*.pyc
+*.sh
