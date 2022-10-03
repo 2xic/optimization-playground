@@ -10,3 +10,5 @@ data
 __pycache__
 .pytest_cache
 path
+.pytest_cache
+__pycache__
