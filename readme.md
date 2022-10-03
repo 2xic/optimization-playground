@@ -1,3 +1,4 @@
-I should just have a single repository for all the paper stuff.
+# paper zoo
 
-Will move the other repos here, soon.
+Zoo of implementations from papers
+

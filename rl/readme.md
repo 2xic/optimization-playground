@@ -2,6 +2,6 @@
 
 - vae
 - dqn (baseline)
-- (wip - merge in from another repo) rebel
+- rebel (wip -> put on hold)
 - (todo) muzero
 - +++
