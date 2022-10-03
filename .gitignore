@@ -5,3 +5,8 @@ lightning_logs
 data
 *.pyc
 *.sh
+notes.txt
+data
+__pycache__
+.pytest_cache
+path
