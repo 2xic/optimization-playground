@@ -12,3 +12,4 @@ __pycache__
 path
 .pytest_cache
 __pycache__
+*.pyc
