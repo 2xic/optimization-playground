@@ -1,5 +1,6 @@
 import torch.nn.functional as F
 import torch.nn as nn
+import torch
 
 class GatedActivation(nn.Module):
     def __init__(self):
@@ -14,11 +15,13 @@ class GatedActivation(nn.Module):
             in_channels=16,
             out_channels=32,
             kernel_size=2,
+            dilation=1,
         )
         self.v_g = nn.Conv1d(
             in_channels=16,
             out_channels=32,
             kernel_size=2,
+            dilation=1,
         )
         self.v_out = nn.Conv1d(
             in_channels=32,
@@ -30,7 +33,7 @@ class GatedActivation(nn.Module):
     def forward(self, h):
         x = self.v_in(h)
 
-        z = F.tanh(self.v_h(x)) * F.sigmoid(self.v_g(x))
+        z = torch.tanh(self.v_h(x)) * torch.sigmoid(self.v_g(x))
 
         x = self.v_out(z)   
 
