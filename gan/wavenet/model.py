@@ -1,3 +1,4 @@
+from unittest import skip
 import torch
 from helpers import softmax_mu
 from gated_activation import GatedActivation
@@ -14,12 +15,20 @@ the parameters. Because log-likelihoods are tractable, we tune hyper-parameters 
 set and can easily measure if the model is overfitting or underfitting.
 """
 
+
 class TinyWavenet(torch.nn.Module):
 
     def __init__(self):
         super(TinyWavenet, self).__init__()
 
-        self.layer_1 = GatedActivation()
+        depth = 4
+        dilations = [2**i for i in range(depth)]
+        in_channel_size = 1
+        out_channel_size = 2 ** (depth + 1)
+        self.skip_layers = nn.ModuleList([
+            GatedActivation(dilation=i, in_channel_size=in_channel_size, out_channel_size=out_channel_size) for i in dilations
+        ])
+
         """
         Add more layer here
         """
@@ -30,7 +39,7 @@ class TinyWavenet(torch.nn.Module):
         self.post_skip_connection = nn.Sequential(
             *[
                 nn.Conv1d(
-                    in_channels=16,
+                    in_channels=32,
                     out_channels=128,
                     kernel_size=1,
                     padding="same"
@@ -38,7 +47,7 @@ class TinyWavenet(torch.nn.Module):
                 nn.ReLU(),
                 nn.Conv1d(
                     in_channels=128,
-                    out_channels=1, 
+                    out_channels=256,
                     kernel_size=1,
                     padding="same"
                 ),
@@ -46,10 +55,13 @@ class TinyWavenet(torch.nn.Module):
             ]
         )
 
-
     def forward(self, x):
-        x = self.layer_1(x)
+        x = x
+        skip_connections = []
+        for i in self.skip_layers:
+            output, skip = i(x)
+            skip_connections.append(skip)
 
-        x = self.post_skip_connection(x)
-
+        outputs = sum([s[:,:,-output.size(2):] for s in skip_connections])
+        x = self.post_skip_connection(outputs)
         return x

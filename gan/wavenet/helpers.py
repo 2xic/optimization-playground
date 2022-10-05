@@ -6,7 +6,7 @@ import numpy as np
 
 
 def softmax_mu(x_t, mu=torch.tensor([256])):
-    print(x_t)
+    #print(x_t)
 #    assert torch.max(x_t) <= 1
 #    assert -1 <= torch.min(x_t)
     out = torch.sign(x_t) * (
