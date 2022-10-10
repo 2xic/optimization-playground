@@ -22,10 +22,10 @@ def softmax_mu(x_t, mu=torch.tensor([256])):
 
 def inverse_mu(x_t, mu=torch.tensor([256])):
     x_t = x_t.float()
-    x_t = 2 * x_t / mu.item() - 1
+    #x_t = 2 * x_t / mu.item() - 1
     
-    assert torch.max(x_t) <= 1
-    assert -1 <= torch.min(x_t)
+    assert torch.max(x_t) <= 1, torch.max(x_t)
+    assert -1 <= torch.min(x_t), torch.min(x_t)
 
     output = torch.sgn(x_t) * (
         (1 + mu)**torch.abs(x_t)
@@ -46,10 +46,10 @@ def get_audio_wave(file):
 
     return signal
 
-def write_audio_frames(frames):
+def write_audio_frames(frames, name="test-out.wav"):
     frames *= 2 ** 15
     frames = frames.astype(np.int16)
-    spf = wave.open("test-out.wav", "w")
+    spf = wave.open(name, "w")
     spf.setnchannels(1)
     spf.setsampwidth(2)
     spf.setframerate(22050)
