@@ -10,75 +10,82 @@ from optimization_utils.tree.MuzeroMonteCarloNode import MuzeroMonteCarloNode
 from parameters import ROLLOUT_STEPS_K
 from optimization_utils.exploration.EpsilonGreedy import EpsilonGreedy
 from optimization_utils.diagnostics.Diagnostics import Diagnostics
+import torch
+import numpy as np
+
 
 def learn(replay_buffer: ReplayBuffer, model: Model, diagnostics: Diagnostics, optimizer: torch.optim.Adam):
     trajectory = replay_buffer.sample_trajectory()
-    observation = trajectory[0].state
 
-    representation = model.get_state_representation(observation.reshape((1, -1)).float())
-
-    
     loss = torch.tensor(0).float()
-    for index in range(ROLLOUT_STEPS_K):
-        trajectory_idx = trajectory[index]
-        real_action = trajectory_idx.action
-        real_reward = trajectory_idx.reward
 
-        policy = torch.tensor(trajectory_idx.metadata['policy'])
-        value = torch.tensor(trajectory_idx.metadata['value'])
+    diagnostics.isValueChanging("trajectory_id", trajectory[0].id)
 
-        predicted_reward, next_state = model.get_dynamics(representation, torch.tensor([real_action]).reshape((1, -1)).float())
-        predicted_policy, predicted_value = model.get_prediction(next_state)
+    for i in range(len(trajectory) - ROLLOUT_STEPS_K):
+        observation = trajectory[i].state
+        representation = model.get_state_representation(
+            observation.reshape((1, -1)).float())
 
-        loss_function = lambda x, y, train=True: ((x - y) ** 2).sum() if train else torch.tensor(0)
+        for index in range(ROLLOUT_STEPS_K):
+            trajectory_idx = trajectory[i + index]
+            real_action = trajectory_idx.action
+            real_reward = trajectory_idx.reward
 
-        reward_loss = loss_function(
-            real_reward,
-            predicted_reward
-        )
-        policy_loss = loss_function(
-            # I think something is wrong when training the policy
-            # Try to train without it and see what happens.
-            policy,
-            predicted_policy,
-            train = False
-        ) 
-        value_loss = loss_function(
-            value,
-            predicted_value
-        )
-        loss += reward_loss + policy_loss + value_loss
+            policy = torch.tensor(trajectory_idx.metadata['policy'])
+            value = torch.tensor(trajectory_idx.metadata['value'])
 
-        """
-        TODO: idea, track each part of the loss, if it goes out of the mean, report it as a probable error in the env.
-                or something else.
-        diagnostics.loss({
-            "reward":  reward_loss,
-            "policy": policy_loss,
-            "value": value_loss
-        })
-        """
+            predicted_reward, next_state = model.get_dynamics(
+                representation, torch.tensor([real_action]).reshape((1, -1)).float())
+            predicted_policy, predicted_value = model.get_prediction(
+                next_state)
 
-    
+            def loss_function(x, y, train=True): return (
+                (x - y) ** 2).sum() if train else torch.tensor(0)
+
+            reward_loss = loss_function(
+                real_reward,
+                predicted_reward
+            )
+            policy_loss = loss_function(
+                # I think something is wrong when training the policy
+                # Try to train without it and see what happens.
+                policy,
+                predicted_policy,
+                train=True
+            )
+            value_loss = loss_function(
+                value,
+                predicted_value
+            )
+            loss += reward_loss + policy_loss + value_loss
+
+            """
+            TODO: idea, track each part of the loss, if it goes out of the mean, report it as a probable error in the env.
+                    or something else.
+            
+            diagnostics.loss({
+                "reward":  reward_loss,
+                "policy": policy_loss,
+                "value": value_loss
+            })
+            """
+
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 
     return loss.item()
-        
-def play(replay_buffer: ReplayBuffer, exploration: EpsilonGreedy, model: Model, diagnostics: Diagnostics, epoch_id:int):
+
+
+def play(replay_buffer: ReplayBuffer, exploration: EpsilonGreedy, model: Model, diagnostics: Diagnostics, epoch_id: int):
     env = SimpleEnv().reset()
     state = env.state
     sum_reward = 0
     actions = []
 
+    should_log = epoch_id % 100 == 0
+
     while not env.done():
-        """
-        TODO: 
-            Dynamics and the reward components should be added here.
-            Need to make some adjustments to the monte carlo logic to make sure it takes
-            into account the new information about the reward.
-        """
         action = exploration.get_action(lambda: None)
 
         planner = MonteCarloTreeSearch(
@@ -92,23 +99,32 @@ def play(replay_buffer: ReplayBuffer, exploration: EpsilonGreedy, model: Model, 
                 predictor=model.get_prediction
             ),
             node=MuzeroMonteCarloNode
-        ) 
+        )
+        # add noise to the search.
+        planner.root._policy = torch.tensor(
+            np.random.dirichlet((1, planner.root.state.action_space,)))
+
         # do the search
         planner.get_action(iterations=100)
-        # we use muzero
-
         if action is None:
-            action = planner.root.muzero_action
+            # TODO: This should instead be the softmax alpha
+            action = np.random.choice(
+                list(range(planner.root.state.action_space)),
+                p=planner.root.policy
+            )
 
-        if epoch_id % 100 == 0:
-            print(env.state)
-            print(action)
-            print(planner.muzero_policy)
+        state_before_action = env.state.clone()
 
         diagnostics.profile(action)
 
         state, reward, _, _ = env.step(action)
 
+        if should_log:
+            print(f"state: ({env.index}) : {state_before_action}")
+            print(f"action : {action}")
+            print(f"reward : {reward}")
+            print(f"policy: {planner.muzero_policy}")
+            print("")
 
         replay_buffer.push(
             state=state,
@@ -123,10 +139,15 @@ def play(replay_buffer: ReplayBuffer, exploration: EpsilonGreedy, model: Model, 
         sum_reward += reward
         actions.append(action)
 
+    if should_log:
+        print(f"Sum reward {sum_reward}")
+        print("")
+
 #    assert diagnostics.is_healthy()
     diagnostics.reward(sum_reward)
 
     return sum_reward, actions
+
 
 timer = StopTimer(
     iterations=10_000
@@ -146,14 +167,15 @@ timer.tick()
 diagnostics = Diagnostics()
 
 while not timer.is_done():
-    reward, actions = play(replay_buffer, exploration, model, diagnostics, timer.epoch)
+    reward, actions = play(replay_buffer, exploration,
+                           model, diagnostics, timer.epoch)
     loss = learn(replay_buffer, model, diagnostics, optimizer)
 
     if timer.epoch % 10 == 0:
         diagnostics.print(timer.epoch, {
             "loss": loss,
             "epsilon": exploration.epsilon,
+            "last_game_sum_reward": reward,
         })
 
     timer.tick()
-

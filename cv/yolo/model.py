@@ -115,8 +115,6 @@ class Yolo(nn.Module):
             nn.Sigmoid(),
         ])
 
-        # TODO: add leaky relu between layers
-
     def forward(self, x):
         x = self.conv_1(x)
         x = self.conv_2(x)
