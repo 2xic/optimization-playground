@@ -2,7 +2,6 @@
 from tkinter.tix import Tree
 from dataloader import SimClrCifar100Dataloader
 from model import Net, Projection, SimClrModel
-from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import matplotlib.pyplot as plt
 import torch

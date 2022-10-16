@@ -4,7 +4,7 @@ Selecting a new paper every week regardless of progress on previous paper (with 
 
 
 | **Paper / Reference**                                                                       | **Location**                    | **Converges ?** | **Trainable ?** | **Essential components implemented ?** | **Has paper notes ?** |
-|---------------------------------------------------------------------------------------------|---------------------------------|-----------------|-----------------|----------------------------------------|-----------------------|
+| ------------------------------------------------------------------------------------------- | ------------------------------- | --------------- | --------------- | -------------------------------------- | --------------------- |
 | **RL**                                                                                      |                                 |                 |                 |                                        |                       |
 | [value prediction network](https://arxiv.org/abs/1707.03497)                                | rl/vpn                          | Yes             | Yes             | Yes                                    | No                    |
 | [DQN](https://en.wikipedia.org/wiki/Q-learning#Deep_Q-learning)                             | rl/dqn                          | Yes             | Yes             | Yes                                    | No                    |
@@ -21,3 +21,4 @@ Selecting a new paper every week regardless of progress on previous paper (with 
 | [Wavenet](https://arxiv.org/abs/1609.03499)                                                 | gan/wavenet                     | No              | No              | Partial                                | No                    |
 | **Computer vision**                                                                         |                                 |                 |                 |                                        |                       |
 | [You Only Look Once: Unified, Real-Time Object Detection](https://arxiv.org/abs/1506.02640) | cv/yolo                         | Yes             | Yes             | Yes, but room for stuff like NMS       | No                    |
+| [Resnet](https://arxiv.org/abs/1512.03385)                                                  | cv/resnet                       | Yes             | Yes             | Yes, but not made deep                 | Yes                   |
