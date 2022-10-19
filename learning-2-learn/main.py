@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 from dataloader import QuadraticFunctionsDataset
 
-max_epochs = 50
+max_epochs = 1_000
 
 dataset = QuadraticFunctionsDataset()
 train_loader = DataLoader(dataset,
@@ -31,7 +31,7 @@ trainer = pl.Trainer(
     limit_train_batches=500,
     max_epochs=max_epochs,
     enable_checkpointing=True,
-    default_root_dir="./checkpoints"
+    default_root_dir="./checkpoints_l2l"
 )
 trainer.fit(model=model, train_dataloaders=train_loader)
 

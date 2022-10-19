@@ -24,14 +24,14 @@ class Learning2Learn(pl.LightningModule):
                             batch_first=True)
         self.linear = nn.Linear(hidden_size, 1)
 
-    def forward(self, x, y, logging=False):
+    def forward(self, error_function, logging=False):
         step_size = 100
         t_0 = torch.rand((1, 1, 1))
         hidden = (
             torch.zeros((self.num_layers, 1, self.hidden_size)),
             torch.zeros((self.num_layers, 1, self.hidden_size))
         )
-        error_function = get_quadratic_function_error(x, y)
+        #error_function = get_quadratic_function_error(x, y)
         error_over_time = None
         y_pred = None
         x_history = [
@@ -64,6 +64,7 @@ class Learning2Learn(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         x, y = batch
-        error = self.forward(x, y)
+        error_function = get_quadratic_function_error(x, y)
+        error = self.forward(error_function)# x, y)
         loss = error.mean()
         return loss
