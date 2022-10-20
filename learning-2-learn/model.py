@@ -38,6 +38,36 @@ class Learning2Learn(pl.LightningModule):
             t_0
         ]
         for _ in range(step_size):
+            """
+            Rereading parts of the paper, it seems like there is something I have misunderstood.
+
+            
+            https://sml.csa.iisc.ac.in/Courses/Spring19/E0_270/Presentations/Learning%20%20To%20learn%20by%20Gradient%20Descent%20By%20Gradient%20DescentL.pdf
+            It is also mentioned here "Needed to detach gradients from computational graph of pytorch to feed them to the meta optimizer"
+            So clearly, part of my loss is wrong since I Dont' detach.
+
+            - wait we do, actually.... 
+            - but let's breakdown the optimizer either way
+
+            theta* ( f, phi )
+                - phi -> Optimizer parameters
+                - f is the function we try to optimize
+            theta* final optmizee parameters
+
+
+            theta_(t + 1) = theta_t + g_t(
+                grad_f(theta_t), phi
+            )
+
+            Looking at figure 2
+            optimizee takes in a theta
+                - you get the gradient
+                - model (m) outputs g_t_2
+            - add it theta
+                -
+
+
+            """
             func_error = error_function(x_history[-1]).reshape((1, 1, -1))
             lstm_out, hidden = self.lstm(func_error, hidden)
             y_pred = self.linear(lstm_out[:, -1])
@@ -57,6 +87,8 @@ class Learning2Learn(pl.LightningModule):
                 ])
         if logging:
             print(error_over_time.reshape((-1)))
+
+        # as mentioned in the paper it's convenient for the loss to be the sum 
         return error_function(x_history[-1] + y_pred).reshape((1, -1))
 
     def configure_optimizers(self):
