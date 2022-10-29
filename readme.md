@@ -1,6 +1,6 @@
-# paper zoo
+# optimization playground
 
-Selecting a new paper every week regardless of progress on previous paper (with few exceptions). Why ? Goal is to examine ideas, and not try write a perfect re-implementation. 
+Selecting a new paper every week regardless of progress on previous paper (with few exceptions). Goal is to examine ideas, and not try write a perfect re-implementation. 
 
 
 | **Paper / Reference**                                                                       | **Location**                    | **Converges ?** | **Trainable ?** | **Essential components implemented ?** | **Has paper notes ?** |
@@ -10,6 +10,8 @@ Selecting a new paper every week regardless of progress on previous paper (with 
 | [DQN](https://en.wikipedia.org/wiki/Q-learning#Deep_Q-learning)                             | rl/dqn                          | Yes             | Yes             | Yes                                    | No                    |
 | [ReBel](https://arxiv.org/abs/2007.13544)                                                   | rl/rebel                        | No              | Partial         | Partial                                | Yes                   |
 | [MuZero](https://arxiv.org/pdf/1911.08265.pdf)                                              | rl/muzero                       | Partial         | Yes             | Yes                                    | Yes                   |
+| [Learning Skills without a Reward Function](https://arxiv.org/abs/1802.06070)                                              | rl/diviersity-is-all-you-need                       | TBD         | Yes             | Yes                                    | Yes                   |
+| [Soft Actor-Critic](https://arxiv.org/abs/1801.01290)                                              | rl/diviersity-is-all-you-need/soft_actor_critic                       | Yes         | Yes             | Yes                                    | no                   |
 | **Contrastive learning**                                                                    |                                 |                 |                 |                                        |                       |
 | [FixMatch](https://arxiv.org/abs/2001.07685)                                                | contrastive-learning/fixmatch   | *TBD*           | Yes             | Yes                                    | No                    |
 | [MixMatch](https://arxiv.org/abs/1905.02249)                                                | contrastive-learning/mixmatch   | *TBD*           | Yes             | Yes                                    | Yes                   |
@@ -24,4 +26,4 @@ Selecting a new paper every week regardless of progress on previous paper (with 
 | [Resnet](https://arxiv.org/abs/1512.03385)                                                  | cv/resnet                       | Yes             | Yes             | Yes, but not made deep                 | Yes                   |
 | [Improving Object Detection With One Line of Code](https://arxiv.org/pdf/1704.04503.pdf)    | cv/s-nms                        | Yes             | Yes             | Yes                                    | Yes                   |
 | **Meta learning**                                                                           |                                 |                 |                 |                                        |                       |
-| [Learning to learn by gradient descent by gradient descent](https://arxiv.org/abs/1606.04474) | learning-2-learn                | WIP             | WIP             | WIP                                    | WIP                   |
+| [Learning to learn by gradient descent by gradient descent](https://arxiv.org/abs/1606.04474) | learning-2-learn                | Not sure actually             | Yes             | Yes                                    | Yes                   |
