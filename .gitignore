@@ -16,3 +16,5 @@ __pycache__
 dataset
 *.pdf
 *_model
+model_state
+.ipynb_checkpoints
