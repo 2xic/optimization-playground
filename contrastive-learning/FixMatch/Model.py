@@ -27,8 +27,7 @@ class Net(nn.Module):
         x = F.dropout(x, p=0.1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        x = torch.sigmoid(x)
+        x = F.relu(self.fc3(x))
         return x
 
 class SimpleModel(pl.LightningModule):
@@ -37,7 +36,8 @@ class SimpleModel(pl.LightningModule):
         self.model = model
         self.fix_match_loss = FixMatch()
         self.unlabeled_loss_weight = 1
-        self.labeled_loss_weight = 1
+        self.labeled_loss_weight = 0.6
+        self.batch = 0
 
     def forward(self, X):
         return self.model(X)
@@ -47,9 +47,13 @@ class SimpleModel(pl.LightningModule):
 
         batch_size = x.shape[0]
         predictions = self.get_class_predictions(x)
-        accuracy = batch_size - torch.count_nonzero(predictions - y)
-        self.log("test_accuracy", accuracy / float(batch_size))
+        accuracy = (batch_size - torch.count_nonzero(predictions - y)) / float(batch_size)
+        self.log("test_accuracy", accuracy)
 
+        if self.batch % 10 == 0:
+            with open("test_accuracy.txt", "a") as file:
+                file.write(f"{accuracy}\n")
+        self.batch += 1
 
     def get_class_predictions(self, X):
         z = self.forward(X)
@@ -57,7 +61,7 @@ class SimpleModel(pl.LightningModule):
         return predictions
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
+        optimizer = optim.Adam(self.parameters(), lr=1e-4)
         return optimizer
 
     def timer_start(self):
@@ -83,10 +87,16 @@ class FixMatchModel(SimpleModel):
         y = y[:int(y.shape[0] * supervised_size_ratio)]
         y_pred = self.forward(x)
 
-        #if self.current_epoch % warm_epoch == 0:
-        #    self.unlabeled_loss_weight += 0.25
-
         supervised = torch.nn.CrossEntropyLoss(reduction=loss_reduction)(output_reduction(y_pred), y)
+
+        batch_size = x.shape[0]
+        
+        accuracy = (batch_size - torch.count_nonzero(torch.argmax(y_pred.clone().detach(), dim=1) - y)) / float(batch_size)
+        if self.batch % 10 == 0:
+            with open("train_accuracy.txt", "a") as file:
+                file.write(f"{accuracy}\n")
+        self.batch += 1
+
         unsupervised = self.fix_match_loss.loss(self, unlabeled)
 
         return supervised * self.labeled_loss_weight + unsupervised * self.unlabeled_loss_weight

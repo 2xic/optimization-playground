@@ -3,12 +3,9 @@ import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchmetrics.functional import pairwise_cosine_similarity
 import time
-
 from loss import Loss
 
-# just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
 
 DEBUG = False
 
@@ -17,7 +14,6 @@ def debug_assert(condition):
     if DEBUG:
         return condition
     return True
-
 
 class Net(nn.Module):
     def __init__(self):
@@ -38,7 +34,6 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
         return x
-
 
 class Projection(nn.Module):
     def __init__(self):
@@ -87,35 +82,3 @@ class SimClrModel(pl.LightningModule):
 
     def timer_end(self, action):
         print(action + " : " + str(time.time() - self.start))
-
-
-class SimpleModel(pl.LightningModule):
-    def __init__(self, model):
-        super().__init__()
-        self.model = model
-
-    def forward(self, X):
-        return self.model(X)
-
-    def training_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.model(x)
-        loss = nn.functional.cross_entropy(z, y)
-        self.log("train_loss", loss)
-        return loss
-
-    def test_step(self, batch, batch_idx):
-        x, y = batch
-        z = self.model(x)
-        loss = nn.functional.cross_entropy(z, y)
-        batch_size = x.shape[0]
-        predictions = torch.argmax(z, dim=1)
-        # if all are non zero accuracy = batch size
-        accuracy = batch_size - torch.count_nonzero(predictions - y)
-
-        self.log("test_loss", loss)
-        self.log("test_accuracy", accuracy / float(batch_size))
-
-    def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-3)
-        return optimizer

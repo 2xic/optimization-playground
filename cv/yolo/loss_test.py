@@ -1,10 +1,8 @@
-from inspect import classify_class_attrs
 import unittest
 from coco2yolo import Coco2Yolo
-from loss import GridEntry, GridEntryTruth, yolo_loss
+from loss import yolo_loss
 from constants import Constants
 from loss import prediction_2_grid
-
 
 class loss_test(unittest.TestCase):
     def test_1(self):

@@ -17,7 +17,8 @@ class Cifar10Dataloader(Dataset):
 
     def filter(self):
         dataset = self.dataset
-        labels_per_class = 300
+        # cifar 10 has 6000 images per class, so we train on 1/6
+        labels_per_class = 1_000
         class_distribution = defaultdict(int)
         total_class_distribution = defaultdict(int)
         labeled = []
@@ -34,8 +35,6 @@ class Cifar10Dataloader(Dataset):
                 class_distribution[y] += 1
                 labeled.append((X, y))
             total_class_distribution[y] += 1
-      #  print(total_class_distribution)
-
         self.dataset = labeled
         self.unlabeled = unlabeled
 

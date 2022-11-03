@@ -1,0 +1,1 @@
+The core idea from the paper is by having consistency between strong and weak augmentation the model should also be able to learn the classes.
