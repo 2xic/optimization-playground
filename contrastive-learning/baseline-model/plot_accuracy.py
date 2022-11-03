@@ -11,4 +11,4 @@ plot.plot(
     ]
 )
 
-plot.save("train_loss.png")
+plot.save("train_accuracy.png")
