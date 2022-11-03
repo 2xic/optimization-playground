@@ -24,6 +24,5 @@ class Net(nn.Module):
         x = F.dropout(x, p=0.1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
-        x = torch.sigmoid(x)
+        x = F.relu(self.fc3(x))
         return x

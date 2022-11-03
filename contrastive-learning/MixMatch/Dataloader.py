@@ -3,7 +3,7 @@ from typing import DefaultDict
 from torch.utils.data import Dataset
 import torchvision
 import random
-
+import torch
 
 class Cifar10Dataloader(Dataset):
     def __init__(self, test=False):
@@ -46,6 +46,9 @@ class Cifar10Dataloader(Dataset):
         X, y = self.dataset[idx]
         if self.test:
             return torchvision.transforms.ToTensor()(X), y,
+        
+        y_hot = torch.zeros(10)
+        y_hot[y] = 1
 
         unlabeled_x = self.unlabeled[random.randint(0, len(self.unlabeled)-1)]
-        return torchvision.transforms.ToTensor()(X), y, torchvision.transforms.ToTensor()(unlabeled_x),
+        return torchvision.transforms.ToTensor()(X), y_hot, torchvision.transforms.ToTensor()(unlabeled_x),

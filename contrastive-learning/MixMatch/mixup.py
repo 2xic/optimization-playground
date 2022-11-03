@@ -9,10 +9,10 @@ class MixUp:
     """
     TODO: make this more tensor friendly
     """
-    def __call__(self, x, y, x2, y2):
+    def __call__(self, x, y, x2, y2, device):
         batch_size = 1
-        l = np.random.beta(self.alpha, self.alpha, batch_size)
-        l = torch.from_numpy(np.maximum(l, np.ones(l.shape) - l))
+        l = torch.distributions.beta.Beta(self.alpha, self.alpha).sample(torch.tensor([batch_size])).to(device)
+        l = torch.maximum(l, torch.ones(l.shape) - l).to(device)
 
         new_x = x * l + (1 - l) * x2
         new_y = y * l + (1 - l) * y2
