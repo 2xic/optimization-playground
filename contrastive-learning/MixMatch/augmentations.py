@@ -1,7 +1,8 @@
 import torchvision
+import torch
 
-augmentations = [
-    torchvision.transforms.RandomHorizontalFlip(p=1),
-    torchvision.transforms.RandomVerticalFlip(p=1),
-    torchvision.transforms.RandomGrayscale(p=1)
-]
+augmentations = torch.nn.Sequential(
+    torchvision.transforms.RandomHorizontalFlip(p=0.33),
+    torchvision.transforms.RandomVerticalFlip(p=0.33),
+    torchvision.transforms.RandomGrayscale(p=0.33)
+)
