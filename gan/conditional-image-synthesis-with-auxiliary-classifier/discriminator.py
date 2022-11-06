@@ -13,7 +13,9 @@ class Discriminator(nn.Module):
         self.conv2 = nn.Conv2d(6, 16, 5)
         self.fc1 = nn.Linear(16 * 4 * 4, 256)
         self.fc2 = nn.Linear(256, 128)
-        self.fc3 = nn.Linear(128, 1)
+        # is_real + classes -> using mist
+        self.source = nn.Linear(128, 1)
+        self.labels = nn.Linear(128, 10)
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
@@ -22,5 +24,6 @@ class Discriminator(nn.Module):
         x = F.dropout(x, p=0.1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = torch.sigmoid(self.fc3(x))
-        return x
+        source = torch.sigmoid(self.source(x))
+        labels = torch.sigmoid(self.labels(x))
+        return source, labels
