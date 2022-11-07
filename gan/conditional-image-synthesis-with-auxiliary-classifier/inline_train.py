@@ -16,18 +16,16 @@ from torchvision import transforms
 from torch.utils.data import DataLoader
 
 
-def forward(generator, discriminator, x_real, y_real, is_generator_loss):
-    y_real = F.one_hot(y_real, num_classes=10)
+def forward(generator, discriminator, x_real, y_real, is_generator_loss, device):
+    x_real = x_real.to(device)
+    y_real = F.one_hot(y_real, num_classes=10).to(device)
+    x_fake = torch.normal(mean=0, std=1,  size=(x_real.shape[0], 100)).to(device)
 
-    one_hot_class_labels = torch.arange(0, 10).repeat(x_real.shape[0])[:x_real.shape[0]] #.reshape((x_real.shape[0], 10))
-
-    x_fake = torch.normal(mean=0, std=1,  size=(x_real.shape[0], 100))
-    y_fake = F.one_hot(one_hot_class_labels, num_classes=10)
-        
-    
-
+    random_labels = torch.argmax(torch.rand(size=(y_real.shape[0], 10)), dim=1)
+    y_fake =  F.one_hot(random_labels, num_classes=10).to(device).float() 
+     
     x_fake = generator(x_fake, y_fake)
-    (discriminator_real_source ,discriminator_real_labels) = discriminator(x_real)
+    (discriminator_real_source, discriminator_real_labels) = discriminator(x_real)
     (discriminator_fake_source, discriminator_fake_labels) = discriminator(x_fake)
 
     if is_generator_loss:
@@ -37,54 +35,80 @@ def forward(generator, discriminator, x_real, y_real, is_generator_loss):
         discriminator_fake_labels.detach()
     else:
         x_fake.detach()
+    """
+    Should learn to determine what is real, and not.
 
-    l_s_real = F.binary_cross_entropy(
-        discriminator_real_source.reshape((-1, 1)),
-        torch.ones(x_real.shape[0], 1)
+    Standard gan loss
+    """
+    loss = F.cross_entropy
+    l_s_real = torch.nn.L1Loss()(
+        discriminator_real_source,
+        torch.ones((x_real.shape[0], 1)).float().to(device)
     )
-    l_s_fake = F.binary_cross_entropy(
-        discriminator_fake_source.reshape((-1, 1)),
-        torch.zeros(x_fake.shape[0], 1)
+    l_s_fake = torch.nn.L1Loss()(
+        discriminator_fake_source,
+        torch.zeros((x_fake.shape[0], 1)).float().to(device)
     )
-
     l_s_loss = (l_s_real + l_s_fake)
 
-    l_c_real = F.binary_cross_entropy(
+    """
+    Should learn to determine correct class.
+
+    Which is the part meant to guide.
+
+    Question then is, how should it .
+
+    oh, I think the idea is to reuse the same C for both generator and discriminator!
+
+    But the discriminator should assume everything from the fake source to be wrong. Right?
+    So it should be trained on a zero value. At least in the begging.
+    """
+    y_real = torch.argmax(y_real, dim=1).long()
+    l_c_real = loss(
         discriminator_real_labels,
-        y_real.float()
+        y_real,
     )
-    l_c_fake = F.binary_cross_entropy(
+#    y_fake_labels = y_real if is_generator_loss else 
+    #y_fake_labels = torch.zeros(y_real.shape[0]).long().to(device) if not is_generator_loss else y_real
+    l_c_fake = loss(
         discriminator_fake_labels,
-        y_fake.float()
+        y_fake,
     )
 
     l_c_loss = l_c_real + l_c_fake
 
-    generator_loss = l_s_loss - l_c_loss
-    discriminator_loss = l_s_loss + l_c_loss
-    
+    generator_loss = -(l_s_loss - l_c_loss)
+    discriminator_loss = (l_s_loss + l_c_loss)
+
     if is_generator_loss:
         return generator_loss
     return discriminator_loss
 
-def train(generator, discriminator):
-    lr = 1e-3
-    opt_g = torch.optim.Adam(generator.parameters(), lr=lr)
-    opt_d = torch.optim.Adam(discriminator.parameters(), lr=lr)
+def train(generator, discriminator, device):
+    lr_d = 0.0002 #1e-3
+    lr_g = lr_d
+    opt_g = torch.optim.Adam(generator.parameters(), lr=lr_g)
+    opt_d = torch.optim.Adam(discriminator.parameters(), lr=lr_d)
 
-    train_ds = MNIST("./", train=True, download=True, transform=transforms.ToTensor())
+    train_ds = MNIST("./", train=True, download=True,
+                     transform=transforms.ToTensor())
     train_loader = DataLoader(
-        train_ds, batch_size=64, shuffle=True)
+        train_ds, batch_size=32, shuffle=True)
+    
+    forward_loss = forward if True else forward_nnl
+
     for current_epoch in range(25):
         for batch, (x_real, y_real) in enumerate(train_loader):
             total_discriminator_loss = torch.tensor(0).float()
-            for _ in range(16):
-                discriminator_loss = forward(
+            train_batch = 4
+            for _ in range(train_batch):
+                discriminator_loss = forward_loss(
                     generator,
                     discriminator,
                     x_real,
                     y_real,
-                    is_generator_loss=False
+                    is_generator_loss=False,
+                    device=device
                 )
 
                 discriminator.zero_grad()
@@ -92,34 +116,38 @@ def train(generator, discriminator):
                 total_discriminator_loss += discriminator_loss.item()
                 opt_d.step()
 
-            generator_loss = forward(
+            generator_loss = forward_loss(
                 generator,
                 discriminator,
                 x_real,
                 y_real,
-                is_generator_loss=True
+                is_generator_loss=True,
+                device=device
             )
             generator.zero_grad()
             generator_loss.backward()
             opt_g.step()
 
-            if  batch % 25 == 0:
-                print(f"\tg_loss {generator_loss}, d_loss {total_discriminator_loss/10}")
-
-        noise = torch.normal(mean=0, std=1,  size=(10, 100))
-        one_hot_class_labels = torch.arange(0, 10)
-        y_fake = F.one_hot(one_hot_class_labels, num_classes=10)
-
+            if batch % 25 == 0:
+                print(
+                    f"\tg_loss {generator_loss}, d_loss {total_discriminator_loss/train_batch}")
+            
+        noise = torch.normal(mean=0, std=1,  size=(10, 100)).to(device)
+        one_hot_class_labels = torch.arange(0, 10).to(device)
+        y_fake = F.one_hot(one_hot_class_labels, num_classes=10).to(device)
         output = generator(noise, y_fake)
+
         grid_image = torchvision.utils.make_grid(output)
         torchvision.utils.save_image(
             grid_image, f"imgs/img_{current_epoch}.png")
         print(f"saved -> imgs/img_{current_epoch}.png")
 
 if __name__ == '__main__':
-    discriminator = Discriminator()
-    generator = Generator(z=100)
+    device = torch.device('cuda:0') if torch.cuda.is_available() else torch.device('cpu')
+    discriminator = Discriminator().to(device)
+    generator = Generator(z=100).to(device)
     gan = train(
         discriminator=discriminator,
-        generator=generator
+        generator=generator,
+        device=device
     )

@@ -24,6 +24,8 @@ class Discriminator(nn.Module):
         x = F.dropout(x, p=0.1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        source = torch.sigmoid(self.source(x))
-        labels = torch.sigmoid(self.labels(x))
+
+        source = F.relu(self.source(x))
+        labels = F.relu(self.labels(x))
+
         return source, labels
