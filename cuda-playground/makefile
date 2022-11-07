@@ -1,14 +1,14 @@
 
 gpu:
-	nvcc gpu.cu -o gpu
+	nvcc gpu/gpu.cu -o gpu/gpu -I ./ ./gpu/kernel.cu -rdc=true
 
 cpu:
-	gcc cpu.c -o cpu
+	gcc cpu/cpu.c -o cpu/cpu
 
 test_build:
-	gcc test_matmul.c -o test_matmul -I ./ ./shared.c 
+	gcc cpu/test_matmul.c -o cpu/test_matmul -I ./ ./cpu/shared.c 
 
 test: test_build
-	./test_matmul
+	./cpu/test_matmul
 
 .PHONY: gpu cpu test
