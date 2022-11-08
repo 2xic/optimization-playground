@@ -26,65 +26,62 @@ void print_array(int *ptr, int length)
     printf("]");
 }
 
-__global__ void setElement(Matrix *a, int row, int col, int value)
-{
-    int rowIndex = a->columns * row;
-    a->data[rowIndex + col] = value;
-}
-
-__global__ void getElement(Matrix *a, int row, int col, int *value)
-{
-    int rowIndex = a->columns * row;
-    *value = a->data[rowIndex + col];
+__global__ void setElement(int *data, int columns, int row, int col, int value){
+    int rowIndex = columns * row;
+    data[rowIndex + col] = value;
 }
 
 // TODO: this should support any dimension.
+/*
 __global__ void createMatrix(void **device, int rows, int columns)
 {
-    cudaMalloc((void **)&device, sizeof(Matrix));
-    Matrix *matrix = (Matrix *)&device;
-    if (device == NULL)
+    cudaMalloc(device, sizeof(Matrix));
+    void *deviceMatrix = *device;
+    if (deviceMatrix == NULL)
     {
         return;
     }
-    matrix->rows = rows;
-    matrix->columns = columns;
-
+    Matrix *matrix = (Matrix*)deviceMatrix;
+    matrix->rows = 2;
+    matrix->columns = 2;
+    /*
     int size = rows * columns * sizeof(int *);
-    cudaMalloc((int **)matrix->data, size);
+    int **datapointer = &matrix->data;
+    int results = cudaMalloc(datapointer, size);
+    if (results != cudaSuccess) {
+        matrix->rows = -1;
+    }
+   // cudaMemset(datapointer, 0, size);
 }
+*/
 
-__global__ void MatMul(Matrix *a, Matrix *b, Matrix *c)
+__global__ void MatMul(int *a, int *b, int *c, int columns, int rows)
 {
     printf("hello world \n");
-    for (int row = 0; row < c->rows; row++)
+    for (int row = 0; row < rows; row++)
     {
-        for (int column = 0; column < c->columns; column++)
+        for (int column = 0; column < columns; column++)
         {
             int accumulator = 0;
-            for (int column_j = 0; column_j < c->columns; column_j++)
+            for (int current_colum = 0; current_colum < columns; current_colum++)
             {
-                int *res_a;
-                int *res_b;
-                cudaMalloc((void**)&res_a, sizeof(int));
-                getElement<<<1,1>>>(a, row, column_j, res_a);
+                // current row + current column
+                int a_rowIndex = columns * row;
+                int a_item = a[a_rowIndex + current_colum];
 
-                cudaMalloc((void**)&res_b, sizeof(int));
-                getElement<<<1,1>>>(b, column_j, column, res_b);
+                // current column + column
+                int b_rowIndex = columns * current_colum;
+                int b_item = b[b_rowIndex + column];
 
-/*               int res_b; 
-                getElement<<<1,1>>>(b, column_j, column, &res_b);
-*/
-                printf("%d", *res_a);
-                accumulator += *res_a * *res_b;
+                accumulator += a_item * b_item;
             }
-/*
             setElement<<<1,1>>>(
                 c,
+                columns,
                 row,
                 column,
-                accumulator);
-                */
+                accumulator
+            );
         }
     }
 }

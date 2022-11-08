@@ -6,90 +6,43 @@
 
 
 int main(){
-    printf("Creating first matrix :)\n");
+    int SIZE = 4;
+//    int *a_host;
+    int *a_device;
+    Matrix *a = (Matrix*)malloc(sizeof(Matrix));
+    cudaMalloc(&a_device, SIZE * sizeof(int));
+    a->data = a_device;
+    a->rows = 2;
+    a->columns = 2;
 
-	Matrix *d_a;
-    createMatrix<<<1, 1>>>((void**)&d_a, 2, 2);
-    setElement<<<1, 1>>>(d_a, 0, 0, -2);
-    setElement<<<1, 1>>>(d_a, 0, 1, 1);
-    setElement<<<1, 1>>>(d_a, 1, 0, 0);
-    setElement<<<1, 1>>>(d_a, 1, 1, 4);
+    setElement<<<1, 1>>>(a->data, a->columns, 0, 0, -2);
+    setElement<<<1, 1>>>(a->data, a->columns, 0, 1, 1);
+    setElement<<<1, 1>>>(a->data, a->columns, 1, 0, 0);
+    setElement<<<1, 1>>>(a->data, a->columns, 1, 1, 4);
 
-    printf("Creating second matrix :)\n");
+//    int *b_host;
+    int *b_device;
+    Matrix *b = (Matrix*)malloc(sizeof(Matrix));
+    cudaMalloc(&b_device, SIZE * sizeof(int));
+    b->data = b_device;
+    b->rows = 2;
+    b->columns = 2;
 
-	Matrix *d_b;
-    createMatrix<<<1, 1>>>((void**)&d_b, 2, 2);
-    setElement<<<1, 1>>>(d_b, 0, 0, -2);
-    setElement<<<1, 1>>>(d_b, 0, 1, 1);
-    setElement<<<1, 1>>>(d_b, 1, 0, 0);
-    setElement<<<1, 1>>>(d_b, 1, 1, 4);
+    setElement<<<1,1>>>(b->data, b->columns, 0, 0, 6);
+    setElement<<<1,1>>>(b->data, b->columns, 0, 1, 5);
+    setElement<<<1,1>>>(b->data, b->columns, 1, 0, -7);
+    setElement<<<1,1>>>(b->data, b->columns, 1, 1, 1);
 
-    printf("Creating last matrix :)\n");
+    int *c_device;
+    cudaMalloc(&c_device, SIZE * sizeof(int));
+    MatMul<<<1, 1>>>(a->data, b->data, c_device, a->rows, b->columns);
 
-    Matrix *d_c;
-    createMatrix<<<2, 1>>>((void**)&d_c, 2, 2);
-    cudaMemset(d_c->data, 0, 2 * 2);
+    int *c_host;
+    c_host = (int*)malloc(SIZE * sizeof(int));
+    cudaMemcpy(c_host, c_device, SIZE * sizeof(int), cudaMemcpyDeviceToHost);
+    printf("%i\n", c_host[0]);
+    printf("%i\n", c_host[1]);
+    printf("%i\n", c_host[2]);
+    printf("%i\n", c_host[3]);
 
-    MatMul<<<2, 1>>>(d_a, d_b, d_c);
-    printf("Finished  matmul :D\n");
-
-
-    int *out;
-    printf("copy ?? ");
-    out = (int*) malloc(sizeof(int *) * 2 * 2);
-    cudaMemcpy(out, d_c->data, sizeof(int) * 2 * 2, cudaMemcpyDeviceToHost);
-    printf("printing ?? ");
-    print_array(out, 2);
-
-    printf("done \n");
-
-    cudaFree(d_a->data);
-    cudaFree(d_a);
-    cudaFree(d_b);
-    cudaFree(d_b->data);
-    cudaFree(d_c);
-    cudaFree(d_c->data);
-
-///    MatMul<<<1, 1>>>(d_a, d_b, d_c);
-
-    /*
-    Matrix *results;
-    createMatrix<<<1,1>>>(
-        a->rows,
-        b->columns
-    );
-    */
-
-
-    /*
-    float *a, *b, *out; 
-    float *d_a, *d_b, *d_out;
-    a   = (float*)malloc(sizeof(float) * N);
-    b   = (float*)malloc(sizeof(float) * N);
-    for(int i = 0; i < N; i++){
-        a[i] = 1.0f; 
-        b[i] = 2.0f;
-    }
-
-    cudaMalloc((void**)&d_a, sizeof(float) * N);
-    cudaMemcpy(d_a, a, sizeof(float) * N, cudaMemcpyHostToDevice);
-    
-    cudaMalloc((void**)&d_b, sizeof(float) * N);
-    cudaMemcpy(d_b, b, sizeof(float) * N, cudaMemcpyHostToDevice);
-
-    out = (float*)malloc(sizeof(float) * N);
-    cudaMalloc((void**)&d_out, sizeof(float) * N);
-   // cudaMemcpy(d_out, out, sizeof(float) * N, cudaMemcpyHostToDevice);
-
-    vector_add<<<1,1>>>(d_out, d_a, d_b, N);
-
-    cudaMemcpy(out, d_out, sizeof(float) * N, cudaMemcpyDeviceToHost);
-    
-    free(a);
-    cudaFree(d_a);
-    free(b);
-    cudaFree(d_b);    
-    free(out);
-    cudaFree(d_out);
-    */
 }
