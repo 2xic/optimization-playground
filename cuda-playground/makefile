@@ -2,6 +2,10 @@
 gpu:
 	nvcc gpu/gpu.cu -o gpu/gpu -I ./ ./gpu/kernel.cu -rdc=true
 
+gpu_library:
+	# https://forums.developer.nvidia.com/t/shared-library-creation/4776/4
+	nvcc gpu/library.cu -o gpu/gpu.so -I ./ ./gpu/kernel.cu -rdc=true --compiler-options '-fPIC' --shared 
+
 gpu_run: gpu
 	./gpu/gpu
 

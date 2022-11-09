@@ -7,7 +7,6 @@
 
 int main(){
     int SIZE = 4;
-//    int *a_host;
     int *a_device;
     Matrix *a = (Matrix*)malloc(sizeof(Matrix));
     cudaMalloc(&a_device, SIZE * sizeof(int));
@@ -20,7 +19,6 @@ int main(){
     setElement<<<1, 1>>>(a->data, a->columns, 1, 0, 0);
     setElement<<<1, 1>>>(a->data, a->columns, 1, 1, 4);
 
-//    int *b_host;
     int *b_device;
     Matrix *b = (Matrix*)malloc(sizeof(Matrix));
     cudaMalloc(&b_device, SIZE * sizeof(int));
@@ -44,5 +42,4 @@ int main(){
     printf("%i\n", c_host[1]);
     printf("%i\n", c_host[2]);
     printf("%i\n", c_host[3]);
-
 }

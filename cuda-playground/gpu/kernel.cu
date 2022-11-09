@@ -1,16 +1,6 @@
 #include <stdlib.h>
 #include "kernel.h"
 #include <stdio.h>
-/*
-
-
-
-
-void freeMatrix( Matrix *a) {
-    free(a->data);
-    free(a);
-}
-*/
 
 void print_array(int *ptr, int length)
 {
@@ -30,30 +20,6 @@ __global__ void setElement(int *data, int columns, int row, int col, int value){
     int rowIndex = columns * row;
     data[rowIndex + col] = value;
 }
-
-// TODO: this should support any dimension.
-/*
-__global__ void createMatrix(void **device, int rows, int columns)
-{
-    cudaMalloc(device, sizeof(Matrix));
-    void *deviceMatrix = *device;
-    if (deviceMatrix == NULL)
-    {
-        return;
-    }
-    Matrix *matrix = (Matrix*)deviceMatrix;
-    matrix->rows = 2;
-    matrix->columns = 2;
-    /*
-    int size = rows * columns * sizeof(int *);
-    int **datapointer = &matrix->data;
-    int results = cudaMalloc(datapointer, size);
-    if (results != cudaSuccess) {
-        matrix->rows = -1;
-    }
-   // cudaMemset(datapointer, 0, size);
-}
-*/
 
 __global__ void MatMul(int *a, int *b, int *c, int columns, int rows)
 {
