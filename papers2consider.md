@@ -18,3 +18,8 @@
 [Recurrent World Models Facilitate Policy Evolution](https://arxiv.org/pdf/1809.01999.pdf?utm_source=pocket_mylist)
 
 [Deep Reinforcement Learning with Double Q-learning](https://arxiv.org/abs/1509.06461)
+
+## NLP 
+[Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
+
+
