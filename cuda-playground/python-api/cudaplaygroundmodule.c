@@ -17,7 +17,7 @@ cudaplayground_system(PyObject *self, PyObject *args)
 static PyMethodDef CudaplaygroundMethods[] = {
     {"system",  cudaplayground_system, METH_VARARGS,
      "Execute a shell command."},
-    {NULL, NULL, 0, NULL}        /* Sentinel */
+    {NULL, NULL, 0, NULL}
 };
 
 
@@ -34,12 +34,11 @@ static struct PyModuleDef Cudaplaygroundmodule = {
 
 
 
-
-
 PyMODINIT_FUNC
 PyInit_cudaplayground(void)
 {
     testHello();
+    printf("test v1 ??\n");
     return PyModule_Create(&Cudaplaygroundmodule);
 }
 

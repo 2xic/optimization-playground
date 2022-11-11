@@ -8,6 +8,12 @@ void vector_add(float *out, float *a, float *b, int N) {
     }
 }
 
+
+void testHello(){
+    // test
+    printf("hello broo !! :)\n");
+}
+
 #define N 1000
 
 int main(){
@@ -30,4 +36,6 @@ int main(){
     free(a);
     free(b);
     free(out);
+
+    return 0;
 }

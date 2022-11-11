@@ -1,3 +1,4 @@
 gpu/gpu
 cpu/cpu
 test_matmul
+*.so
