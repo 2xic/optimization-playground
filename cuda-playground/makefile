@@ -15,7 +15,7 @@ cpu:
 	gcc cpu/cpu.c -o cpu/cpu
 
 cpu_library:
-	gcc -shared -fPIC cpu/cpu.c -o cpu/libcpu.so 
+	gcc -shared -fPIC cpu/library.c cpu/shared.c -o cpu/libcpu.so 
 	sudo cp cpu/libcpu.so /usr/lib/
 #	gcc -shared -fPIC cpu/cpu.c -o cpu/cpu.o 
 #	gcc cpu/cpu.c -o cpu/cpu.so -shared -Wall -fPIC -O2

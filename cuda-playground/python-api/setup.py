@@ -14,7 +14,7 @@ def main():
             ["cudaplaygroundmodule.c"],
 #            libraries=['/home/brage/Desktop/paper-zoo/cuda-playground/python-api/gpu']
 #            library_dirs=['/home/brage/Desktop/paper-zoo/cuda-playground/python-api/cpu/', './'],
-            libraries=['gpu'],
+            libraries=['gpu', 'cpu'],
           )])
     """
       P.s also move the package to /usr/lib

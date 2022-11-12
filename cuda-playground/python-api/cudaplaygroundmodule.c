@@ -3,22 +3,26 @@
 #include "gpu_library.h"
 
 static PyObject *
-cudaplayground_system(PyObject *self, PyObject *args)
+gpu(PyObject *self, PyObject *args)
 {
-    const char *command;
-    int sts;
+    gpu_test();
+    
+    return PyLong_FromLong(1);
+}
 
-    if (!PyArg_ParseTuple(args, "s", &command))
-        return NULL;
-    sts = system(command);
-    return PyLong_FromLong(sts);
+static PyObject *
+cpu(PyObject *self, PyObject *args)
+{
+    cpu_test();
+    return PyLong_FromLong(1);
 }
 
 static PyMethodDef CudaplaygroundMethods[] = {
-    {"system",  cudaplayground_system, METH_VARARGS,
+    {"gpu", gpu, METH_VARARGS,
      "Execute a shell command."},
-    {NULL, NULL, 0, NULL}
-};
+    {"cpu", cpu, METH_VARARGS,
+     "Execute a shell command."},
+    {NULL, NULL, 0, NULL}};
 
 
 static struct PyModuleDef Cudaplaygroundmodule = {
@@ -26,33 +30,27 @@ static struct PyModuleDef Cudaplaygroundmodule = {
     "cudaplayground",
     NULL,
     -1,
-    CudaplaygroundMethods
-};
-
-
-
-
+    CudaplaygroundMethods};
 
 
 PyMODINIT_FUNC
 PyInit_cudaplayground(void)
 {
-    testHello();
-    printf("test v1 ??\n");
     return PyModule_Create(&Cudaplaygroundmodule);
 }
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
     wchar_t *program = Py_DecodeLocale(argv[0], NULL);
-    if (program == NULL) {
+    if (program == NULL)
+    {
         fprintf(stderr, "Fatal error: cannot decode argv[0]\n");
         exit(1);
     }
 
     /* Add a built-in module, before Py_Initialize */
-    if (PyImport_AppendInittab("cudaplayground", PyInit_cudaplayground) == -1) {
+    if (PyImport_AppendInittab("cudaplayground", PyInit_cudaplayground) == -1)
+    {
         fprintf(stderr, "Error: could not extend in-built modules table\n");
         exit(1);
     }
@@ -68,7 +66,8 @@ main(int argc, char *argv[])
        import can be deferred until the embedded script
        imports it. */
     PyObject *pmodule = PyImport_ImportModule("cudaplayground");
-    if (!pmodule) {
+    if (!pmodule)
+    {
         PyErr_Print();
         fprintf(stderr, "Error: could not import module 'cudaplayground'\n");
     }

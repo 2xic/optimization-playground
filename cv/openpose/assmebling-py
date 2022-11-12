@@ -1,0 +1,29 @@
+"""
+Bipartite Matching is used for doing the matching of keypoints
+
+See algorithm for section 3.5
+
+z[j1][j2] -> check if two detection candiates are valid
+
+D_j = {
+    [....] <- possible for partj (x,y)
+    ...
+    ...
+    part j
+}
+
+Z = is the set of possible connection of parts in D_j
+
+Basically - we want to maximize
+
+E = 2d arr
+for m in D:
+    for n in D:
+        E[m][n] = E_m_m * z[m][n] 
+            <- E_m_m is the  weight confidence
+
+https://en.wikipedia.org/wiki/Hungarian_algorithm is used for the matching
+
+
+"""
+

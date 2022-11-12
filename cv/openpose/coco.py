@@ -91,10 +91,9 @@ class Coco:
     def show(self):
         self.results[0].show(self.skeleton)
         
-    def plot_confidence(self):
+    def get_confidence_map(self, sigma):
         confidence = ConfidenceMap()
         img_shape = self.results[0].shape
-        x = torch.zeros(img_shape)
         current_keypoint = self.results[0].keypoints[5].locaiton.reshape((1, 1, 2))
 
         i, j = torch.meshgrid(
@@ -103,40 +102,39 @@ class Coco:
             indexing='ij'
         )
         grid_tenosr = torch.dstack([i, j]).float()
-        print(grid_tenosr)
-        print(grid_tenosr.shape)
-        print(current_keypoint.shape)
-       # exit(0)
-
-        x = confidence.function(
+        results = confidence.function(
             grid_tenosr,
-            current_keypoint
+            current_keypoint,
+            sigma
         )
-       # print(x.shape)
-      #  print(x)
-       # exit(0)
-        plt.imshow(x * 255)
-        plt.show()
+        return results
 
-    def plot_paf(self):
-        img_shape = self.results[0].shape
-        x = ParityFields()
+    def get_paf_map(self, sigma, optimized=False):
+        #print(self.results[0].shape)
+        img_shape = (640, 480)#, 3) #self.results[0].shape
+        parity_fields = ParityFields()
+        parity_x = torch.zeros(img_shape + (2, ))
         p_1 = torch.tensor((355, 367)).float()
         p_2 = torch.tensor((423, 314)).float()
 
-        break_now = False
-        for i in range(img_shape[0]):
-            if break_now:
-                break
-            for j in range(img_shape[1]):
-                res = x.function(i, j, p_1, p_2)
-                if torch.is_tensor(res):
-                   # plt.scatter(i, j)
-                    plt.quiver(p_1[0], p_1[1], (p_2[0] - p_1[0]), (p_2[1] - p_1[0]), angles='xy', scale_units='xy')#, scale=100)
-                    plt.quiver(p_1[0], p_1[1], res[0], res[1], angles='xy', scale_units='xy')#, scale=100)
-                 #   break_now = True
-                    break
-                
-     #   self.results[0].imshow()
-        plt.show()
+        img = torch.zeros((img_shape))
+        img[p_1[0].long(), p_1[1].long()] = 255
+        img[p_2[0].long(), p_2[1].long()] = 255
 
+        if optimized:
+            i, j = torch.meshgrid(
+                torch.arange(img_shape[0]), 
+                torch.arange(img_shape[1]), 
+                indexing='ij'
+            )
+            grid_tenosr = torch.dstack([i, j]).float()
+            res = parity_fields.function(grid_tenosr, p_1, p_2, sigma)
+            return res
+        else:
+            for i in range(300, img_shape[0]):
+                for j in range(300, img_shape[1]):
+                    res = parity_fields.unoptimized_function(torch.tensor([i, j]), p_1, p_2, 5)
+                    if torch.is_tensor(res):
+                        img[i, j] = 128
+                        parity_x[i, j] = res
+            return img
