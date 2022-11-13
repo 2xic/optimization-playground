@@ -90,30 +90,7 @@ class ParityFields:
         return 0
 
 
-def trapezoidal(n=10_000):
-    dx = 1 / n
-    # (1 - u) * dj + udj
-    f = lambda u: (1 - u) + u
-    results = 0
-    for i in range(0, n):
-        x_k = dx * i
-        x_n = dx * n
-        if i > 0 and (i + 1) < n:
-            results += 2 * f(x_k)        
-        else:
-            results +=  f(x_k)
-    return dx/2 * results
-
-
-def E():
-    # trapezoidal * 
-    # function = L(p(u))
-    # p = (1 - u) p_1 + u * p_2
-    E = trapezoidal()
-
 if __name__ == "__main__":
-    print(trapezoidal())
-    """
     from coco import Coco
     import matplotlib.pyplot as plt
     dataset = Coco().get_paf_map(10, optimized=False)
@@ -121,5 +98,3 @@ if __name__ == "__main__":
     print(data)
     plt.imshow(dataset)
     plt.show()
-    """
-    
