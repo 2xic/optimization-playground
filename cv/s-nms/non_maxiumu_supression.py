@@ -1,3 +1,6 @@
+import sys
+sys.path.append('../yolo')
+
 from dis import dis
 from telnetlib import BM
 import numpy as np
@@ -66,25 +69,26 @@ def soft_nms(bounding_boxses, scores):
     return d, copy_scores
 
 
-original_box = (0.4772736728191376, 0.07791886478662491,
-                0.4721715450286865, 0.07105270773172379)
+if __name__ == "__main__":
+    original_box = (0.4772736728191376, 0.07791886478662491,
+                    0.4721715450286865, 0.07105270773172379)
 
-assert iou(original_box, original_box) == 1,  iou(original_box, original_box) 
+    assert iou(original_box, original_box) == 1,  iou(original_box, original_box) 
 
-boxses_with_some_noise = [
-    [original_box[i] * (1 + np.random.rand() * 0.1)
-     for i in range(len(original_box))]
-    for _ in range(4)
-]
-scores = list(range(len(boxses_with_some_noise)))
+    boxses_with_some_noise = [
+        [original_box[i] * (1 + np.random.rand() * 0.1)
+        for i in range(len(original_box))]
+        for _ in range(4)
+    ]
+    scores = list(range(len(boxses_with_some_noise)))
 
 
-plot = ImageBoundingBox().load_image(
-    "000000558840.jpg",
-    Constants()
-)
-for i in nms(*soft_nms(boxses_with_some_noise, scores)):
-    plot.load_bbox(
-        i
+    plot = ImageBoundingBox().load_image(
+        "000000558840.jpg",
+        Constants()
     )
-plot.show()
+    for i in nms(*soft_nms(boxses_with_some_noise, scores)):
+        plot.load_bbox(
+            i
+        )
+    plot.show()

@@ -1,7 +1,7 @@
 from coco import Coco
 import numpy as np
 from scipy.optimize import linear_sum_assignment
-
+from skeleton import Skeleton
 #dataset = Coco().load_annotations().show()
 #print(dataset)
 
@@ -26,34 +26,6 @@ parity_fields = ParityFields()
 p_1 = torch.tensor((355, 367)).float()
 p_2 = torch.tensor((423, 314)).float()
 
-def f(u, d_1, d_2):
-    p = (
-        1 - u 
-    ) * d_1 + u * d_2
-    res = parity_fields.unoptimized_function(p, p_1, p_2, 5)
-    if not torch.is_tensor(res):
-        res = torch.tensor([0, 0]).float()
-    res = res @ (p_2 - p_1) / torch.norm(p_2 - p_1)
-    return res
-
-def trapezoidal(d_1, d_2, n=3):
-    dx = 1 / n
-    # (1 - u) * dj + udj
-    results = 0
-    for i in range(0, n):
-        print(i)
-        x_k = dx * i
-        if i > 0 and (i + 1) < n:
-            results += 2 * f(x_k, d_1, d_2)
-        else:
-            results +=  f(x_k, d_1, d_2)
-    return dx/2 * results
-
-
-def E(d_1, d_2):
-    print(d_1 , d_2)
-    return trapezoidal(d_1, d_2)
-
 
 if __name__ == "__main__":
     # okay, so the results of E is the matrix we want to maximize
@@ -64,12 +36,18 @@ if __name__ == "__main__":
     # <- P_1 = Weight of ??
     # E = Total weight (I think)
     # We supply points to E.
-    results_1 = E(p_1, p_2)
+    obj = Skeleton(
+        img_shape=(640, 480),
+        skeleton=[[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12], [7, 13], [6, 7], [6, 8], [7, 9], [8, 10], [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]],
+        keypoints=[(0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (325, 160, 2), (398, 177, 2), (0, 0, 0), (437, 238, 2), (0, 0, 0), (477, 270, 2), (287, 255, 1), (339, 267, 2), (0, 0, 0), (423, 314, 2), (0, 0, 0), (355, 367, 2)]
+    )
+
+    results_1 = obj.E(p_1, p_2, p_1, p_2)
     print(results_1)
     """
     Hm, okay, I guess.
     """
-    results_2 = E(p_1 / 2, p_2)
+    results_2 = obj.E(p_1, p_2, p_1 / 2, p_2)
     print(results_2)
     """
     Okay, so now you know the weights of a given point!

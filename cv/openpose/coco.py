@@ -56,7 +56,15 @@ class ImageLabel:
 
                 plt.plot(x_values, y_values, 'bo', linestyle="--")
 
+    def plot_image_skeleton_keypoints(self, score_coordinate):
+        for score, from_c, to_c in score_coordinate:
+            print((score, from_c, to_c))
+            if score is not None:
+                from_c = [from_c[0], from_c[1]]
+                to_c = [to_c[0], to_c[1]]
+                plt.plot(from_c, to_c, 'bo', linestyle="--")
         plt.imshow(self.image)
+        plt.show()
 
     def show(self, skeleton=[]):
         self.imshow(skeleton)
@@ -66,7 +74,7 @@ class ImageLabel:
 class Coco:
     def __init__(self) -> None:
         self.results = []
-
+        self.skeleton = None
 
     def load_annotations(self):
         self.annotations = open(
@@ -91,24 +99,6 @@ class Coco:
     def show(self):
         self.results[0].show(self.skeleton)
         
-    def get_confidence_map(self, sigma):
-        confidence = ConfidenceMap()
-        img_shape = self.results[0].shape
-        current_keypoint = self.results[0].keypoints[5].locaiton.reshape((1, 1, 2))
-
-        i, j = torch.meshgrid(
-            torch.arange(img_shape[0]), 
-            torch.arange(img_shape[1]), 
-            indexing='ij'
-        )
-        grid_tenosr = torch.dstack([i, j]).float()
-        results = confidence.function(
-            grid_tenosr,
-            current_keypoint,
-            sigma
-        )
-        return results
-
     def get_paf_map(self, sigma, optimized=False):
         #print(self.results[0].shape)
         img_shape = (640, 480)#, 3) #self.results[0].shape
@@ -127,8 +117,8 @@ class Coco:
                 torch.arange(img_shape[1]), 
                 indexing='ij'
             )
-            grid_tenosr = torch.dstack([i, j]).float()
-            res = parity_fields.function(grid_tenosr, p_1, p_2, sigma)
+            grid_tensor = torch.dstack([i, j]).float()
+            res = parity_fields.function(grid_tensor, p_1, p_2, sigma)
             return res
         else:
             for i in range(300, img_shape[0]):
@@ -138,3 +128,11 @@ class Coco:
                         img[i, j] = 128
                         parity_x[i, j] = res
             return img
+
+
+if __name__  == "__main__":
+    obj = Coco()
+    obj.load_annotations()
+    print(obj.skeleton)
+    print(obj.results[0].keypoints)
+
