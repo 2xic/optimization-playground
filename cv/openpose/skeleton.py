@@ -118,13 +118,14 @@ class Skeleton:
         #   :)
         # -> Still not entirely sure how to separate from each person
         #   -> I guess this is where the non maximum suppression comes in
-        confidence = torch.sigmoid(confidence)
+        #confidence = torch.sigmoid(confidence)
         x = F.pad(confidence, (1, 1, 1, 1))
         pool = nn.MaxPool2d(3, stride=1)
-        limit = 0.73
+        limit = 0.70
         maxpooled = pool(
             x
-        )
+        ) if False else confidence
+
 #        for keypoints in range(len(self.keypoints)):
         for index, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
             (x, y) = (torch.where(maxpooled[keypoint_index_i - 1, :, :] > limit))
@@ -133,11 +134,17 @@ class Skeleton:
             x_y_1 = self._mergePoints(x, y).reshape((-1, 2))
             x_y_2 = self._mergePoints(x_1, y_1).reshape((-1, 2))
 
+            print(x.shape)
+            print(x_1.shape)
+
             """
             TODO: Sloppy merge, but this should be fixed !!!!
             """
             #print(x_y_1.shape)
             #print(x_y_2.shape)
+
+            truth_point_i = self.keypoints[keypoint_index_i - 1]
+            truth_point_j = self.keypoints[keypoint_index_j - 1]
 
             min_max_item = [None, None, None]
             for i in x_y_1:
@@ -149,13 +156,22 @@ class Skeleton:
                     ))
                     if results.item() != 0 and not torch.isnan(results):
                         if (min_max_item[0] is None or min_max_item[0] < results.item()):
+
+                           # if truth_point_i.locaiton[0] == i[0] and truth_point_i.locaiton[1] == i[1]:
+                           #    if truth_point_j.locaiton[0] == j[0] and truth_point_j.locaiton[1] == j[1]:
+                           #       print("Found match :)")
+
                             min_max_item[0] = results.item()
-                            min_max_item[1] = i
-                            min_max_item[2] = j
+                            min_max_item[1] = i # truth_point_i.locaiton #i
+                            min_max_item[2] = j # truth_point_j.locaiton #j
+            print(min_max_item)
             yield (min_max_item)
             #print(f"limb {index}")
 
-            
+    def skeleton_from_keypoints(self):
+        for (i, j) in self.skeleton:
+            if self.keypoints[i - 1].is_visible() and self.keypoints[j - 1].is_visible():
+                yield (1, self.keypoints[i - 1].locaiton, self.keypoints[j - 1].locaiton)
 
 if __name__ == "__main__":
     obj = Skeleton(
@@ -172,8 +188,10 @@ if __name__ == "__main__":
         obj.confidence_map(),
         obj.paf_field()
     ))
+#    items = list(
+#        obj.skeleton_from_keypoints()
+#    )
     obj = Coco()
-    obj.load_annotations(
-    )
+    obj.load_annotations()
     obj.results[0].plot_image_skeleton_keypoints(items)
 

@@ -60,8 +60,8 @@ class ImageLabel:
         for score, from_c, to_c in score_coordinate:
             print((score, from_c, to_c))
             if score is not None:
-                from_c = [from_c[0], from_c[1]]
-                to_c = [to_c[0], to_c[1]]
+                from_c = [from_c[0], to_c[0]]
+                to_c = [from_c[1], to_c[1]]
                 plt.plot(from_c, to_c, 'bo', linestyle="--")
         plt.imshow(self.image)
         plt.show()
