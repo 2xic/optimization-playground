@@ -7,6 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from coco import Coco
 
+
 class Skeleton:
     def __init__(self, img_shape, keypoints, skeleton) -> None:
         self.img_shape = img_shape
@@ -38,21 +39,29 @@ class Skeleton:
         return confidence_tensor
 
     def paf_field(self):
-        if os.path.isfile('parity_fields.pt'):
-            return torch.load('parity_fields.pt')['tensor']
+      #  if os.path.isfile('parity_fields.pt'):
+      #      return torch.load('parity_fields.pt')['tensor']
         parity_fields = ParityFields()
         parity_tensor = torch.zeros(
             (len(self.skeleton), ) + self.img_shape + (2, ))
+
         for index, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
             p_1 = self.keypoints[keypoint_index_i - 1]
             p_2 = self.keypoints[keypoint_index_j - 1]
 
             if (p_1.visible and p_2.visible):
-                for i in range(0, self.img_shape[0]):
-                    for j in range(0, self.img_shape[1]):
-                        res = parity_fields.unoptimized_function(
-                            torch.tensor([i, j]), p_1.locaiton, p_2.locaiton, self.sigma)
-                        parity_tensor[index, i, j] = res
+#                for i in range(0, self.img_shape[0]):
+#                    for j in range(0, self.img_shape[1]):
+                x, y = torch.meshgrid(
+                    torch.arange(0, self.img_shape[0]), 
+                    torch.arange(0, self.img_shape[1]), 
+                    indexing='ij'
+                )
+                res = parity_fields.optimized_function(x, y, p_1.locaiton, p_2.locaiton, self.sigma, shape=(
+                    self.img_shape[0],
+                    self.img_shape[1]
+                ))
+                parity_tensor[index] = res
         torch.save({
             'tensor': parity_tensor
         }, 'parity_fields.pt')
@@ -69,7 +78,7 @@ class Skeleton:
             1 - u
         ) * d_1 + u * d_2
         self.parity_fields = ParityFields()
-        res = self.parity_fields.unoptimized_function(p, p_1, p_2, 5)
+        res = self.parity_fields.optimized_function(p[0], p[1], p_1, p_2, 5)
         if not torch.is_tensor(res):
             res = torch.tensor([0, 0]).float()
         res = res @ (d_2 - d_1) / torch.norm(d_2 - d_1)
@@ -97,8 +106,8 @@ class Skeleton:
 
     def _mergePoints(self, x, y):
         i, j = torch.meshgrid(
-            x, 
-            y, 
+            x,
+            y,
             indexing='ij'
         )
         grid_tensor = torch.dstack([i, j]).float()
@@ -119,38 +128,47 @@ class Skeleton:
         # -> Still not entirely sure how to separate from each person
         #   -> I guess this is where the non maximum suppression comes in
         #confidence = torch.sigmoid(confidence)
-        x = F.pad(confidence, (1, 1, 1, 1))
-        pool = nn.MaxPool2d(3, stride=1)
-        limit = 0.70
-        maxpooled = pool(
-            x
-        ) if False else confidence
+#        limit = 0.70
+#        maxpooled = confidence
 
 #        for keypoints in range(len(self.keypoints)):
         for index, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
-            (x, y) = (torch.where(maxpooled[keypoint_index_i - 1, :, :] > limit))
-            (x_1, y_1) = (torch.where(maxpooled[keypoint_index_j - 1, :, :] > limit))
 
-            x_y_1 = self._mergePoints(x, y).reshape((-1, 2))
-            x_y_2 = self._mergePoints(x_1, y_1).reshape((-1, 2))
+            def get_keypoints(index):
+                x = F.pad(confidence[index], (2, 2, 2, 2))
+                center = x[1:x.shape[0] - 1, 1:x.shape[1]-1]
+                left = x[2:x.shape[0], 1:x.shape[1] - 1]
+                right = x[:x.shape[0] -2, 1:x.shape[1] - 1]
+                top = x[1:x.shape[0] - 1, :x.shape[1] - 2]
+                bottom = x[1:x.shape[0] - 1, 2:x.shape[1] ]
 
-            print(x.shape)
-            print(x_1.shape)
-
+                peak = (
+                    (center > left).long() &
+                    (center > right).long() &
+                    (center > top).long() &
+                    (center > bottom).long()
+                )
+    #            print(peak)
+    #            exit(0)
+                keypoints_x, keypoints_y = torch.where(peak > 0)
+                return torch.dstack([keypoints_x, keypoints_y]).float()[0]
             """
             TODO: Sloppy merge, but this should be fixed !!!!
+
+            Look at this a bit more, looks like the way they solve it by padding the array
+            - Then reading 2+ x
+            -              -2x
+            -              2+y
+            -              -2 y
+            -   With a center of (1 + x, y + 1)
+            -  ^ value with max in center = good item.
             """
-            #print(x_y_1.shape)
-            #print(x_y_2.shape)
-
-            truth_point_i = self.keypoints[keypoint_index_i - 1]
-            truth_point_j = self.keypoints[keypoint_index_j - 1]
-
+            """
             min_max_item = [None, None, None]
-            for i in x_y_1:
-                for j in x_y_2:
+            for i in keypoints_x:
+                for j in keypoints_y:
                     results = (self.E(
-                        paf[index, :, :, :],    
+                        paf[index, :, :, :],
                         d_1=i,
                         d_2=j
                     ))
@@ -162,9 +180,14 @@ class Skeleton:
                            #       print("Found match :)")
 
                             min_max_item[0] = results.item()
-                            min_max_item[1] = i # truth_point_i.locaiton #i
-                            min_max_item[2] = j # truth_point_j.locaiton #j
+                            min_max_item[1] = i  # truth_point_i.locaiton #i
+                            min_max_item[2] = j  # truth_point_j.locaiton #j
+            """
+            min_max_item = [1, None, None]
+            min_max_item[1] = get_keypoints(keypoint_index_i - 1)[0]
+            min_max_item[2] = get_keypoints(keypoint_index_j - 1)[0]
             print(min_max_item)
+            #print(min_max_item)
             yield (min_max_item)
             #print(f"limb {index}")
 
@@ -172,6 +195,7 @@ class Skeleton:
         for (i, j) in self.skeleton:
             if self.keypoints[i - 1].is_visible() and self.keypoints[j - 1].is_visible():
                 yield (1, self.keypoints[i - 1].locaiton, self.keypoints[j - 1].locaiton)
+
 
 if __name__ == "__main__":
     obj = Skeleton(
@@ -181,17 +205,16 @@ if __name__ == "__main__":
         keypoints=[(0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (325, 160, 2), (398, 177, 2), (0, 0, 0), (437, 238, 2),
                    (0, 0, 0), (477, 270, 2), (287, 255, 1), (339, 267, 2), (0, 0, 0), (423, 314, 2), (0, 0, 0), (355, 367, 2)]
     )
-    #print(obj.confidence_map())
-    #print(obj.paf_field())
-    #exit(0)
+    # print(obj.confidence_map())
+    # print(obj.paf_field())
+    # exit(0)
     items = list(obj.merge(
         obj.confidence_map(),
         obj.paf_field()
     ))
 #    items = list(
 #        obj.skeleton_from_keypoints()
-#    )
+ #   )
     obj = Coco()
     obj.load_annotations()
     obj.results[0].plot_image_skeleton_keypoints(items)
-

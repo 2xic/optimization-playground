@@ -11,59 +11,35 @@ l_ck = xj_2 - xj_1
 """
 
 class ParityFields:
-    def function(self, p, p_1, p_2, sigma):
-        """
-        TODO: write optimized version
-        """
-        # This stays the same for each keypoint.
-        v_single =  ((p_2 - p_1)/torch.norm(p_2 - p_1))
-        # This stays the same for each keypoint
+    def optimized_function(self, x, y, p_1, p_2, sigma, shape):
+        v: torch.Tensor = (p_2 - p_1)/torch.norm(p_2 - p_1)
         l_ck = torch.norm(p_2 - p_1) 
-        # This stays the same for each keypoint
+
         perpendicular = torch.tensor([
-            -v_single[1],
-            v_single[0]
-        ]) 
-        # This stays the same for each origin keypoint
-        p_delta = p - p_1
-        """
-        Need this to be a 2D vector output.
-        """
-       # print(p_delta.shape)
-       # print(v_single.shape)
-        full_v = torch.concat([
-            v_single.reshape((1, 2)) for _ in range(480)
-        ], dim=0)
-        full_perpendicular = torch.concat([
-            perpendicular.reshape((1, 2)) for _ in range(480)
-        ], dim=0)
-    #    print(full_perpendicular)
+            -v[1],
+            v[0]
+        ])
 
-        vp = torch.zeros(p.shape[:2])
-        for i in range(p.shape[0]):
-            for j in range(p.shape[1]):
-                vp[i, j] = torch.norm(v_single @ p_delta[i, j, :])
-        
-        v_perpendicular = torch.zeros(p.shape[:2])
-        for i in range(p.shape[0]):
-            for j in range(p.shape[1]):
-                #print(p_delta[i, :, :].shape)
-                #results = torch.norm(full_perpendicular @  p_delta[i, :, :].T, dim=1)#.shape)
-                v_perpendicular[i, j] = torch.norm(perpendicular @  p_delta[i, j, :]) 
-        print(vp)
-        print(v_perpendicular)
+        distance = v[0].float() * (x - p_1[0]) + (v[1].float() * (y - p_1[1]))
+        distance_per = torch.abs(
+            perpendicular[0].float() * (x - p_1[0]) + (perpendicular[1].float() * (y - p_1[1]))
+        )
+        xyz = torch.zeros(shape)
+        (x, y) = torch.where(0 <= distance)
+        xyz[x, y] += 1
 
-        v_p_p_1 = vp #torch.norm(p_delta * v_single, dim=2)
-        v_norm_p_p_1 = v_perpendicular # torch.norm(p_delta * perpendicular, dim=2)
+        (x, y) = torch.where(distance <= l_ck)
+        xyz[x, y] += 1
 
-        z_xx = torch.zeros((v_p_p_1.shape))
-        z_xx[0 <= v_p_p_1] += 1
-        z_xx[v_p_p_1 <= l_ck] += 1
-        z_xx[v_norm_p_p_1 <= sigma ] += 1
-        
-        zzzz = torch.zeros(v_p_p_1.shape)
-        zzzz[3 <= z_xx] = 255
-        return zzzz
+        (x, y) = torch.where(distance_per <= sigma)
+        xyz[x, y] += 1
+
+        output = torch.zeros(shape + (2, ))
+        x, y = torch.where(xyz >= 3)
+        output[x, y] = v
+        print(output)
+
+        return output
 
     # This looks 
     def unoptimized_function(self, p, p_1, p_2, sigma):
