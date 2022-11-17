@@ -19,3 +19,4 @@ dataset
 model_state
 .ipynb_checkpoints
 gpu.so
+model.pkt
