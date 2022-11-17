@@ -11,7 +11,7 @@ from coco import Coco
 class Skeleton:
     def __init__(self, img_shape, keypoints, skeleton) -> None:
         self.img_shape = img_shape
-        self.keypoints = list(map(lambda x: KeyPoint(*x), keypoints))
+        self.keypoints = keypoints #list(map(lambda x: KeyPoint(*x), keypoints))
         self.skeleton = skeleton
         # default to 1 for now
         self.persons = 1
@@ -186,7 +186,7 @@ class Skeleton:
             min_max_item = [1, None, None]
             min_max_item[1] = get_keypoints(keypoint_index_i - 1)[0]
             min_max_item[2] = get_keypoints(keypoint_index_j - 1)[0]
-            print(min_max_item)
+            #print(min_max_item)
             #print(min_max_item)
             yield (min_max_item)
             #print(f"limb {index}")

@@ -55,6 +55,7 @@ class ImageLabel:
                 y_values = [point_1.y, point_2.y]
 
                 plt.plot(x_values, y_values, 'bo', linestyle="--")
+        plt.imshow(self.image)
 
     def plot_image_skeleton_keypoints(self, score_coordinate):
         for score, from_c, to_c in score_coordinate:
@@ -81,7 +82,7 @@ class Coco:
             get_local_dir("annotations/person_keypoints_train2017.json"), "r").read()
         self.annotations = json.loads(self.annotations)
         self.images = {}
-        for entry in self.annotations['annotations'][:1]:
+        for entry in self.annotations['annotations'][:10]:
             keypoints = entry['keypoints']
             results = []
             for i in range(0, len(keypoints), 3):
@@ -96,8 +97,9 @@ class Coco:
 
         return self
 
-    def show(self):
-        self.results[0].show(self.skeleton)
+    def show(self, index=0):
+      #  print(len(self.results))
+        self.results[index].show(self.skeleton)
         
     def get_paf_map(self, sigma, optimized=False):
         #print(self.results[0].shape)
@@ -129,10 +131,20 @@ class Coco:
                         parity_x[i, j] = res
             return img
 
+    def get_metadata(self, index):
+        return {
+            "skeleton": self.skeleton,
+            "keypoints": self.results[index].keypoints,
+            "path":  get_local_dir("train2017/" + self.results[index].name)
+        }
 
 if __name__  == "__main__":
     obj = Coco()
     obj.load_annotations()
-    print(obj.skeleton)
-    print(obj.results[0].keypoints)
-
+    # obj.show(4)
+#    obj.show(6)
+  
+    
+#    print(obj.skeleton)
+#    print(obj.results[0].keypoints)
+#    print(obj.results[0].name)
