@@ -37,7 +37,7 @@ class ParityFields:
         output = torch.zeros(shape + (2, ))
         x, y = torch.where(xyz >= 3)
         output[x, y] = v
-        print(output)
+        #print(output)
 
         return output
 

@@ -1,9 +1,6 @@
-from coco import KeyPoint
 from confience_map import ConfidenceMap
 import torch
 from parity_fields import ParityFields
-import os
-import torch.nn as nn
 import torch.nn.functional as F
 from coco import Coco
 
@@ -11,11 +8,18 @@ from coco import Coco
 class Skeleton:
     def __init__(self, img_shape, keypoints, skeleton) -> None:
         self.img_shape = img_shape
-        self.keypoints = keypoints #list(map(lambda x: KeyPoint(*x), keypoints))
+        self.keypoints = keypoints
         self.skeleton = skeleton
         # default to 1 for now
         self.persons = 1
         self.sigma = 1
+
+    def annotation_map(self):
+        annotation_tensor = torch.zeros(
+            self.img_shape)
+        for index, keypoint in enumerate(self.keypoints):
+            annotation_tensor[keypoint.x][keypoint.y] = 1
+        return annotation_tensor
 
     def confidence_map(self):
         confidence_tensor = torch.zeros(
@@ -24,23 +28,22 @@ class Skeleton:
         for index, KeyPoint in enumerate(self.keypoints):
             current_keypoint = KeyPoint.locaiton.reshape((1, 1, 2))
 
-            i, j = torch.meshgrid(
-                torch.arange(self.img_shape[0]),
-                torch.arange(self.img_shape[1]),
-                indexing='ij'
-            )
-            grid_tensor = torch.dstack([i, j]).float()
-            results = confidence.function(
-                grid_tensor,
-                current_keypoint,
-                self.sigma
-            )
-            confidence_tensor[index] = results
+            if KeyPoint.is_visible():
+                i, j = torch.meshgrid(
+                    torch.arange(self.img_shape[0]),
+                    torch.arange(self.img_shape[1]),
+                    indexing='ij'
+                )
+                grid_tensor = torch.dstack([i, j]).float()
+                results = confidence.function(
+                    grid_tensor,
+                    current_keypoint,
+                    self.sigma
+                )
+                confidence_tensor[index] = results
         return confidence_tensor
 
     def paf_field(self):
-      #  if os.path.isfile('parity_fields.pt'):
-      #      return torch.load('parity_fields.pt')['tensor']
         parity_fields = ParityFields()
         parity_tensor = torch.zeros(
             (len(self.skeleton), ) + self.img_shape + (2, ))
@@ -50,11 +53,9 @@ class Skeleton:
             p_2 = self.keypoints[keypoint_index_j - 1]
 
             if (p_1.visible and p_2.visible):
-#                for i in range(0, self.img_shape[0]):
-#                    for j in range(0, self.img_shape[1]):
                 x, y = torch.meshgrid(
-                    torch.arange(0, self.img_shape[0]), 
-                    torch.arange(0, self.img_shape[1]), 
+                    torch.arange(0, self.img_shape[0]),
+                    torch.arange(0, self.img_shape[1]),
                     indexing='ij'
                 )
                 res = parity_fields.optimized_function(x, y, p_1.locaiton, p_2.locaiton, self.sigma, shape=(
@@ -62,9 +63,6 @@ class Skeleton:
                     self.img_shape[1]
                 ))
                 parity_tensor[index] = res
-        torch.save({
-            'tensor': parity_tensor
-        }, 'parity_fields.pt')
         return parity_tensor
 
     def E_generated(self, p_1, p_2, d_1, d_2):
@@ -128,19 +126,19 @@ class Skeleton:
         # -> Still not entirely sure how to separate from each person
         #   -> I guess this is where the non maximum suppression comes in
         #confidence = torch.sigmoid(confidence)
-#        limit = 0.70
-#        maxpooled = confidence
+        #        limit = 0.70
+        #        maxpooled = confidence
 
-#        for keypoints in range(len(self.keypoints)):
-        for index, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
+        #        for keypoints in range(len(self.keypoints)):
+        for _, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
 
             def get_keypoints(index):
                 x = F.pad(confidence[index], (2, 2, 2, 2))
                 center = x[1:x.shape[0] - 1, 1:x.shape[1]-1]
                 left = x[2:x.shape[0], 1:x.shape[1] - 1]
-                right = x[:x.shape[0] -2, 1:x.shape[1] - 1]
+                right = x[:x.shape[0] - 2, 1:x.shape[1] - 1]
                 top = x[1:x.shape[0] - 1, :x.shape[1] - 2]
-                bottom = x[1:x.shape[0] - 1, 2:x.shape[1] ]
+                bottom = x[1:x.shape[0] - 1, 2:x.shape[1]]
 
                 peak = (
                     (center > left).long() &
@@ -183,13 +181,16 @@ class Skeleton:
                             min_max_item[1] = i  # truth_point_i.locaiton #i
                             min_max_item[2] = j  # truth_point_j.locaiton #j
             """
-            min_max_item = [1, None, None]
-            min_max_item[1] = get_keypoints(keypoint_index_i - 1)[0]
-            min_max_item[2] = get_keypoints(keypoint_index_j - 1)[0]
-            #print(min_max_item)
-            #print(min_max_item)
-            yield (min_max_item)
-            #print(f"limb {index}")
+            try:
+                min_max_item = [1, None, None]
+                min_max_item[1] = get_keypoints(keypoint_index_i - 1)[0]
+                min_max_item[2] = get_keypoints(keypoint_index_j - 1)[0]
+                # print(min_max_item)
+                # print(min_max_item)
+                yield (min_max_item)
+                #print(f"limb {index}")
+            except Exception as e:
+                print(e)
 
     def skeleton_from_keypoints(self):
         for (i, j) in self.skeleton:

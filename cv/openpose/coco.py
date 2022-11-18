@@ -44,7 +44,7 @@ class ImageLabel:
     def imshow(self, skeleton=[]):
         for index, i in enumerate(self.keypoints):
             plt.scatter(i.x, i.y)
-            print(index, i.x, i.y)
+            #print(index, i.x, i.y)
 
         for _, i in enumerate(skeleton):
             point_1 = self.keypoints[i[0] - 1]
@@ -59,7 +59,7 @@ class ImageLabel:
 
     def plot_image_skeleton_keypoints(self, score_coordinate):
         for score, from_c, to_c in score_coordinate:
-            print((score, from_c, to_c))
+            #print((score, from_c, to_c))
             if score is not None:
                 from_c = [from_c[0], to_c[0]]
                 to_c = [from_c[1], to_c[1]]
