@@ -6,29 +6,32 @@ from coco import Coco
 
 
 class Skeleton:
-    def __init__(self, img_shape, keypoints, skeleton) -> None:
+    def __init__(self, img_shape, keypoints, skeleton, bbox) -> None:
         self.img_shape = img_shape
         self.keypoints = keypoints
         self.skeleton = skeleton
         # default to 1 for now
         self.persons = 1
-        self.sigma = 1
+        self.sigma = 5
+        self.bbox = bbox
 
-    def annotation_map(self):
-        annotation_tensor = torch.zeros(
-            self.img_shape)
-        for index, keypoint in enumerate(self.keypoints):
-            annotation_tensor[keypoint.x][keypoint.y] = 1
-        return annotation_tensor
+    def annotation_map(self, channels):
+        heatmap = torch.zeros((channels, ) + self.img_shape)
+        heatmap[
+            :,
+            int(self.bbox[1]):int(self.bbox[1])+int(self.bbox[3]),
+            int(self.bbox[0]):int(self.bbox[0])+int(self.bbox[2]),
+        ] = 1
+        return heatmap
 
     def confidence_map(self):
         confidence_tensor = torch.zeros(
             (len(self.keypoints), ) + self.img_shape)
         confidence = ConfidenceMap()
-        for index, KeyPoint in enumerate(self.keypoints):
-            current_keypoint = KeyPoint.locaiton.reshape((1, 1, 2))
+        for index, keypoint in enumerate(self.keypoints):
+            current_keypoint = keypoint.location.reshape((1, 1, 2))
 
-            if KeyPoint.is_visible():
+            if keypoint.is_visible():
                 i, j = torch.meshgrid(
                     torch.arange(self.img_shape[0]),
                     torch.arange(self.img_shape[1]),
@@ -58,7 +61,7 @@ class Skeleton:
                     torch.arange(0, self.img_shape[1]),
                     indexing='ij'
                 )
-                res = parity_fields.optimized_function(x, y, p_1.locaiton, p_2.locaiton, self.sigma, shape=(
+                res = parity_fields.optimized_function(x, y, p_1.location, p_2.location, self.sigma, shape=(
                     self.img_shape[0],
                     self.img_shape[1]
                 ))
@@ -129,93 +132,66 @@ class Skeleton:
         #        limit = 0.70
         #        maxpooled = confidence
 
-        #        for keypoints in range(len(self.keypoints)):
         for _, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
-
-            def get_keypoints(index):
-                x = F.pad(confidence[index], (2, 2, 2, 2))
-                center = x[1:x.shape[0] - 1, 1:x.shape[1]-1]
-                left = x[2:x.shape[0], 1:x.shape[1] - 1]
-                right = x[:x.shape[0] - 2, 1:x.shape[1] - 1]
-                top = x[1:x.shape[0] - 1, :x.shape[1] - 2]
-                bottom = x[1:x.shape[0] - 1, 2:x.shape[1]]
-
-                peak = (
-                    (center > left).long() &
-                    (center > right).long() &
-                    (center > top).long() &
-                    (center > bottom).long()
-                )
-    #            print(peak)
-    #            exit(0)
-                keypoints_x, keypoints_y = torch.where(peak > 0)
-                return torch.dstack([keypoints_x, keypoints_y]).float()[0]
             """
             TODO: Sloppy merge, but this should be fixed !!!!
-
-            Look at this a bit more, looks like the way they solve it by padding the array
-            - Then reading 2+ x
-            -              -2x
-            -              2+y
-            -              -2 y
-            -   With a center of (1 + x, y + 1)
-            -  ^ value with max in center = good item.
-            """
-            """
-            min_max_item = [None, None, None]
-            for i in keypoints_x:
-                for j in keypoints_y:
-                    results = (self.E(
-                        paf[index, :, :, :],
-                        d_1=i,
-                        d_2=j
-                    ))
-                    if results.item() != 0 and not torch.isnan(results):
-                        if (min_max_item[0] is None or min_max_item[0] < results.item()):
-
-                           # if truth_point_i.locaiton[0] == i[0] and truth_point_i.locaiton[1] == i[1]:
-                           #    if truth_point_j.locaiton[0] == j[0] and truth_point_j.locaiton[1] == j[1]:
-                           #       print("Found match :)")
-
-                            min_max_item[0] = results.item()
-                            min_max_item[1] = i  # truth_point_i.locaiton #i
-                            min_max_item[2] = j  # truth_point_j.locaiton #j
             """
             try:
                 min_max_item = [1, None, None]
-                min_max_item[1] = get_keypoints(keypoint_index_i - 1)[0]
-                min_max_item[2] = get_keypoints(keypoint_index_j - 1)[0]
-                # print(min_max_item)
-                # print(min_max_item)
+                min_max_item[1] = self.extract_keypoints_from_confidence(confidence, keypoint_index_i - 1)[0]
+                min_max_item[2] = self.extract_keypoints_from_confidence(confidence, keypoint_index_j - 1)[0]
+
                 yield (min_max_item)
-                #print(f"limb {index}")
             except Exception as e:
                 print(e)
+
+    def extract_keypoints_from_confidence(self, confidence, index):
+        """
+        TODO: Sloppy merge, but this should be fixed !!!!
+
+        Look at this a bit more, looks like the way they solve it by padding the array
+        - Then reading 2+ x
+        -              -2x
+        -              2+y
+        -              -2 y
+        -   With a center of (1 + x, y + 1)
+        -  ^ value with max in center = good item.
+        """
+        x = F.pad(confidence[index], (2, 2, 2, 2))
+        center = x[1:x.shape[0] - 1, 1:x.shape[1]-1]
+        left = x[2:x.shape[0], 1:x.shape[1] - 1]
+        right = x[:x.shape[0] - 2, 1:x.shape[1] - 1]
+        top = x[1:x.shape[0] - 1, :x.shape[1] - 2]
+        bottom = x[1:x.shape[0] - 1, 2:x.shape[1]]
+
+        peak = (
+            (center > left).long() &
+            (center > right).long() &
+            (center > top).long() &
+            (center > bottom).long()
+        )
+        keypoints_x, keypoints_y = torch.where(peak > 0)
+        return torch.dstack([keypoints_x, keypoints_y]).float()[0]
 
     def skeleton_from_keypoints(self):
         for (i, j) in self.skeleton:
             if self.keypoints[i - 1].is_visible() and self.keypoints[j - 1].is_visible():
-                yield (1, self.keypoints[i - 1].locaiton, self.keypoints[j - 1].locaiton)
+                yield (1, self.keypoints[i - 1].location, self.keypoints[j - 1].location)
 
 
 if __name__ == "__main__":
-    obj = Skeleton(
-        img_shape=(640, 480),
-        skeleton=[[16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12], [7, 13], [6, 7], [
-            6, 8], [7, 9], [8, 10], [9, 11], [2, 3], [1, 2], [1, 3], [2, 4], [3, 5], [4, 6], [5, 7]],
-        keypoints=[(0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (0, 0, 0), (325, 160, 2), (398, 177, 2), (0, 0, 0), (437, 238, 2),
-                   (0, 0, 0), (477, 270, 2), (287, 255, 1), (339, 267, 2), (0, 0, 0), (423, 314, 2), (0, 0, 0), (355, 367, 2)]
+    coco = Coco()
+    coco.load_annotations()
+
+    metadata = coco.get_metadata(6)
+
+    skeleton = Skeleton(
+        img_shape=metadata['shape'],
+        skeleton=metadata['skeleton'],
+        keypoints=metadata['keypoints']
     )
-    # print(obj.confidence_map())
-    # print(obj.paf_field())
-    # exit(0)
-    items = list(obj.merge(
-        obj.confidence_map(),
-        obj.paf_field()
+    items = list(skeleton.merge(
+        skeleton.confidence_map(),
+        skeleton.paf_field()
     ))
-#    items = list(
-#        obj.skeleton_from_keypoints()
- #   )
-    obj = Coco()
-    obj.load_annotations()
-    obj.results[0].plot_image_skeleton_keypoints(items)
+    coco.results[6].plot_image_skeleton_keypoints(items)

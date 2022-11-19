@@ -3,3 +3,5 @@ train2017
 annotations
 model_state
 parity_fields.pt
+debug
+*.pt

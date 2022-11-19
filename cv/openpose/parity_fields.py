@@ -2,7 +2,6 @@ import torch
 """
 body part j_1 -> j_2
 
-
 if the point is on the limb -> value is V
 else 0
 
@@ -37,34 +36,8 @@ class ParityFields:
         output = torch.zeros(shape + (2, ))
         x, y = torch.where(xyz >= 3)
         output[x, y] = v
-        #print(output)
 
         return output
-
-    # This looks 
-    def unoptimized_function(self, p, p_1, p_2, sigma):
-        """
-        TODO: write optimized version
-        """
-        v: torch.Tensor = (p_2 - p_1)/torch.norm(p_2 - p_1)
-        l_ck = torch.norm(p_2 - p_1) 
-
-        perpendicular = torch.tensor([
-            -v[1],
-            v[0]
-        ]) 
-
-        # v single vector
-        # p_delta single vector
-        v_p_p_1 = torch.norm(v.float() @ (p - p_1))
-
-        v_norm_p_p_1 = torch.norm(perpendicular.float() @ (p.float() - p_1))
-
-        if 0 <= v_p_p_1 and v_p_p_1 <= l_ck:
-            if torch.norm(v_norm_p_p_1) < sigma:
-                return v
-        return 0
-
 
 if __name__ == "__main__":
     from coco import Coco
