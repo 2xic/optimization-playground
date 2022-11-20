@@ -21,9 +21,6 @@
 [Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
 
-## Explain-ability
-[RISE: Randomized Input Sampling for Explanation of Black-box Models](https://arxiv.org/pdf/1806.07421.pdf)
-
 ## NN architecture
 [Decoupled Neural Interfaces using Synthetic Gradients](https://arxiv.org/pdf/1608.05343.pdf)
 [ZerO Initialization: Initializing Neural Networks with only Zeros and Ones](https://openreview.net/pdf?id=1AxQpKmiTc)
@@ -34,5 +31,3 @@
 
 ## Recommendations
 [Monolith: Real Time Recommendation System With Collisionless Embedding Table](https://arxiv.org/pdf/2209.07663.pdf)
-
-

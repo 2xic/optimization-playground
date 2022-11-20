@@ -1,18 +1,14 @@
 import torch.nn as nn
 import torch
 from skeleton import Skeleton
-# Same model (almost) as https://arxiv.org/pdf/1611.08050.pdf
 from loss import loss
 from torchvision import transforms
-from helpers import get_local_dir
 from PIL import Image
 from coco import Coco
 import torch
 
 """
 TODO: Should do refined stages
-
-- TODO: should try to fix the masks for the model
 """
 
 def get_conv(output_shape):

@@ -4,16 +4,22 @@ from parity_fields import ParityFields
 import torch.nn.functional as F
 from coco import Coco
 
-
 class Skeleton:
     def __init__(self, img_shape, keypoints, skeleton, bbox) -> None:
         self.img_shape = img_shape
         self.keypoints = keypoints
         self.skeleton = skeleton
+
         # default to 1 for now
         self.persons = 1
         self.sigma = 5
         self.bbox = bbox
+        self.debug = True
+
+    
+    def print(self, *args):
+        if self.debug:
+            print(args)
 
     def annotation_map(self, channels):
         heatmap = torch.zeros((channels, ) + self.img_shape)
@@ -159,14 +165,14 @@ class Skeleton:
                                 b[0]
                             )
                         ))
-                print(len(score))
+                self.print(len(score))
                 score = list(sorted(score, key=lambda x: x[2]))
                 if 0 < len(score):
                     min_max_item[1] = score[0][1]                
                     min_max_item[2] = score[0][0]              
                 yield (min_max_item)
             except Exception as e:
-                print(e)
+                self.print(e)
 
     def extract_keypoints_from_confidence(self, confidence, index):
         """
@@ -194,10 +200,8 @@ class Skeleton:
             (center > bottom).long()
         )
         keypoints_x, keypoints_y = torch.where(peak > 0)
-#        print(
-#            torch.dstack([keypoints_x, keypoints_y]).float()
-#        )
-        return torch.dstack([keypoints_x, keypoints_y]).float()#[0]
+
+        return torch.dstack([keypoints_x, keypoints_y]).float()
 
     def skeleton_from_keypoints(self):
         for (i, j) in self.skeleton:
