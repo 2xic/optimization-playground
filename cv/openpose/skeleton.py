@@ -114,7 +114,7 @@ class Skeleton:
         grid_tensor = torch.dstack([i, j]).float()
         return grid_tensor
 
-    def merge(self, confidence, paf):
+    def merge(self, confidence, paf, keypoint=None):
         # it's not super clear for the paper how the non maximum suppression is supposed to work
         # you know the keypoints with a given confidence.
         # https://docs.nvidia.com/isaac/packages/skeleton_pose_estimation/doc/2Dskeleton_pose_estimation.html
@@ -131,16 +131,39 @@ class Skeleton:
         #confidence = torch.sigmoid(confidence)
         #        limit = 0.70
         #        maxpooled = confidence
+        skeleton = self.skeleton
 
-        for _, (keypoint_index_i, keypoint_index_j) in enumerate(self.skeleton):
+        if keypoint is not None:
+            skeleton = [skeleton[keypoint]]
+
+        for index, (keypoint_index_i, keypoint_index_j) in enumerate(skeleton):
             """
             TODO: Sloppy merge, but this should be fixed !!!!
             """
+         #   print(42)
             try:
                 min_max_item = [1, None, None]
-                min_max_item[1] = self.extract_keypoints_from_confidence(confidence, keypoint_index_i - 1)[0]
-                min_max_item[2] = self.extract_keypoints_from_confidence(confidence, keypoint_index_j - 1)[0]
+                candidates_a = self.extract_keypoints_from_confidence(confidence, keypoint_index_i - 1)
+                candidates_b = self.extract_keypoints_from_confidence(confidence, keypoint_index_j - 1)
 
+                score = []
+                for a in candidates_a:
+                    for b in candidates_b:
+#                        print((a, b))
+                        score.append((
+                            a[0], 
+                            b[0],
+                            self.E(
+                                paf[index],
+                                a[0],
+                                b[0]
+                            )
+                        ))
+                print(len(score))
+                score = list(sorted(score, key=lambda x: x[2]))
+                if 0 < len(score):
+                    min_max_item[1] = score[0][1]                
+                    min_max_item[2] = score[0][0]              
                 yield (min_max_item)
             except Exception as e:
                 print(e)
@@ -171,7 +194,10 @@ class Skeleton:
             (center > bottom).long()
         )
         keypoints_x, keypoints_y = torch.where(peak > 0)
-        return torch.dstack([keypoints_x, keypoints_y]).float()[0]
+#        print(
+#            torch.dstack([keypoints_x, keypoints_y]).float()
+#        )
+        return torch.dstack([keypoints_x, keypoints_y]).float()#[0]
 
     def skeleton_from_keypoints(self):
         for (i, j) in self.skeleton:
