@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 from loss import Loss
+import random
 
 
 DEBUG = False
@@ -32,18 +33,19 @@ class Net(nn.Module):
         x = F.dropout(x, p=0.1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = F.dropout(x, p=0.1)
+        x = F.relu(self.fc3(x))
         return x
 
 class Projection(nn.Module):
     def __init__(self):
         super().__init__()
         self.projection_in = nn.Linear(100, 64)
-        self.projection_out = nn.Linear(64, 100)
+        self.projection_out = nn.Linear(64, 10)
 
     def forward(self, x):
         x = F.relu(self.projection_in(x))
-        x = self.projection_out(x)
+     #   x = (self.projection_out(x))
         return x
 
 
@@ -58,17 +60,27 @@ class SimClrModel(pl.LightningModule):
         return self.projection(self.model(X))
 
     def training_step(self, batch):
-        x, y = batch    
+        x, y = batch
+        model_device = next(self.projection.parameters()).device
+        x = x.to(model_device)
+        y = y.to(model_device)
 
         self.timer_start()
         z_k_1 = self.forward(x)
         z_k_2 = self.forward(y)
-        
-        assert debug_assert((z_k_1).isnan().any() == False), z_k_1
-        assert debug_assert((z_k_2.isnan()).any() == False), z_k_2
+
+        if self.debug:  
+            assert debug_assert((z_k_1).isnan().any() == False), z_k_1
+            assert debug_assert((z_k_2.isnan()).any() == False), z_k_2
 
         loss_value = Loss().loss(z_k_1, z_k_2)
-    
+
+        if random.randint(0, 10) == 5 and self.debug:
+            print(z_k_1[0])
+            print(z_k_2[0])
+            print(loss_value)
+            exit(0)
+
         self.log("train_loss", loss_value)
 
         return loss_value

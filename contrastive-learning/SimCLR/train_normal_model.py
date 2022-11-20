@@ -1,10 +1,8 @@
-
 from dataloader import Cifar10Dataloader
-from model import Net, Projection, SimpleModel
+from model import Net
+from simpel_model import SimpleModel
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-
-from transfer_learning import TransferLearning
 
 """
 base model that we are comparing against.
