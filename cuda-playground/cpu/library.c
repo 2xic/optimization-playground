@@ -3,6 +3,9 @@
 
 int cpu_test()
 {
+
+    printf("hello python (from cpu!)!\n");
+
     Matrix *a = createMatrix(2, 2);
     setElement(a, 0, 0, -2);
     setElement(a, 0, 1, 1);
@@ -27,3 +30,4 @@ int cpu_test()
 
     return 0;
 }
+
