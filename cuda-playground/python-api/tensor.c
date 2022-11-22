@@ -7,9 +7,6 @@ typedef struct
 {
     PyObject_HEAD int size;
     Matrix *matrix;
-    /*
-        Here we store the
-    */
 } TensorObject;
 
 static PyObject *
@@ -36,8 +33,7 @@ Ones(TensorObject *self, PyObject *Py_UNUSED(ignored))
 static PyObject *
 Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    printf("pointer bro = %p\n", self);
-    printf("%i\n", self->size);
+    printf("Matrix pointer = %p\n", self);
 
     for (int i = 0; i < 4; i++)
     {
@@ -69,58 +65,6 @@ static PyMethodDef tensor_methods[] = {
     {NULL} /* Sentinel */
 };
 
-PyObject *tp_new(PyTypeObject *subtype, PyObject *args, PyObject *kwds)
-{
-    /*    subtype->matrix = createMatrix(4, 4);
-        fill(subtype->matrix, 1);
-        subtype->size = 42;*/
-    return subtype;
-}
-
-static int *init_object(TensorObject *self, PyObject *Py_UNUSED(ignored))
-{
-    //  subtype->matrix = createMatrix(4, 4);
-    printf("%p", self);
-
-    return self;
-}
-
-static int
-Noddy_init(TensorObject *self, PyObject *args, PyObject *kwds)
-{
-    /*  PyObject *first=NULL, *last=NULL, *tmp;
-
-      static char *kwlist[] = {"first", "last", "number", NULL};
-
-      if (! PyArg_ParseTupleAndKeywords(args, kwds, "|SSi", kwlist,
-                                        &first, &last,
-                                        &self->number))
-          return -1;
-  */
-    /*
-        if (first) {
-            tmp = self->first;
-            Py_INCREF(first);
-            self->first = first;
-            Py_DECREF(tmp);
-        }
-
-        if (last) {
-            tmp = self->last;
-            Py_INCREF(last);
-            self->last = last;
-            Py_DECREF(tmp);
-        }
-    */
-    return 0;
-}
-
-void tp_free(TensorObject *self)
-{
-    printf("%p", self);
-    freeMatrix(self->matrix);
-}
-
 static PyObject *
 Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
@@ -128,7 +72,7 @@ Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 
     TensorObject *self;
     printf("alloc\n");
-    // TODO: Fix out this 
+    // TODO: Fix out this
     self = (TensorObject *)type->tp_alloc(type, 256);
     printf("did alloc\n");
     if (self != NULL)
@@ -140,52 +84,42 @@ Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)self;
 }
 
-static int
-Custom_init(TensorObject *self, PyObject *args, PyObject *kwds)
-{
-    printf("%p Brooo!!! we out here in new !!\n", self);
+void tp_dealloc(PyObject *self) {
+    printf("deallocate +\n");
+}
 
-    return 0;
+void tp_free(void *self) {
+    printf("free the beef? +\n");
 }
 
 static PyTypeObject TensorType = {
     PyObject_HEAD_INIT(NULL)
-    //.ob_size = 0,
     .tp_name = "tensor",
     .tp_doc = PyDoc_STR("Tensor objects"),
     .tp_basicsize = sizeof(TensorObject),
     .tp_itemsize = sizeof(Matrix),
-    //.tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE | Py_TPFLAGS_IMMUTABLETYPE ,
-    .tp_new = Custom_new,
-    .tp_init = Custom_init,
-    //  .tp_init = Noddy_init,
-    // .tp_free= tp_free,
+    .tp_new = PyType_GenericNew,
+  //  .tp_new = Custom_new,
+    .tp_free= tp_free,
+    .tp_dealloc=tp_dealloc,
+
     //.tp_alloc = init_object,
     .tp_as_number = &magic_num_methods,
     .tp_methods = tensor_methods,
-   // .tp_init = (initproc)init_object,
 };
 
 static PyObject *
 tensor_add(PyObject *self, PyObject *args)
 {
-    printf("we out here\n");
 
-  if (PyType_Ready(&TensorType)) {
-    return NULL;
-  } 
+    if (PyType_Ready(&TensorType)) {
+        return NULL;
+    } 
 
-    /* Pass two arguments, a string and an int. */
     PyObject *argList = Py_BuildValue("si", "hello", 42);
-   /* Call the class object. */
-   printf("CREATING IT RO\n");
     TensorObject *obj = PyObject_CallObject((PyObject *) &TensorType, argList);
     Py_INCREF(obj);
-
-    printf("out it now %p\n", obj);
-    printf("New matrix created ? %p \n ", obj);
     obj->matrix = createMatrix(4, 4);
-    printf("yeah boiii\n");
 
     return obj;
 }

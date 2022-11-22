@@ -56,6 +56,7 @@ int getSize(int size[]){
 
 void freeMatrix(Matrix *a)
 {
+    printf("freeing the matreix\n");
     free(a->data);
     free(a->size);
     free(a);

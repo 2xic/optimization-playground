@@ -24,7 +24,7 @@ int main(){
 
     vector_add(out, a, b, N);
 
-    printf("Hello World from GPU!\n");
+    printf("Hello World from cpu!\n");
     print_array(out, N);
     
     free(a);
