@@ -8,12 +8,15 @@ CHEAT_TEST(mathematics_still_work,
     setElement(a, 0, 1, 1);
     setElement(a, 1, 0, 0);
     setElement(a, 1, 1, 4);
-    Matrix *b = createMatrix(2, 2);
+    int s[] = {2, 2};
+    Matrix *b = createMatrixN(s);
 
-    setElement(b, 0, 0, 6);
-    setElement(b, 0, 1, 5);
-    setElement(b, 1, 0, -7);
-    setElement(b, 1, 1, 1);
+    setElementN(b, (int[]){0, 0}, 6);
+    setElementN(b, (int[]){0, 1}, 5);
+    setElementN(b, (int[]){1, 0}, -7);
+    setElementN(b, (int[]){1, 1}, 1);
+
+    printf("%i\n", getElement(b, 0, 0));
 
     Matrix *c = MatMul(a, b);
     cheat_assert(getElement(c, 0,0) == -19);
@@ -28,3 +31,5 @@ CHEAT_TEST(mathematics_still_work,
     cheat_assert(2 + 2 == 4);
 	cheat_assert_not(2 + 2 == 5);
 )
+
+

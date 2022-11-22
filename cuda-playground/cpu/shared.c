@@ -29,9 +29,35 @@ void setElement(Matrix *a, int row, int col, int value)
     a->data[rowIndex + col] = value;
 }
 
+void setElementN(Matrix *a, int location[], int value)
+{
+    size_t inputSize = getSize(location);
+    size_t arrSize = getSize(a->size);
+    if (inputSize != arrSize){
+        return;
+    }
+    int tensorLocation = 0;
+    for (int i = 0; i < arrSize; i++) {
+        if (0 == i) {
+            tensorLocation = location[i];
+        } else {
+            tensorLocation = tensorLocation * a->size[i] + location[i];
+        }
+        printf("tensor == %i %i %i\n", i, tensorLocation, a->size[i]);
+    }
+    printf("%i\n", tensorLocation);
+    a->data[tensorLocation] = value;
+}
+
+int getSize(int size[]){
+    size_t arrSize = sizeof(size)/sizeof(size[0]);
+    return arrSize;
+}
+
 void freeMatrix(Matrix *a)
 {
     free(a->data);
+    free(a->size);
     free(a);
 }
 
@@ -49,7 +75,53 @@ createMatrix(int rows, int columns)
 
     int size = rows * columns * sizeof(int *);
     matrix->data = (int *)malloc(size);
+    printf("should fill ? %i (%i, %i)\n", size, rows, columns);
     memset(matrix->data, 0, size);
+    printf("memset :)\n");
+
+    return matrix;
+}
+
+
+void fill(Matrix *a, int value) {
+    int size = a->rows * a->columns * sizeof(int *);
+    printf("filling %i (%i, %i) \n", size, a->rows, a->columns);
+    for (int i = 0; i < size; i++) {
+        a->data[i] = value;
+    }
+}
+
+Matrix *createMatrixN(int size[])
+{
+    Matrix *matrix = malloc(sizeof(Matrix));
+    if (matrix == NULL)
+    {
+        return NULL;
+    }
+    matrix->size = (int *)malloc(sizeof(size));
+    for(int i = 0; i < getSize(matrix->size); i++) {
+        matrix->size[i] = size[i];
+    }
+
+    int nSize = 0;
+    size_t arrSize = getSize(size);
+    for (int i = 0; i < arrSize; i++) {
+        printf("size[i] == %i\n", size[i]);
+
+        if( i== 0) {
+            nSize = size[i];
+            matrix->columns = size[i];
+        } else {
+            matrix->rows = size[i];
+            nSize *= size[i];
+        }
+    }
+
+    int dataSize = nSize * sizeof(int *);
+    printf("dataSize = %i\n", dataSize);
+
+    matrix->data = (int *)malloc(dataSize);
+    memset(matrix->data, 0, dataSize);
 
     return matrix;
 }
@@ -61,7 +133,7 @@ Matrix *MatMul(Matrix *a, Matrix *b)
 
     if (a->columns != b->rows)
     {
-        // printf("Not equal\n");
+        printf("Not equal dimensions\n");
         return NULL;
     }
     Matrix *results = createMatrix(
