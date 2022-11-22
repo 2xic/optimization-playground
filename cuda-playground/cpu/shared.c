@@ -56,9 +56,11 @@ int getSize(int size[]){
 
 void freeMatrix(Matrix *a)
 {
-    printf("freeing the matreix\n");
+    printf("Freeing the matrix\n");
     free(a->data);
-    free(a->size);
+    if (a->size != NULL ){
+        free(a->size);
+    }
     free(a);
 }
 
@@ -73,6 +75,7 @@ createMatrix(int rows, int columns)
     }
     matrix->rows = rows;
     matrix->columns = columns;
+    matrix->size = NULL;
 
     int size = rows * columns * sizeof(int *);
     matrix->data = (int *)malloc(size);
@@ -85,7 +88,7 @@ createMatrix(int rows, int columns)
 
 
 void fill(Matrix *a, int value) {
-    int size = a->rows * a->columns * sizeof(int *);
+    int size = a->rows * a->columns;// * sizeof(int *);
     printf("filling %i (%i, %i) \n", size, a->rows, a->columns);
     for (int i = 0; i < size; i++) {
         a->data[i] = value;
@@ -125,6 +128,21 @@ Matrix *createMatrixN(int size[])
     memset(matrix->data, 0, dataSize);
 
     return matrix;
+}
+
+Matrix *Add(Matrix * a, Matrix *b) {
+    // TODO: BOunce check
+    printf("add !\n");
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for(int i = 0; i < a->columns; i++) {
+        for (int j = 0; j < a->rows; j++) {
+            setElement(c, i, j, 
+                getElement(a, i, j) +
+                getElement(b, i, j)
+            );
+        }
+    }
+    return c;
 }
 
 Matrix *MatMul(Matrix *a, Matrix *b)

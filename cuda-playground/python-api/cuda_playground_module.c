@@ -28,13 +28,11 @@ tensor_f(PyObject *self, PyObject *args)
 
     PyObject *argList = Py_BuildValue("si", "hello", 42);
 
-    TensorObject *obj = PyObject_CallObject((PyObject *)&TensorType, argList);
-    Py_INCREF(obj);
+    TensorObject *obj = PyObject_CallObject((PyObject *)&TensorType, argList);    
     obj->matrix = createMatrix(4, 4);
 
     return obj;
 }
-
 
 static PyMethodDef CudaplaygroundMethods[] = {
     {"gpu", gpu, METH_VARARGS,
@@ -45,12 +43,14 @@ static PyMethodDef CudaplaygroundMethods[] = {
      "Execute a shell command."},
     {NULL, NULL, 0, NULL}};
 
+
 static struct PyModuleDef Cudaplaygroundmodule = {
     PyModuleDef_HEAD_INIT,
     "cudaplayground",
     NULL,
     -1,
     CudaplaygroundMethods};
+
 
 PyMODINIT_FUNC
 PyInit_cudaplayground(void)

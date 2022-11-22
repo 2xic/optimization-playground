@@ -27,6 +27,8 @@ Matrix *createMatrix(int rows, int columns);
 
 Matrix *createMatrixN(int size[]);
 
+Matrix *Add(Matrix * a, Matrix *b) ;
+
 void fill(Matrix *a, int value);
 
 void setElementN(Matrix *a, int location[], int value);

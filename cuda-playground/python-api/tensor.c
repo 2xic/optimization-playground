@@ -12,21 +12,14 @@ typedef struct
 static PyObject *
 Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    printf("zeros -> %p\n", self);
-    self->matrix = createMatrix(4, 4);
-    self->size = 42;
-
     return self;
 }
 
 static PyObject *
 Ones(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    printf("ones -> %p\n", self);
-    self->matrix = createMatrix(4, 4);
     fill(self->matrix, 1);
     self->size = 42;
-
     return self;
 }
 
@@ -68,6 +61,7 @@ static PyMethodDef tensor_methods[] = {
 static PyObject *
 Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
 {
+    
     printf("%p Brooo!!! we out here in new !! %p \n", type);
 
     TensorObject *self;
@@ -84,7 +78,8 @@ Custom_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     return (PyObject *)self;
 }
 
-void tp_dealloc(PyObject *self) {
+void tp_dealloc(TensorObject *self) {
+//    free(self->matrix);
     printf("deallocate +\n");
 }
 
@@ -115,11 +110,12 @@ tensor_add(PyObject *self, PyObject *args)
     if (PyType_Ready(&TensorType)) {
         return NULL;
     } 
+    
 
     PyObject *argList = Py_BuildValue("si", "hello", 42);
     TensorObject *obj = PyObject_CallObject((PyObject *) &TensorType, argList);
     Py_INCREF(obj);
-    obj->matrix = createMatrix(4, 4);
+    obj->matrix = Add(((TensorObject*)self)->matrix, ((TensorObject*)args)->matrix);
 
     return obj;
 }
