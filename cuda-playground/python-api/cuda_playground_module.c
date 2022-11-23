@@ -18,30 +18,42 @@ cpu(PyObject *self, PyObject *args)
     return PyLong_FromLong(1);
 }
 
-static PyObject *
-tensor_f(PyObject *self, PyObject *args)
+static TensorObject *
+tensor(PyObject *self, PyObject *args)
 {
     if (PyType_Ready(&TensorType))
     {
         return NULL;
     }
+    int ok;
+    int i;
+    int j;
 
-    PyObject *argList = Py_BuildValue("si", "hello", 42);
+    ok = PyArg_ParseTuple(args, "(ii)", &i, &j);
+    if (!ok) {
+        printf("Unexpected input\n");
+        return NULL;
+    }
 
-    TensorObject *obj = PyObject_CallObject((PyObject *)&TensorType, argList);    
-    obj->matrix = createMatrix(4, 4);
+    printf("Size (%i, %i)\n", i, j);
+
+    TensorObject *obj = PyObject_CallObject((PyObject *)&TensorType, NULL);    
+    obj->matrix = createMatrix(i, j);
 
     return obj;
 }
+
+
 
 static PyMethodDef CudaplaygroundMethods[] = {
     {"gpu", gpu, METH_VARARGS,
      "Execute a shell command."},
     {"cpu", cpu, METH_VARARGS,
      "Execute a shell command."},
-    {"tensor_f", tensor_f, METH_VARARGS,
+    {"tensor", tensor, METH_VARARGS,
      "Execute a shell command."},
     {NULL, NULL, 0, NULL}};
+
 
 
 static struct PyModuleDef Cudaplaygroundmodule = {
@@ -50,6 +62,7 @@ static struct PyModuleDef Cudaplaygroundmodule = {
     NULL,
     -1,
     CudaplaygroundMethods};
+
 
 
 PyMODINIT_FUNC

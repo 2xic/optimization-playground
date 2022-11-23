@@ -3,7 +3,7 @@
 
 
 typedef struct {
-    int *data;
+    float *data;
     int rows;
     int columns;
     int *size;
@@ -17,13 +17,15 @@ typedef struct {
 
 int getSize(int size[]);
 
-int getElement(Matrix *a, int row, int col);
+float getElement(Matrix *a, int row, int col);
 
-void setElement(Matrix *a, int row, int col, int value);
+void setElement(Matrix *a, int row, int col, float value);
 
 void freeMatrix(Matrix *a);
 
 Matrix *createMatrix(int rows, int columns);
+
+void fillRandom(Matrix *a);
 
 Matrix *createMatrixN(int size[]);
 

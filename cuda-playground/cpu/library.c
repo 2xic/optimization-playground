@@ -19,10 +19,10 @@ int cpu_test()
     setElement(b, 1, 1, 1);
 
     Matrix *c = MatMul(a, b);
-    printf("%i\n", getElement(c, 0, 0));
-    printf("%i\n", getElement(c, 0, 1));
-    printf("%i\n", getElement(c, 1, 0));
-    printf("%i\n", getElement(c, 1, 1));
+    printf("%f\n", getElement(c, 0, 0));
+    printf("%f\n", getElement(c, 0, 1));
+    printf("%f\n", getElement(c, 1, 0));
+    printf("%f\n", getElement(c, 1, 1));
 
     freeMatrix(a);
     freeMatrix(b);

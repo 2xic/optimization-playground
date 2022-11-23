@@ -3,8 +3,8 @@ import cudaplayground
 print("Hello :)")
 p = cudaplayground
 #print(dir(cudaplayground))
-a = p.tensor_f()
-c = p.tensor_f()
+a = p.tensor((2, 2))
+c = p.tensor((2, 2))
 c.zeros()
 
 #a = a.zeros()
@@ -12,7 +12,7 @@ print("a")
 a.print()
 print("===")
 
-b = p.tensor_f()
+b = p.tensor((2, 2))
 b = b.ones()
 
 print("= * 16")
@@ -46,3 +46,10 @@ print(b)
 print(a)
 print(c)
 print("ready for peacful shutdown :)")
+c = c + 1
+print(c)
+
+random = p.tensor((2, 2)).rand()
+print(random)
+print("???")
+random.print()

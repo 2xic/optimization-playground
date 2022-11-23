@@ -17,13 +17,13 @@ void print_array(float *ptr, int length)
     printf("]");
 }
 
-int getElement(Matrix *a, int row, int col)
+float getElement(Matrix *a, int row, int col)
 {
     int rowIndex = a->columns * row;
     return a->data[rowIndex + col];
 }
 
-void setElement(Matrix *a, int row, int col, int value)
+void setElement(Matrix *a, int row, int col, float value)
 {
     int rowIndex = a->columns * row;
     a->data[rowIndex + col] = value;
@@ -65,9 +65,7 @@ void freeMatrix(Matrix *a)
 }
 
 // TODO: this should support any dimension.
-Matrix *
-createMatrix(int rows, int columns)
-{
+Matrix *createMatrix(int rows, int columns) {
     Matrix *matrix = malloc(sizeof(Matrix));
     if (matrix == NULL)
     {
@@ -77,8 +75,8 @@ createMatrix(int rows, int columns)
     matrix->columns = columns;
     matrix->size = NULL;
 
-    int size = rows * columns * sizeof(int *);
-    matrix->data = (int *)malloc(size);
+    int size = rows * columns * sizeof(float *);
+    matrix->data = (float *)malloc(size);
     printf("should fill ? %i (%i, %i)\n", size, rows, columns);
     memset(matrix->data, 0, size);
     printf("memset :)\n");
@@ -86,6 +84,14 @@ createMatrix(int rows, int columns)
     return matrix;
 }
 
+void fillRandom(Matrix *a) {
+    int size = a->rows * a->columns;// * sizeof(int *);
+    printf("filling randomly %i (%i, %i) \n", size, a->rows, a->columns);
+    for (int i = 0; i < size; i++) {
+        float random = 1 * ((float) rand()) / (float) RAND_MAX;
+        a->data[i] = random;
+    }
+}
 
 void fill(Matrix *a, int value) {
     int size = a->rows * a->columns;// * sizeof(int *);
@@ -102,7 +108,7 @@ Matrix *createMatrixN(int size[])
     {
         return NULL;
     }
-    matrix->size = (int *)malloc(sizeof(size));
+    matrix->size = (int *)malloc(sizeof(int*) * getSize(size));
     for(int i = 0; i < getSize(matrix->size); i++) {
         matrix->size[i] = size[i];
     }
@@ -124,7 +130,7 @@ Matrix *createMatrixN(int size[])
     int dataSize = nSize * sizeof(int *);
     printf("dataSize = %i\n", dataSize);
 
-    matrix->data = (int *)malloc(dataSize);
+    matrix->data = (float *)malloc(dataSize);
     memset(matrix->data, 0, dataSize);
 
     return matrix;
