@@ -153,4 +153,3 @@ tensor_mul(PyObject *self, PyObject *args)
     }
 }
 
-

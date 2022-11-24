@@ -29,19 +29,20 @@ void setElement(Matrix *a, int row, int col, float value)
     a->data[rowIndex + col] = value;
 }
 
-void setElementN(Matrix *a, int location[], int value)
+void setElementN(Matrix *a, int *location, int length, int value)
 {
-    size_t inputSize = getSize(location);
-    size_t arrSize = getSize(a->size);
+    size_t inputSize = length; // getSize(location);
+    size_t arrSize = length; // getSize(a->size);
     if (inputSize != arrSize){
         return;
     }
     int tensorLocation = 0;
     for (int i = 0; i < arrSize; i++) {
+        int locI = *(location + i);
         if (0 == i) {
-            tensorLocation = location[i];
+            tensorLocation = locI;
         } else {
-            tensorLocation = tensorLocation * a->size[i] + location[i];
+            tensorLocation = tensorLocation * a->size[i] + locI;
         }
         printf("tensor == %i %i %i\n", i, tensorLocation, a->size[i]);
     }
@@ -50,7 +51,9 @@ void setElementN(Matrix *a, int location[], int value)
 }
 
 int getSize(int size[]){
-    size_t arrSize = sizeof(size)/sizeof(size[0]);
+    printf("%i\n", sizeof(size));
+    printf("%i\n", sizeof(int));
+    int arrSize = sizeof(size)/sizeof(int);
     return arrSize;
 }
 
@@ -101,7 +104,7 @@ void fill(Matrix *a, int value) {
     }
 }
 
-Matrix *createMatrixN(int size[])
+Matrix *createMatrixN(int size[], int length)
 {
     Matrix *matrix = malloc(sizeof(Matrix));
     if (matrix == NULL)
@@ -114,9 +117,10 @@ Matrix *createMatrixN(int size[])
     }
 
     int nSize = 0;
-    size_t arrSize = getSize(size);
+    int arrSize = length; // getSize(size);
+    printf("length size %i\n", arrSize);
     for (int i = 0; i < arrSize; i++) {
-        printf("size[i] == %i\n", size[i]);
+        printf("\tsize[i] == %i\n", size[i]);
 
         if( i== 0) {
             nSize = size[i];
