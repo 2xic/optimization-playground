@@ -3,6 +3,11 @@
 #include "external_library.h"
 #include "tensor.c"
 
+Matrix *makeMatrix(int *arr);
+void parse_array_recursive(PyObject *args, int *size_array);
+void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length, Matrix* m);
+int sizeOfPointer(int *arr);
+
 static PyObject *
 gpu(PyObject *self, PyObject *args)
 {
@@ -17,6 +22,7 @@ cpu(PyObject *self, PyObject *args)
     cpu_test();
     return PyLong_FromLong(1);
 }
+
 
 static TensorObject *
 tensor(PyObject *self, PyObject *args)
@@ -41,12 +47,12 @@ tensor(PyObject *self, PyObject *args)
     TensorObject *obj = PyObject_CallObject((PyObject *)&TensorType, NULL);
     obj->matrix = createMatrix(i, j);
 
+
     return obj;
 }
-Matrix *makeMatrix(int *arr);
-void parse_array_recursive(PyObject *args, int *size_array);
 
-static PyObject *parse_array(PyObject *self, PyObject *args)
+
+static TensorObject *parse_array(PyObject *self, PyObject *args)
 {
     Py_ssize_t size = PyTuple_Size(args);
 
@@ -63,12 +69,14 @@ static PyObject *parse_array(PyObject *self, PyObject *args)
     obj->matrix = m;
 
 
-    int *indexarrLoc = malloc(sizeOfPointer(size_array) * sizeof(int*));
-    memset(indexarrLoc, 0, sizeOfPointer(size_array) + 1);
+    int *indexArray = malloc(sizeOfPointer(size_array) * sizeof(int*));
+    memset(indexArray, 0, sizeOfPointer(size_array) * sizeof(int*));
+    printf("arr_size = %i\n", sizeOfPointer(size_array));
+  //  printf("%i %i\n", *indexArray, *(indexArray + 1));
     copy_recursive(
         PyTuple_GetItem(args, 0), 
         0,
-        indexarrLoc,
+        indexArray,
         sizeOfPointer(size_array),
         obj->matrix
     );
@@ -76,6 +84,60 @@ static PyObject *parse_array(PyObject *self, PyObject *args)
 
 
     return obj;
+}
+
+
+void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length, Matrix* m) {
+    if (PyList_Check(list_or_data) != 1)
+    {
+        printf("NEVER CALLED\n");
+        return;
+    }
+    int size = PyList_Size(list_or_data);
+    if (indexLoc == 0) {
+        printf("lengthhhh %i\n", size);
+    }
+
+    for (int i = 0; i < size; i++)
+    {
+        *(Index+indexLoc) = i;
+
+        PyObject *temp_p = PyList_GetItem(list_or_data, i);
+        if (temp_p == NULL)
+        {
+            printf("Quick skip :)\n");
+            return;
+        }
+
+        if (indexLoc == 0) {
+            printf("loc == %i\n", i);
+        }
+
+        /* Check if temp_p is numeric */
+        if (PyList_Check(temp_p) != 1)
+        {
+            /*            */
+            /*
+            printf("Write number :)\n");
+            for(int i = 0; i < length; i++){
+                if(i > 0) {
+                    printf(",");
+                }
+                printf("%i ", *(Index + i));
+            }
+            printf("\n");
+            */
+            float value = PyFloat_AsDouble(temp_p);
+
+            printf("%f\n", value);
+
+            setElementN(m, Index, length, value);
+        }
+        else
+        {
+            copy_recursive(temp_p, indexLoc + 1, Index, length, m);
+        }
+    }
 }
 
 int sizeOfPointer(int *arr){
@@ -107,45 +169,6 @@ Matrix *makeMatrix(int *arr)
     return createMatrixN(stackArr, length);
 }
 
-void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length, Matrix* m){
-    if (PyList_Check(list_or_data) != 1)
-    {
-        printf("NEVER CALLED\n");
-        return;
-    }
-    Py_ssize_t size = PyList_Size(list_or_data);
-
-    for (int i = 0; i < size; i++)
-    {
-        *(Index+indexLoc) = i;
-
-        PyObject *temp_p = PyList_GetItem(list_or_data, i);
-        if (temp_p == NULL)
-        {
-            return NULL;
-        }
-
-        /* Check if temp_p is numeric */
-        if (PyList_Check(temp_p) != 1)
-        {
-            printf("Write number :)\n");
-            for(int i = 0; i < length; i++){
-                if(i > 0) {
-                    printf(",");
-                }
-                printf("%i ", *(Index + i));
-            }
-            printf("\n");
-            setElementN(m, Index, length, 42);
-        }
-        else
-        {
-            copy_recursive(temp_p, indexLoc++, Index, length, m);
-        }
-    }
-    return;
-}
-
 
 void parse_array_recursive(PyObject *args, int *size_array)
 {
@@ -163,7 +186,7 @@ void parse_array_recursive(PyObject *args, int *size_array)
         PyObject *temp_p = PyList_GetItem(args, i);
         if (temp_p == NULL)
         {
-            return NULL;
+            return;
         }
 
         /* Check if temp_p is numeric */

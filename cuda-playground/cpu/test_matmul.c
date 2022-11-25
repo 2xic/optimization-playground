@@ -9,12 +9,12 @@ CHEAT_TEST(mathematics_still_work,
     setElement(a, 1, 0, 0);
     setElement(a, 1, 1, 4);
     int s[] = {2, 2};
-    Matrix *b = createMatrixN(s);
+    Matrix *b = createMatrixN(s, 2);
 
-    setElementN(b, (int[]){0, 0}, 6);
-    setElementN(b, (int[]){0, 1}, 5);
-    setElementN(b, (int[]){1, 0}, -7);
-    setElementN(b, (int[]){1, 1}, 1);
+    setElementN(b, (int[]){0, 0}, 2, 6);
+    setElementN(b, (int[]){0, 1}, 2, 5);
+    setElementN(b, (int[]){1, 0}, 2, -7);
+    setElementN(b, (int[]){1, 1}, 2, 1);
 
     printf("%i\n", getElement(b, 0, 0));
 

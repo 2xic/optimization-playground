@@ -29,7 +29,7 @@ void setElement(Matrix *a, int row, int col, float value)
     a->data[rowIndex + col] = value;
 }
 
-void setElementN(Matrix *a, int *location, int length, int value)
+void setElementN(Matrix *a, int *location, int length, float value)
 {
     size_t inputSize = length; // getSize(location);
     size_t arrSize = length; // getSize(a->size);
@@ -48,13 +48,6 @@ void setElementN(Matrix *a, int *location, int length, int value)
     }
     printf("%i\n", tensorLocation);
     a->data[tensorLocation] = value;
-}
-
-int getSize(int size[]){
-    printf("%i\n", sizeof(size));
-    printf("%i\n", sizeof(int));
-    int arrSize = sizeof(size)/sizeof(int);
-    return arrSize;
 }
 
 void freeMatrix(Matrix *a)
@@ -111,8 +104,8 @@ Matrix *createMatrixN(int size[], int length)
     {
         return NULL;
     }
-    matrix->size = (int *)malloc(sizeof(int*) * getSize(size));
-    for(int i = 0; i < getSize(matrix->size); i++) {
+    matrix->size = (int *)malloc(sizeof(int*) * length);
+    for(int i = 0; i < length; i++) {
         matrix->size[i] = size[i];
     }
 
@@ -124,9 +117,11 @@ Matrix *createMatrixN(int size[], int length)
 
         if( i== 0) {
             nSize = size[i];
-            matrix->columns = size[i];
-        } else {
             matrix->rows = size[i];
+        } else {
+            if (i == 1) {
+                matrix->columns = size[i];
+            }
             nSize *= size[i];
         }
     }

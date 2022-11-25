@@ -20,10 +20,15 @@ cudaplayground.pare_array(
 print("expected == 4")
 """
 
+X = np.random.rand(3, 2)
 arr = cudaplayground.pare_array(
-    np.zeros((3, 2)).tolist()
+    X.tolist()
 )
+print(X.tolist())
 print("expected == 2")
 print("=" * 18)
 print(arr)
 arr.print()
+print(
+    np.zeros((3, 2))#.tolist()
+)
