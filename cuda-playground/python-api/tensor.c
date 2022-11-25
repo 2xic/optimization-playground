@@ -9,15 +9,17 @@ typedef struct
     Matrix *matrix;
 } TensorObject;
 
-static TensorObject *tensor_add(PyObject *self, PyObject *args);
-static TensorObject *tensor_mul(PyObject *self, PyObject *args);
-static TensorObject *tensor_subtract(PyObject *self, PyObject *args);
+static TensorObject *tensor_add(TensorObject *self, PyObject *args);
+static TensorObject *tensor_mul(TensorObject *self, PyObject *args);
+static TensorObject *tensor_subtract(TensorObject *self, PyObject *args);
+static TensorObject *tensor_transpose(TensorObject *self);
+static TensorObject *tensor_matmul(TensorObject *self, PyObject *args);
+
 
 static TensorObject *Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored));
 static TensorObject *Ones(TensorObject *self, PyObject *Py_UNUSED(ignored));
 static TensorObject *Rand(TensorObject *self, PyObject *Py_UNUSED(ignored));
 static TensorObject *Print(TensorObject *self, PyObject *Py_UNUSED(ignored));
-
 
 void tp_dealloc(TensorObject *self);
 void tp_free(void *self);
@@ -31,8 +33,9 @@ static PyMethodDef tensor_methods[] = {
     {"zeros", (PyCFunction)Zeros, METH_NOARGS, "Creates a zero tensor"},
     {"ones", (PyCFunction)Ones, METH_NOARGS, "Creates a ones tensor"},
     {"rand", (PyCFunction)Rand, METH_NOARGS, "Creates a random tensor"},
-    {"print", (PyCFunction)Print, METH_NOARGS,
-     "Print the tensor"},
+    {"T", (PyCFunction)tensor_transpose, METH_NOARGS, "Transpose tensor (unoptimized)"},
+    {"matmul", (PyCFunction)tensor_matmul, METH_O, "Matmul two tensors"},
+    {"print", (PyCFunction)Print, METH_NOARGS, "Print the tensor"},
     {NULL} /* Sentinel */
 };
 
@@ -48,7 +51,6 @@ static PyTypeObject TensorType = {
     .tp_as_number = &magic_num_methods,
     .tp_methods = tensor_methods,
 };
-
 
 void tp_dealloc(TensorObject *self)
 {
@@ -85,7 +87,7 @@ Rand(TensorObject *self, PyObject *Py_UNUSED(ignored))
 static TensorObject *
 Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    printf("Matrix pointer = %p\n", self);
+    printf("Matrix pointer = %p (%i, %i)\n", self, self->matrix->columns, self->matrix->rows);
 
     for (int i = 0; i < self->matrix->rows; i++)
     {
@@ -104,7 +106,7 @@ Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
 }
 
 static TensorObject *
-tensor_subtract(PyObject *self, PyObject *args)
+tensor_subtract(TensorObject *self, PyObject *args)
 {
 
     if (PyType_Ready(&TensorType))
@@ -120,7 +122,7 @@ tensor_subtract(PyObject *self, PyObject *args)
     }
     else
     {
-        TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
         return obj;
@@ -128,7 +130,7 @@ tensor_subtract(PyObject *self, PyObject *args)
 }
 
 static TensorObject *
-tensor_add(PyObject *self, PyObject *args)
+tensor_add(TensorObject *self, PyObject *args)
 {
 
     if (PyType_Ready(&TensorType))
@@ -144,7 +146,7 @@ tensor_add(PyObject *self, PyObject *args)
     }
     else
     {
-        TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
         return obj;
@@ -152,7 +154,7 @@ tensor_add(PyObject *self, PyObject *args)
 }
 
 static TensorObject *
-tensor_mul(PyObject *self, PyObject *args)
+tensor_mul(TensorObject *self, PyObject *args)
 {
 
     if (PyType_Ready(&TensorType))
@@ -171,6 +173,58 @@ tensor_mul(PyObject *self, PyObject *args)
     {
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+
+        return obj;
+    }
+}
+
+static TensorObject *
+tensor_transpose(TensorObject *self)
+{
+
+    if (PyType_Ready(&TensorType))
+    {
+        return NULL;
+    }
+
+    TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+    int s[] = {self->matrix->columns, self->matrix->rows};
+
+    Matrix *results = createMatrixN(s, 2);
+    obj->matrix = results;
+    
+
+    for(int i = 0; i < self->matrix->rows; i++){
+        for(int j = 0; j < self->matrix->columns; j++){
+//            printf("%i %i %f\n", i, j, getElement(self->matrix, i, j));
+            setElement(obj->matrix, j, i, getElement(self->matrix, i, j));
+        }
+    }
+
+    ///        obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+
+    return obj;
+}
+
+static TensorObject *
+tensor_matmul(TensorObject *self, PyObject *args)
+{
+    
+    if (PyType_Ready(&TensorType))
+    {
+        return NULL;
+    }
+
+    if (PyLong_Check(args))
+    {
+        long value = PyLong_AsLong(args);
+        printf("Add a constant value :) %li\n", value);
+        return self;
+    }
+    else
+    {
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        obj->matrix = MatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
         return obj;
     }

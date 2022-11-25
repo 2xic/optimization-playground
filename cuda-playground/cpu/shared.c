@@ -152,7 +152,7 @@ Matrix *Add(Matrix * a, Matrix *b) {
 
 Matrix *MatMul(Matrix *a, Matrix *b)
 {
-    // printf("(%d, %d) (%d, %d)\n", a->rows, a->columns, b->rows, b->columns);
+     printf("(%d, %d) @ (%d, %d)\n", a->rows, a->columns, b->rows, b->columns);
     // printf("%d is equal\n", (a->columns != b->rows));
 
     if (a->columns != b->rows)
@@ -168,7 +168,7 @@ Matrix *MatMul(Matrix *a, Matrix *b)
     {
         for (int column = 0; column < results->columns; column++)
         {
-            int accumulator = 0;
+            float accumulator = 0;
             for (int column_j = 0; column_j < results->columns; column_j++)
             {
                 // printf("%d * %d, \n", getElement(a, row, column_j), getElement(b, column_j, column) );

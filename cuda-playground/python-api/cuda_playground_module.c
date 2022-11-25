@@ -23,7 +23,6 @@ cpu(PyObject *self, PyObject *args)
     return PyLong_FromLong(1);
 }
 
-
 static TensorObject *
 tensor(PyObject *self, PyObject *args)
 {
@@ -50,7 +49,6 @@ tensor(PyObject *self, PyObject *args)
 
     return obj;
 }
-
 
 static TensorObject *parse_array(PyObject *self, PyObject *args)
 {
@@ -85,6 +83,7 @@ static TensorObject *parse_array(PyObject *self, PyObject *args)
 
     return obj;
 }
+
 
 
 void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length, Matrix* m) {
@@ -139,6 +138,7 @@ void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length
         }
     }
 }
+
 
 int sizeOfPointer(int *arr){
     int *copyArr = arr;

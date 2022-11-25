@@ -19,7 +19,7 @@ cudaplayground.pare_array(
 )
 print("expected == 4")
 """
-
+"""
 X = np.random.rand(3, 2)
 arr = cudaplayground.pare_array(
     X.tolist()
@@ -32,3 +32,14 @@ arr.print()
 print(
     np.zeros((3, 2))#.tolist()
 )
+"""
+
+X = np.random.rand(3, 2)
+arr = cudaplayground.pare_array(
+    X.tolist()
+)
+print(arr)
+W = arr.T()
+print(W)
+W.print()
+arr.print()
