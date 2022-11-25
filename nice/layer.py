@@ -1,12 +1,28 @@
+import torch
+import torch.nn as nn
 
+class AddictiveCouplingLayer(nn.Module):
+    def __init__(self, d, D) -> None:
+        super(AddictiveCouplingLayer, self).__init__()
 
-class AddictiveCouplingLayer:
-    def __init__(self) -> None:
-        self.model = lambda x: x
+        self.d = 28 * 14
+        self.D = 28 * 28
+#        self.model = lambda x: torch.zeros((self.D - self.d))
+
+        self.model = nn.Sequential(
+          nn.Linear(self.d, self.D - self.d),
+          nn.ReLU(),
+        )
+
+    def split(self, X):
+        return X[:self.d], X[self.d:]
 
     def forward(self, x_1, x_2, prev=None):
-        y_1 = x_1 if prev is None else prev
-        y_2 = x_2 + self.model(x_1)
+        assert x_1.shape[-1] == self.d
+        assert x_2.shape[-1] == self.D - self.d
+        
+        y_1 = x_1 
+        y_2 = (x_1 if prev is None else prev) + self.model(x_1.reshape((1, ) + x_1.shape).float())[0]
 
         return (
             y_1,
