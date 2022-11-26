@@ -33,7 +33,7 @@ print(
     np.zeros((3, 2))#.tolist()
 )
 """
-
+"""
 X = np.random.rand(3, 2)
 arr = cudaplayground.pare_array(
     X.tolist()
@@ -43,3 +43,4 @@ W = arr.T()
 print(W)
 W.print()
 arr.print()
+"""

@@ -9,12 +9,14 @@ typedef struct
     Matrix *matrix;
 } TensorObject;
 
-static TensorObject *tensor_add(TensorObject *self, PyObject *args);
-static TensorObject *tensor_mul(TensorObject *self, PyObject *args);
-static TensorObject *tensor_subtract(TensorObject *self, PyObject *args);
+static TensorObject *tensor_add(PyObject *self, PyObject *args);
+static TensorObject *tensor_mul(PyObject *self, PyObject *args);
+static TensorObject *tensor_divide(PyObject *self, PyObject *args);
+static TensorObject *tensor_subtract(PyObject *self, PyObject *args);
 static TensorObject *tensor_transpose(TensorObject *self);
-static TensorObject *tensor_matmul(TensorObject *self, PyObject *args);
-
+static TensorObject *tensor_matmul(PyObject *self, PyObject *args);
+static TensorObject *tensor_negative(TensorObject *self);
+static TensorObject *tensor_isEqual(PyObject *a, PyObject *b);
 
 static TensorObject *Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored));
 static TensorObject *Ones(TensorObject *self, PyObject *Py_UNUSED(ignored));
@@ -26,6 +28,8 @@ void tp_free(void *self);
 
 PyNumberMethods magic_num_methods = {
     .nb_add = tensor_add,
+    .nb_negative = tensor_negative,
+    .nb_true_divide = tensor_divide,
     .nb_multiply = tensor_mul,
     .nb_subtract = tensor_subtract};
 
@@ -36,6 +40,7 @@ static PyMethodDef tensor_methods[] = {
     {"T", (PyCFunction)tensor_transpose, METH_NOARGS, "Transpose tensor (unoptimized)"},
     {"matmul", (PyCFunction)tensor_matmul, METH_O, "Matmul two tensors"},
     {"print", (PyCFunction)Print, METH_NOARGS, "Print the tensor"},
+    {"isEqual", (PyCFunction)tensor_isEqual, METH_O, "Matmul two tensors"},
     {NULL} /* Sentinel */
 };
 
@@ -106,8 +111,16 @@ Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
 }
 
 static TensorObject *
-tensor_subtract(TensorObject *self, PyObject *args)
+tensor_subtract(PyObject *a, PyObject *b)
 {
+    TensorObject *self;
+    PyObject *args;
+    int direction;
+
+    getTensorPointer(
+        a, b,
+        &self, &args, &direction
+    );
 
     if (PyType_Ready(&TensorType))
     {
@@ -116,9 +129,55 @@ tensor_subtract(TensorObject *self, PyObject *args)
 
     if (PyLong_Check(args))
     {
-        long value = PyLong_AsLong(args);
-        printf("Add a constant value :) %li\n", value);
-        return self;
+        float value = PyFloat_AsDouble(args);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        obj->matrix = SubtractConstant(((TensorObject *)self)->matrix, value, direction);
+        return obj;
+    }
+    else
+    {
+        
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        obj->matrix = Subtract(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+
+        return obj;
+    }
+}
+
+static TensorObject *
+tensor_negative(TensorObject *self)
+{
+    TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+    obj->matrix = MulConstant(((TensorObject *)self)->matrix, -1, 0);
+
+    return obj;
+}
+
+static TensorObject *
+tensor_add(PyObject *a, PyObject *b)
+{
+    TensorObject *self;
+    PyObject *args;
+    int direction;
+
+    getTensorPointer(
+        a, b,
+        &self, &args, &direction
+    );
+
+
+    if (PyType_Ready(&TensorType))
+    {
+        return NULL;
+    }
+
+    if (PyLong_Check(args))
+    {
+        float value = PyFloat_AsDouble(args);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        obj->matrix = AddConstant(((TensorObject *)self)->matrix, value, direction);
+
+        return obj;
     }
     else
     {
@@ -130,8 +189,16 @@ tensor_subtract(TensorObject *self, PyObject *args)
 }
 
 static TensorObject *
-tensor_add(TensorObject *self, PyObject *args)
+tensor_mul(PyObject *a, PyObject *b)
 {
+    TensorObject *self;
+    PyObject *args;
+    int direction;
+
+    getTensorPointer(
+        a, b,
+        &self, &args, &direction
+    );
 
     if (PyType_Ready(&TensorType))
     {
@@ -140,41 +207,50 @@ tensor_add(TensorObject *self, PyObject *args)
 
     if (PyLong_Check(args))
     {
-        long value = PyLong_AsLong(args);
-        printf("Add a constant value :) %li\n", value);
-        return self;
+        float value = PyFloat_AsDouble(args);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        obj->matrix = MulConstant(((TensorObject *)self)->matrix, value, direction);
+
+        return obj;
     }
     else
     {
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+        obj->matrix = Mul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
         return obj;
     }
 }
 
 static TensorObject *
-tensor_mul(TensorObject *self, PyObject *args)
+tensor_divide(PyObject *a, PyObject *b)
 {
+    TensorObject *self;
+    PyObject *args;
+    int direction;
+
+    getTensorPointer(
+        a, b,
+        &self, &args, &direction
+    );
 
     if (PyType_Ready(&TensorType))
     {
         return NULL;
     }
-    printf("Tensor mul :)\n");
 
     if (PyLong_Check(args))
     {
-        long value = PyLong_AsLong(args);
-        printf("Add a constant value :) %li\n", value);
-        return self;
+        float value = PyFloat_AsDouble(args);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        obj->matrix = DivideConstant(((TensorObject *)self)->matrix, value, direction);
+
+        return obj;
     }
     else
     {
-        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-
-        return obj;
+        // TODO
+        return NULL;
     }
 }
 
@@ -192,24 +268,24 @@ tensor_transpose(TensorObject *self)
 
     Matrix *results = createMatrixN(s, 2);
     obj->matrix = results;
-    
 
-    for(int i = 0; i < self->matrix->rows; i++){
-        for(int j = 0; j < self->matrix->columns; j++){
-//            printf("%i %i %f\n", i, j, getElement(self->matrix, i, j));
+    for (int i = 0; i < self->matrix->rows; i++)
+    {
+        for (int j = 0; j < self->matrix->columns; j++)
+        {
             setElement(obj->matrix, j, i, getElement(self->matrix, i, j));
         }
     }
-
-    ///        obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
     return obj;
 }
 
 static TensorObject *
-tensor_matmul(TensorObject *self, PyObject *args)
+tensor_matmul(PyObject *a, PyObject *b)
 {
-    
+    TensorObject *self = a;
+    PyObject *args= b;
+
     if (PyType_Ready(&TensorType))
     {
         return NULL;
@@ -217,9 +293,12 @@ tensor_matmul(TensorObject *self, PyObject *args)
 
     if (PyLong_Check(args))
     {
+        /*
+            This is illegal throw an error
+        */
         long value = PyLong_AsLong(args);
         printf("Add a constant value :) %li\n", value);
-        return self;
+        return NULL;
     }
     else
     {
@@ -229,3 +308,44 @@ tensor_matmul(TensorObject *self, PyObject *args)
         return obj;
     }
 }
+
+static TensorObject *
+tensor_isEqual(PyObject *a, PyObject *b)
+{
+    TensorObject *self = a;
+    PyObject *args= b;
+
+    if (PyType_Ready(&TensorType))
+    {
+        return NULL;
+    }
+
+    if (PyLong_Check(args))
+    {
+        /*
+            This is illegal throw an error
+        */
+        long value = PyLong_AsLong(args);
+        printf("Add a constant value :) %li\n", value);
+        return self;
+    }
+    else
+    {
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        return PyBool_FromLong(isEqual(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix));
+    }
+}
+
+// One of the objects will always be 
+void getTensorPointer(PyObject *a, PyObject *b, PyObject **tensor, PyObject **args, int*direction ) {
+    if (PyLong_Check(a)) {
+        *tensor = b;
+        *args = a; 
+        *direction = 1;
+    } else {
+        *tensor = a;
+        *args = b; 
+        *direction = 0;
+    }
+}
+

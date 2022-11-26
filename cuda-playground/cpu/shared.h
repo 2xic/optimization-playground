@@ -1,8 +1,8 @@
-#ifndef shared_H_   
+#ifndef shared_H_
 #define shared_H_
 
-
-typedef struct {
+typedef struct
+{
     float *data;
     int rows;
     int columns;
@@ -10,9 +10,9 @@ typedef struct {
 } Matrix;
 
 #ifndef IS_CUDA
-    void print_array(float *ptr, int length);
+void print_array(float *ptr, int length);
 #else
-    extern "C" void print_array(float *ptr, int length);
+extern "C" void print_array(float *ptr, int length);
 #endif
 
 int getSize(int size[]);
@@ -29,16 +29,29 @@ void fillRandom(Matrix *a);
 
 Matrix *createMatrixN(int size[], int length);
 
-Matrix *Add(Matrix * a, Matrix *b) ;
+Matrix *Add(Matrix *a, Matrix *b);
+Matrix *AddConstant(Matrix *a, float b, int direction);
+
+Matrix *Mul(Matrix *a, Matrix *b);
+Matrix *MulConstant(Matrix *a, float b, int direction);
+
+Matrix *DivideConstant(Matrix * a, float b, int direction);
+
+Matrix *Subtract(Matrix *a, Matrix *b);
+Matrix *SubtractConstant(Matrix *a, float b, int direction);
+
+int isEqual(Matrix *a, Matrix *b);
+
+Matrix *Exp(Matrix * a);
 
 void fill(Matrix *a, int value);
 
 void setElementN(Matrix *a, int *location, int length, float value);
 
 #ifndef IS_CUDA
-    Matrix *MatMul(Matrix *a, Matrix *b);
+Matrix *MatMul(Matrix *a, Matrix *b);
 #else
-    extern "C" __global__ Matrix *MatMul(Matrix *a, Matrix *b);
+extern "C" __global__ Matrix *MatMul(Matrix *a, Matrix *b);
 #endif
 
 #endif

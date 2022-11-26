@@ -29,5 +29,5 @@ test: test_build
 
 python: cpu_library
 	cd python-api && ./build.sh
-
+	
 .PHONY: gpu cpu test gpu_library cpu_library

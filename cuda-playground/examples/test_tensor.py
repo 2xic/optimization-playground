@@ -1,5 +1,5 @@
 import cudaplayground
-
+"""
 print("Hello :)")
 p = cudaplayground
 #print(dir(cudaplayground))
@@ -53,3 +53,8 @@ random = p.tensor((2, 2)).rand()
 print(random)
 print("???")
 random.print()
+"""
+
+#b = 2 - a
+#b.print()
+

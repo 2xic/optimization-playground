@@ -203,6 +203,31 @@ void parse_array_recursive(PyObject *args, int *size_array)
     return;
 }
 
+
+static TensorObject *
+torch_exp(PyObject *self, PyObject *args)
+{
+    if (PyType_Ready(&TensorType))
+    {
+        return NULL;
+    }
+
+    int ok;
+    TensorObject *o;
+
+    ok = PyArg_ParseTuple(args, "O", &o);
+    if (!ok)
+    {
+        printf("Unexpected input\n");
+        return NULL;
+    }
+
+    TensorObject *obj = PyObject_CallObject((PyObject *)&TensorType, NULL);
+    obj->matrix = Exp(o->matrix);
+
+    return obj;
+}
+
 static PyMethodDef CudaplaygroundMethods[] = {
     {"gpu", gpu, METH_VARARGS,
      "Execute a shell command."},
@@ -211,6 +236,8 @@ static PyMethodDef CudaplaygroundMethods[] = {
     {"tensor", tensor, METH_VARARGS,
      "Execute a shell command."},
     {"pare_array", parse_array, METH_VARARGS,
+     "Execute a shell command."},
+    {"exp", torch_exp, METH_VARARGS,
      "Execute a shell command."},
     {NULL, NULL, 0, NULL}};
 

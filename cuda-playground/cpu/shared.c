@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include "shared.h"
 #include <string.h>
+#include <math.h>;
 
 void print_array(float *ptr, int length)
 {
@@ -32,16 +33,21 @@ void setElement(Matrix *a, int row, int col, float value)
 void setElementN(Matrix *a, int *location, int length, float value)
 {
     size_t inputSize = length; // getSize(location);
-    size_t arrSize = length; // getSize(a->size);
-    if (inputSize != arrSize){
+    size_t arrSize = length;   // getSize(a->size);
+    if (inputSize != arrSize)
+    {
         return;
     }
     int tensorLocation = 0;
-    for (int i = 0; i < arrSize; i++) {
+    for (int i = 0; i < arrSize; i++)
+    {
         int locI = *(location + i);
-        if (0 == i) {
+        if (0 == i)
+        {
             tensorLocation = locI;
-        } else {
+        }
+        else
+        {
             tensorLocation = tensorLocation * a->size[i] + locI;
         }
         printf("tensor == %i %i %i\n", i, tensorLocation, a->size[i]);
@@ -50,18 +56,45 @@ void setElementN(Matrix *a, int *location, int length, float value)
     a->data[tensorLocation] = value;
 }
 
+int isEqual(Matrix *a, Matrix *b)
+{
+    if (a->rows != b->rows || b->columns != a->columns)
+    {
+        printf("Not equal dimensions\n");
+        return NULL;
+    }
+
+    int isEqual = 1;
+
+    for (int row = 0; row < a->rows; row++)
+    {
+        for (int column = 0; column < a->columns; column++)
+        {
+            isEqual = (getElement(a, row, column) == getElement(b, row, column));
+            if (!isEqual){
+                printf("%f != %f \n", getElement(a, row, column) , getElement(b, row, column));
+                break;
+            }
+        }
+    }
+
+    return isEqual;
+}
+
 void freeMatrix(Matrix *a)
 {
     printf("Freeing the matrix\n");
     free(a->data);
-    if (a->size != NULL ){
+    if (a->size != NULL)
+    {
         free(a->size);
     }
     free(a);
 }
 
 // TODO: this should support any dimension.
-Matrix *createMatrix(int rows, int columns) {
+Matrix *createMatrix(int rows, int columns)
+{
     Matrix *matrix = malloc(sizeof(Matrix));
     if (matrix == NULL)
     {
@@ -80,19 +113,24 @@ Matrix *createMatrix(int rows, int columns) {
     return matrix;
 }
 
-void fillRandom(Matrix *a) {
-    int size = a->rows * a->columns;// * sizeof(int *);
+void fillRandom(Matrix *a)
+{
+    int size = a->rows * a->columns; // * sizeof(int *);
     printf("filling randomly %i (%i, %i) \n", size, a->rows, a->columns);
-    for (int i = 0; i < size; i++) {
-        float random = 1 * ((float) rand()) / (float) RAND_MAX;
+    for (int i = 0; i < size; i++)
+    {
+        float random = 1 * ((float)rand()) / (float)RAND_MAX;
+        printf("value %f\n", random);
         a->data[i] = random;
     }
 }
 
-void fill(Matrix *a, int value) {
-    int size = a->rows * a->columns;// * sizeof(int *);
+void fill(Matrix *a, int value)
+{
+    int size = a->rows * a->columns; // * sizeof(int *);
     printf("filling %i (%i, %i) \n", size, a->rows, a->columns);
-    for (int i = 0; i < size; i++) {
+    for (int i = 0; i < size; i++)
+    {
         a->data[i] = value;
     }
 }
@@ -104,22 +142,28 @@ Matrix *createMatrixN(int size[], int length)
     {
         return NULL;
     }
-    matrix->size = (int *)malloc(sizeof(int*) * length);
-    for(int i = 0; i < length; i++) {
+    matrix->size = (int *)malloc(sizeof(int *) * length);
+    for (int i = 0; i < length; i++)
+    {
         matrix->size[i] = size[i];
     }
 
     int nSize = 0;
     int arrSize = length; // getSize(size);
     printf("length size %i\n", arrSize);
-    for (int i = 0; i < arrSize; i++) {
+    for (int i = 0; i < arrSize; i++)
+    {
         printf("\tsize[i] == %i\n", size[i]);
 
-        if( i== 0) {
+        if (i == 0)
+        {
             nSize = size[i];
             matrix->rows = size[i];
-        } else {
-            if (i == 1) {
+        }
+        else
+        {
+            if (i == 1)
+            {
                 matrix->columns = size[i];
             }
             nSize *= size[i];
@@ -135,16 +179,159 @@ Matrix *createMatrixN(int size[], int length)
     return matrix;
 }
 
-Matrix *Add(Matrix * a, Matrix *b) {
+Matrix *Add(Matrix *a, Matrix *b)
+{
     // TODO: BOunce check
     printf("add !\n");
     Matrix *c = createMatrix(a->rows, a->columns);
-    for(int i = 0; i < a->columns; i++) {
-        for (int j = 0; j < a->rows; j++) {
-            setElement(c, i, j, 
-                getElement(a, i, j) +
-                getElement(b, i, j)
-            );
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            setElement(c, i, j,
+                       getElement(a, i, j) +
+                           getElement(b, i, j));
+        }
+    }
+    return c;
+}
+
+Matrix *AddConstant(Matrix *a, float b, int direction)
+{
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            float new_value = 0;
+            if (direction == 0)
+            {
+                new_value = getElement(a, i, j) + b;
+            } else
+            {
+                new_value = b + getElement(a, i, j);
+            }
+
+            setElement(c, i, j, new_value);
+            
+        }
+    }
+    return c;
+}
+
+
+Matrix *Subtract(Matrix *a, Matrix *b)
+{
+    // TODO: BOunce check
+    printf("add !\n");
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            setElement(c, i, j,
+                       getElement(a, i, j) -
+                           getElement(b, i, j));
+        }
+    }
+    return c;
+}
+
+Matrix *SubtractConstant(Matrix *a, float b, int direction)
+{
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            float new_value = 0;
+            if (direction == 0)
+            {
+                new_value = getElement(a, i, j) - b;
+            } else
+            {
+                new_value = b - getElement(a, i, j);
+            }
+
+            setElement(c, i, j, new_value); 
+        }
+    }
+    return c;
+}
+
+
+Matrix *Mul(Matrix *a, Matrix *b)
+{
+    // TODO: BOunce check
+    printf("add !\n");
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            setElement(c, i, j,
+                       getElement(a, i, j) *
+                           getElement(b, i, j));
+        }
+    }
+    return c;
+}
+
+Matrix *MulConstant(Matrix *a, float b, int direction)
+{
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            float new_value = 0;
+            if (direction == 0)
+            {
+                new_value = getElement(a, i, j) * b;
+            } else
+            {
+                new_value = b * getElement(a, i, j);
+            }
+
+            setElement(c, i, j, new_value);
+        }
+    }
+    return c;
+}
+
+Matrix *DivideConstant(Matrix *a, float b, int direction)
+{
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            float new_value = 0;
+            if (direction == 0)
+            {
+                new_value = getElement(a, i, j) / b;
+            }
+            else
+            {
+                new_value = b / getElement(a, i, j);
+            }
+            setElement(c, i, j,
+                       new_value);
+        }
+    }
+    return c;
+}
+
+Matrix *Exp(Matrix *a)
+{
+    printf("EXP:)\n");
+    Matrix *c = createMatrix(a->rows, a->columns);
+    for (int i = 0; i < a->columns; i++)
+    {
+        for (int j = 0; j < a->rows; j++)
+        {
+            setElement(c, i, j,
+                       exp(getElement(a, i, j)));
         }
     }
     return c;
@@ -152,7 +339,7 @@ Matrix *Add(Matrix * a, Matrix *b) {
 
 Matrix *MatMul(Matrix *a, Matrix *b)
 {
-     printf("(%d, %d) @ (%d, %d)\n", a->rows, a->columns, b->rows, b->columns);
+    printf("(%d, %d) @ (%d, %d)\n", a->rows, a->columns, b->rows, b->columns);
     // printf("%d is equal\n", (a->columns != b->rows));
 
     if (a->columns != b->rows)
@@ -164,25 +351,21 @@ Matrix *MatMul(Matrix *a, Matrix *b)
         a->rows,
         b->columns);
 
-    for (int row = 0; row < results->rows; row++)
+    for (int row = 0; row < a->rows; row++)
     {
-        for (int column = 0; column < results->columns; column++)
+        for (int column = 0; column < b->columns; column++)
         {
             float accumulator = 0;
-            for (int column_j = 0; column_j < results->columns; column_j++)
+            for (int column_j = 0; column_j < b->rows; column_j++)
             {
-                // printf("%d * %d, \n", getElement(a, row, column_j), getElement(b, column_j, column) );
                 accumulator += getElement(a, row, column_j) * getElement(b, column_j, column);
             }
-            // printf("%d acc\n", accumulator);
-
             setElement(
                 results,
                 row,
                 column,
                 accumulator);
         }
-        // printf("\n");
     }
 
     return results;
