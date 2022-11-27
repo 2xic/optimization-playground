@@ -4,9 +4,8 @@
 #include "stdio.h"
 #include "kernel.h"
 
-
-
 extern "C" int gpu_test() {
+    /*
     printf("hello python (from gpu!)!\n");
     int cudaDeviceCount = 0;
     cudaGetDeviceCount(&cudaDeviceCount);
@@ -63,6 +62,6 @@ extern "C" int gpu_test() {
     printf("%i\n", c_host[1]);
     printf("%i\n", c_host[2]);
     printf("%i\n", c_host[3]);
-    
+    */
     return 0;
 }

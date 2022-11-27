@@ -7,12 +7,14 @@ typedef struct
     int rows;
     int columns;
     int *size;
+    int device;
+// TODO This is more like a tensor
 } Matrix;
 
 #ifndef IS_CUDA
-void print_array(float *ptr, int length);
+    void print_array(float *ptr, int length);
 #else
-extern "C" void print_array(float *ptr, int length);
+    extern "C" void print_array(float *ptr, int length);
 #endif
 
 int getSize(int size[]);
@@ -49,9 +51,9 @@ void fill(Matrix *a, int value);
 void setElementN(Matrix *a, int *location, int length, float value);
 
 #ifndef IS_CUDA
-Matrix *MatMul(Matrix *a, Matrix *b);
+    Matrix *MatMul(Matrix *a, Matrix *b);
 #else
-extern "C" __global__ Matrix *MatMul(Matrix *a, Matrix *b);
+    extern "C" __global__ Matrix *MatMul(Matrix *a, Matrix *b);
 #endif
 
 #endif

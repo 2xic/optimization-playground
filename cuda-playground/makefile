@@ -27,7 +27,7 @@ test_build:
 test: test_build
 	./cpu/test_matmul
 
-python: cpu_library
+python: cpu_library gpu_library
 	cd python-api && ./build.sh
 	
 .PHONY: gpu cpu test gpu_library cpu_library

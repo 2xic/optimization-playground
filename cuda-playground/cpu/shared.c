@@ -103,6 +103,7 @@ Matrix *createMatrix(int rows, int columns)
     matrix->rows = rows;
     matrix->columns = columns;
     matrix->size = NULL;
+    matrix->device = 0;
 
     int size = rows * columns * sizeof(float *);
     matrix->data = (float *)malloc(size);
@@ -173,6 +174,7 @@ Matrix *createMatrixN(int size[], int length)
     int dataSize = nSize * sizeof(int *);
     printf("dataSize = %i\n", dataSize);
 
+    matrix->device = 0;
     matrix->data = (float *)malloc(dataSize);
     memset(matrix->data, 0, dataSize);
 

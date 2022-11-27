@@ -23,6 +23,11 @@ static TensorObject *Ones(TensorObject *self, PyObject *Py_UNUSED(ignored));
 static TensorObject *Rand(TensorObject *self, PyObject *Py_UNUSED(ignored));
 static TensorObject *Print(TensorObject *self, PyObject *Py_UNUSED(ignored));
 
+static TensorObject *tensor_cuda(TensorObject *self);
+static TensorObject *tensor_host(TensorObject *self);
+
+int getDevice(Matrix *a, Matrix *b);
+
 void tp_dealloc(TensorObject *self);
 void tp_free(void *self);
 
@@ -41,6 +46,8 @@ static PyMethodDef tensor_methods[] = {
     {"matmul", (PyCFunction)tensor_matmul, METH_O, "Matmul two tensors"},
     {"print", (PyCFunction)Print, METH_NOARGS, "Print the tensor"},
     {"isEqual", (PyCFunction)tensor_isEqual, METH_O, "Matmul two tensors"},
+    {"cuda", (PyCFunction)tensor_cuda, METH_NOARGS, "Send tensor to cuda device"},
+    {"host", (PyCFunction)tensor_host, METH_NOARGS, "Sends tensor to host"},
     {NULL} /* Sentinel */
 };
 
@@ -302,9 +309,18 @@ tensor_matmul(PyObject *a, PyObject *b)
     }
     else
     {
-        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        obj->matrix = MatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
+        int device = getDevice(((TensorObject*)a)->matrix, ((TensorObject*)b)->matrix);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+
+        if (device == 0) {
+            obj->matrix = MatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+        } else if (device == 1) {
+            obj->matrix = MatrixMatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+        } else {
+            // Throw error
+        }
+        
         return obj;
     }
 }
@@ -349,3 +365,26 @@ void getTensorPointer(PyObject *a, PyObject *b, PyObject **tensor, PyObject **ar
     }
 }
 
+int getDevice(Matrix *a, Matrix *b) {
+    if (a->device == b->device){
+        return a->device;
+    } else {
+        return -1;
+    }
+}
+
+
+static TensorObject *
+tensor_cuda(TensorObject *self)
+{
+    sendToGpu(self->matrix);
+    return self;
+}
+
+static TensorObject *
+tensor_host(TensorObject *self)
+{
+    sendToHost(self->matrix);
+
+    return self;
+}
