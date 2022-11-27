@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include "shared.h"
 #include <string.h>
-#include <math.h>;
+#include <math.h>
 
 void print_array(float *ptr, int length)
 {
@@ -61,7 +61,7 @@ int isEqual(Matrix *a, Matrix *b)
     if (a->rows != b->rows || b->columns != a->columns)
     {
         printf("Not equal dimensions\n");
-        return NULL;
+        return -1;
     }
 
     int isEqual = 1;

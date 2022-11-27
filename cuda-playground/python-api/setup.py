@@ -9,11 +9,10 @@ def main():
           author_email="me@2xic.xyz",
           ext_modules=[Extension(
               "cudaplayground",
-              ["cuda_playground_module.c"], #, "tensor.c"],
+              ["extension/cuda_playground_module.c"],
               library_dirs=['/usr/lib/'],
               libraries=['gpu', 'cpu'],
-          )])
-
+          )])\
 
 if __name__ == "__main__":
     main()

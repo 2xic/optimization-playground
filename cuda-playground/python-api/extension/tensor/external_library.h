@@ -1,4 +1,4 @@
-#include "../cpu/shared.h"
+#include "../../../cpu/shared.h"
 
 #ifndef gpu_library_h__
 #define gpu_library_h__

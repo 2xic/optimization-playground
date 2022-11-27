@@ -1,7 +1,8 @@
 // https://docs.python.org/3/extending/newtypes_tutorial.html
 
 #include <Python.h>
-#include "../cpu/shared.h"
+#include "../../../cpu/shared.h"
+#include "external_library.h"
 
 typedef struct
 {
@@ -9,24 +10,25 @@ typedef struct
     Matrix *matrix;
 } TensorObject;
 
-static TensorObject *tensor_add(PyObject *self, PyObject *args);
-static TensorObject *tensor_mul(PyObject *self, PyObject *args);
-static TensorObject *tensor_divide(PyObject *self, PyObject *args);
-static TensorObject *tensor_subtract(PyObject *self, PyObject *args);
-static TensorObject *tensor_transpose(TensorObject *self);
-static TensorObject *tensor_matmul(PyObject *self, PyObject *args);
-static TensorObject *tensor_negative(TensorObject *self);
-static TensorObject *tensor_isEqual(PyObject *a, PyObject *b);
+static PyObject *tensor_add(PyObject *self, PyObject *args);
+static PyObject *tensor_mul(PyObject *self, PyObject *args);
+static PyObject *tensor_divide(PyObject *self, PyObject *args);
+static PyObject *tensor_subtract(PyObject *self, PyObject *args);
+static PyObject *tensor_transpose(TensorObject *self);
+static PyObject *tensor_matmul(PyObject *self, PyObject *args);
+static PyObject *tensor_negative(TensorObject *self);
+static PyObject *tensor_isEqual(PyObject *a, PyObject *b);
 
-static TensorObject *Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored));
-static TensorObject *Ones(TensorObject *self, PyObject *Py_UNUSED(ignored));
-static TensorObject *Rand(TensorObject *self, PyObject *Py_UNUSED(ignored));
-static TensorObject *Print(TensorObject *self, PyObject *Py_UNUSED(ignored));
+static PyObject *Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored));
+static PyObject *Ones(TensorObject *self, PyObject *Py_UNUSED(ignored));
+static PyObject *Rand(TensorObject *self, PyObject *Py_UNUSED(ignored));
+static PyObject *Print(TensorObject *self, PyObject *Py_UNUSED(ignored));
 
-static TensorObject *tensor_cuda(TensorObject *self);
-static TensorObject *tensor_host(TensorObject *self);
+static PyObject *tensor_cuda(TensorObject *self);
+static PyObject *tensor_host(TensorObject *self);
 
 int getDevice(Matrix *a, Matrix *b);
+void getTensorPointer(PyObject *a, PyObject *b, PyObject **tensor, PyObject **args, int*direction );
 
 void tp_dealloc(TensorObject *self);
 void tp_free(void *self);
@@ -75,28 +77,28 @@ void tp_free(void *self)
     printf("free the beef? +\n");
 }
 
-static TensorObject *
+static PyObject *
 Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    return self;
+    return (PyObject*)self;
 }
 
-static TensorObject *
+static PyObject *
 Ones(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
     fill(self->matrix, 1);
     self->size = 42;
-    return self;
+    return (PyObject*)self;
 }
 
-static TensorObject *
+static PyObject *
 Rand(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
     fillRandom(self->matrix);
-    return self;
+    return (PyObject*)self;
 }
 
-static TensorObject *
+static PyObject *
 Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
     printf("Matrix pointer = %p (%i, %i)\n", self, self->matrix->columns, self->matrix->rows);
@@ -114,10 +116,10 @@ Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
         printf("\n");
     }
 
-    return self;
+    return (PyObject*)self;
 }
 
-static TensorObject *
+static PyObject *
 tensor_subtract(PyObject *a, PyObject *b)
 {
     TensorObject *self;
@@ -139,7 +141,7 @@ tensor_subtract(PyObject *a, PyObject *b)
         float value = PyFloat_AsDouble(args);
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = SubtractConstant(((TensorObject *)self)->matrix, value, direction);
-        return obj;
+        return (PyObject*)obj;
     }
     else
     {
@@ -147,20 +149,20 @@ tensor_subtract(PyObject *a, PyObject *b)
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = Subtract(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
-        return obj;
+        return (PyObject*)obj;
     }
 }
 
-static TensorObject *
+static PyObject *
 tensor_negative(TensorObject *self)
 {
     TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
     obj->matrix = MulConstant(((TensorObject *)self)->matrix, -1, 0);
 
-    return obj;
+    return (PyObject*)obj;
 }
 
-static TensorObject *
+static PyObject *
 tensor_add(PyObject *a, PyObject *b)
 {
     TensorObject *self;
@@ -184,18 +186,18 @@ tensor_add(PyObject *a, PyObject *b)
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = AddConstant(((TensorObject *)self)->matrix, value, direction);
 
-        return obj;
+        return (PyObject*)obj;
     }
     else
     {
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
-        return obj;
+        return (PyObject*)obj;
     }
 }
 
-static TensorObject *
+static PyObject *
 tensor_mul(PyObject *a, PyObject *b)
 {
     TensorObject *self;
@@ -218,18 +220,18 @@ tensor_mul(PyObject *a, PyObject *b)
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = MulConstant(((TensorObject *)self)->matrix, value, direction);
 
-        return obj;
+        return (PyObject*)obj;
     }
     else
     {
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = Mul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
 
-        return obj;
+        return (PyObject*)obj;
     }
 }
 
-static TensorObject *
+static PyObject *
 tensor_divide(PyObject *a, PyObject *b)
 {
     TensorObject *self;
@@ -252,7 +254,7 @@ tensor_divide(PyObject *a, PyObject *b)
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
         obj->matrix = DivideConstant(((TensorObject *)self)->matrix, value, direction);
 
-        return obj;
+        return (PyObject*)obj;
     }
     else
     {
@@ -261,7 +263,7 @@ tensor_divide(PyObject *a, PyObject *b)
     }
 }
 
-static TensorObject *
+static PyObject *
 tensor_transpose(TensorObject *self)
 {
 
@@ -284,13 +286,13 @@ tensor_transpose(TensorObject *self)
         }
     }
 
-    return obj;
+    return (PyObject*)obj;
 }
 
-static TensorObject *
+static PyObject *
 tensor_matmul(PyObject *a, PyObject *b)
 {
-    TensorObject *self = a;
+    PyObject *self = a;
     PyObject *args= b;
 
     if (PyType_Ready(&TensorType))
@@ -321,14 +323,14 @@ tensor_matmul(PyObject *a, PyObject *b)
             // Throw error
         }
         
-        return obj;
+        return (PyObject*)obj;
     }
 }
 
-static TensorObject *
+static PyObject *
 tensor_isEqual(PyObject *a, PyObject *b)
 {
-    TensorObject *self = a;
+    PyObject *self = a;
     PyObject *args= b;
 
     if (PyType_Ready(&TensorType))
@@ -336,20 +338,7 @@ tensor_isEqual(PyObject *a, PyObject *b)
         return NULL;
     }
 
-    if (PyLong_Check(args))
-    {
-        /*
-            This is illegal throw an error
-        */
-        long value = PyLong_AsLong(args);
-        printf("Add a constant value :) %li\n", value);
-        return self;
-    }
-    else
-    {
-        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        return PyBool_FromLong(isEqual(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix));
-    }
+    return PyBool_FromLong(isEqual(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix));
 }
 
 // One of the objects will always be 
@@ -374,17 +363,17 @@ int getDevice(Matrix *a, Matrix *b) {
 }
 
 
-static TensorObject *
+static PyObject *
 tensor_cuda(TensorObject *self)
 {
     sendToGpu(self->matrix);
-    return self;
+    return (PyObject*)self;
 }
 
-static TensorObject *
+static PyObject *
 tensor_host(TensorObject *self)
 {
     sendToHost(self->matrix);
 
-    return self;
+    return (PyObject*)self;
 }
