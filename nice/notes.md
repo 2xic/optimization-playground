@@ -33,6 +33,8 @@ Transformations
       - g(a;b) = a + b
     -     
 
+----
 
-
-
+Some good notes
+- https://stats.stackexchange.com/questions/493863/inference-in-normalizing-flow-model-nicenon-linear-independent-components-esti
+- 

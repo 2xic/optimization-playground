@@ -10,9 +10,9 @@ class AddictiveCouplingLayer(nn.Module):
 
         self.model = nn.Sequential(
           nn.Linear(28 * 28, 1000),
-          nn.ReLU(),
+          nn.Sigmoid(),
           nn.Linear(1000, 28 * 28),
-          nn.ReLU(),
+#          nn.ReLU(),
         )
         self.mask = mask
 
@@ -36,15 +36,15 @@ class AddictiveCouplingLayer(nn.Module):
 class ScalingLayer(nn.Module):
     def __init__(self) -> None:
         super(ScalingLayer, self).__init__()
-        self.scale = nn.Parameter(torch.randn(1, 28 * 28, requires_grad=True))
+        self.scale_vector = nn.Parameter(torch.randn(1, 28 * 28, requires_grad=True))
 
     def forward(self, x):
         # As mentioned in section 5.6
         return (
-            torch.exp(self.scale) * x
+            torch.exp(self.scale_vector) * x
         )
     
     def backward(self, x):
         return (
-            torch.exp( - self.scale) * x
+            torch.exp( - self.scale_vector) * x
         )
