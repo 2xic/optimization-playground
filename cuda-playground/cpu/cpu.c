@@ -1,5 +1,5 @@
 #include <stdlib.h>
-#include "stdio.h"
+#include <stdio.h>
 #include "shared.c"
 
 void vector_add(float *out, float *a, float *b, int N) {

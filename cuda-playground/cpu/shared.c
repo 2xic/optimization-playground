@@ -1,8 +1,10 @@
+#include <string.h>
+#include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include "shared.h"
-#include <string.h>
-#include <math.h>
+#include "extensions.c"
+
 
 void print_array(float *ptr, int length)
 {
@@ -71,8 +73,9 @@ int isEqual(Matrix *a, Matrix *b)
         for (int column = 0; column < a->columns; column++)
         {
             isEqual = (getElement(a, row, column) == getElement(b, row, column));
-            if (!isEqual){
-                printf("%f != %f \n", getElement(a, row, column) , getElement(b, row, column));
+            if (!isEqual)
+            {
+                printf("%f != %f \n", getElement(a, row, column), getElement(b, row, column));
                 break;
             }
         }
@@ -181,147 +184,103 @@ Matrix *createMatrixN(int size[], int length)
     return matrix;
 }
 
-Matrix *Add(Matrix *a, Matrix *b)
+Matrix *ApplyOperator(Matrix *a, Matrix *b, float *constant, int direction, int operator)
 {
-    // TODO: BOunce check
-    printf("add !\n");
     Matrix *c = createMatrix(a->rows, a->columns);
+
     for (int i = 0; i < a->columns; i++)
     {
         for (int j = 0; j < a->rows; j++)
         {
-            setElement(c, i, j,
-                       getElement(a, i, j) +
-                           getElement(b, i, j));
+            float (*getter)(int i, int j) = create_subtract_extension(b, constant);
+
+
+            float value = getter(i, j);
+
+            float new_value = 0;
+            if (direction == 0)
+            {
+                new_value = create_operator_extension(getElement(a, i, j), value, operator)();
+            }
+            else
+            {
+                new_value = create_operator_extension(value, getElement(a, i, j), operator)();
+            }
+
+            setElement(c, i, j, new_value);
         }
     }
     return c;
+}
+
+Matrix *Add(Matrix *a, Matrix *b)
+{
+      return ApplyOperator(
+        a,
+        b,
+        NULL,
+        0,
+        ADD);
 }
 
 Matrix *AddConstant(Matrix *a, float b, int direction)
 {
-    Matrix *c = createMatrix(a->rows, a->columns);
-    for (int i = 0; i < a->columns; i++)
-    {
-        for (int j = 0; j < a->rows; j++)
-        {
-            float new_value = 0;
-            if (direction == 0)
-            {
-                new_value = getElement(a, i, j) + b;
-            } else
-            {
-                new_value = b + getElement(a, i, j);
-            }
-
-            setElement(c, i, j, new_value);
-            
-        }
-    }
-    return c;
+      return ApplyOperator(
+        a,
+        NULL,
+        &b,
+        direction,
+        ADD);
 }
-
 
 Matrix *Subtract(Matrix *a, Matrix *b)
 {
-    // TODO: BOunce check
-    printf("add !\n");
-    Matrix *c = createMatrix(a->rows, a->columns);
-    for (int i = 0; i < a->columns; i++)
-    {
-        for (int j = 0; j < a->rows; j++)
-        {
-            setElement(c, i, j,
-                       getElement(a, i, j) -
-                           getElement(b, i, j));
-        }
-    }
-    return c;
+    return ApplyOperator(
+        a,
+        b,
+        NULL,
+        0,
+        SUBTRACT);
 }
 
 Matrix *SubtractConstant(Matrix *a, float b, int direction)
 {
-    Matrix *c = createMatrix(a->rows, a->columns);
-    for (int i = 0; i < a->columns; i++)
-    {
-        for (int j = 0; j < a->rows; j++)
-        {
-            float new_value = 0;
-            if (direction == 0)
-            {
-                new_value = getElement(a, i, j) - b;
-            } else
-            {
-                new_value = b - getElement(a, i, j);
-            }
-
-            setElement(c, i, j, new_value); 
-        }
-    }
-    return c;
+    return ApplyOperator(
+        a,
+        NULL,
+        &b,
+        direction,
+        SUBTRACT);
 }
-
 
 Matrix *Mul(Matrix *a, Matrix *b)
 {
-    // TODO: BOunce check
-    printf("add !\n");
-    Matrix *c = createMatrix(a->rows, a->columns);
-    for (int i = 0; i < a->columns; i++)
-    {
-        for (int j = 0; j < a->rows; j++)
-        {
-            setElement(c, i, j,
-                       getElement(a, i, j) *
-                           getElement(b, i, j));
-        }
-    }
-    return c;
+    return ApplyOperator(
+        a,
+        b,
+        NULL,
+        0,
+        MUL);
 }
 
 Matrix *MulConstant(Matrix *a, float b, int direction)
 {
-    Matrix *c = createMatrix(a->rows, a->columns);
-    for (int i = 0; i < a->columns; i++)
-    {
-        for (int j = 0; j < a->rows; j++)
-        {
-            float new_value = 0;
-            if (direction == 0)
-            {
-                new_value = getElement(a, i, j) * b;
-            } else
-            {
-                new_value = b * getElement(a, i, j);
-            }
-
-            setElement(c, i, j, new_value);
-        }
-    }
-    return c;
+    return ApplyOperator(
+        a,
+        NULL,
+        &b,
+        direction,
+        MUL);
 }
 
 Matrix *DivideConstant(Matrix *a, float b, int direction)
 {
-    Matrix *c = createMatrix(a->rows, a->columns);
-    for (int i = 0; i < a->columns; i++)
-    {
-        for (int j = 0; j < a->rows; j++)
-        {
-            float new_value = 0;
-            if (direction == 0)
-            {
-                new_value = getElement(a, i, j) / b;
-            }
-            else
-            {
-                new_value = b / getElement(a, i, j);
-            }
-            setElement(c, i, j,
-                       new_value);
-        }
-    }
-    return c;
+    return ApplyOperator(
+        a,
+        NULL,
+        &b,
+        direction,
+        DIV);
 }
 
 Matrix *Exp(Matrix *a)

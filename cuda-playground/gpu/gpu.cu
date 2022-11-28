@@ -36,6 +36,10 @@ int main(){
 
     // Results
     Matrix *c = MatrixMatMul(a, b);
+
+    c = MatrixAdd(c, c);
+    c = AddConstant(c, 4.0);
+
     sendToHost(c);
 
     float *c_host = c->data;

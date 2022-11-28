@@ -21,3 +21,4 @@ model_state
 gpu.so
 model.pkt
 __pycache__
+settings.json

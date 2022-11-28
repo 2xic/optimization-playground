@@ -1,6 +1,13 @@
 #ifndef shared_H_
 #define shared_H_
 
+enum OPERATOR {
+    SUBTRACT,
+    ADD,
+    MUL,
+    DIV
+};
+
 typedef struct
 {
     float *data;

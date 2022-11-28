@@ -13,7 +13,7 @@ gpu_run: gpu
 	./gpu/gpu
 
 cpu:
-	gcc cpu/cpu.c -o cpu/cpu
+	gcc cpu/cpu.c -lm -o cpu/cpu
 
 cpu_library:
 	gcc -shared -fPIC cpu/library.c cpu/shared.c -o cpu/libcpu.so 
@@ -22,7 +22,7 @@ cpu_library:
 	nm cpu/libcpu.so | grep test
 
 test_build:
-	gcc cpu/test_matmul.c -o cpu/test_matmul -I ./ ./cpu/shared.c 
+	gcc cpu/test_matmul.c -o cpu/test_matmul -I ./ ./cpu/shared.c -lm 
 
 test: test_build
 	./cpu/test_matmul

@@ -24,9 +24,12 @@ CHEAT_TEST(mathematics_still_work,
     cheat_assert(getElement(c, 1,0) == -28);
     cheat_assert(getElement(c, 1,1) == 4);
 
+    Subtract(a, b);
+
     freeMatrix(a);
     freeMatrix(b);
     freeMatrix(c);
+
 
     cheat_assert(2 + 2 == 4);
 	cheat_assert_not(2 + 2 == 5);
