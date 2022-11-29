@@ -102,6 +102,18 @@ __global__ void SimpleOperator(float *a, float *b, float constant, float *c, int
                 get(cols, i, j, a, constant, &a_item);
                 get(cols, i, j, b, constant, &b_item);
                 value = a_item + b_item;
+            } else if (operator_val == SUB) {
+                get(cols, i, j, a, constant, &a_item);
+                get(cols, i, j, b, constant, &b_item);
+                value = a_item - b_item;
+            } else if (operator_val == MUL) {
+                get(cols, i, j, a, constant, &a_item);
+                get(cols, i, j, b, constant, &b_item);
+                value = a_item * b_item;
+            } else if (operator_val == DIV) {
+                get(cols, i, j, a, constant, &a_item);
+                get(cols, i, j, b, constant, &b_item);
+                value = a_item / b_item;
             }
 
             setElement<<<1, 1>>>(
@@ -117,54 +129,62 @@ __global__ void SimpleOperator(float *a, float *b, float constant, float *c, int
 
 extern "C" Matrix *MatrixAdd(Matrix *a, Matrix *b)
 {
-    // Results
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    SimpleOperator<<<1, 1>>>(a->data, b->data, NULL, c->data, a->rows, b->columns, ADD);
+    SimpleOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
 
     return c;
 }
 
-extern "C" Matrix *AddConstant(Matrix *a, float b)
+extern "C" Matrix *AddConstant(Matrix *a, float b, int direction)
 {
-    // Results
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleOperator<<<1, 1>>>(a->data, NULL, b, c->data, a->rows, a->columns, ADD);
+    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, ADD);
 
     return c;
 }
 
-/*
-__global__ void Add(float *a, float *b, float *c, int columns, int rows)
+extern "C" Matrix *Mul(Matrix *a, Matrix *b)
 {
-    printf("hello world \n");
-    for (int row = 0; row < rows; row++)
-    {
-        for (int column = 0; column < columns; column++)
-        {
-            float accumulator = 0;
-            for (int current_colum = 0; current_colum < columns; current_colum++)
-            {
-                // current row + current column
-                int a_rowIndex = columns * row;
-                float a_item = a[a_rowIndex + current_colum];
+    Matrix *c = createMatrixGpu(a->rows, b->columns);
+    SimpleOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, MUL);
 
-                // current column + column
-                int b_rowIndex = columns * current_colum;
-                float b_item = b[b_rowIndex + column];
-
-                accumulator += a_item * b_item;
-            }
-            setElement<<<1,1>>>(
-                c,
-                columns,
-                row,
-                column,
-                accumulator
-            );
-        }
-    }
+    return c;
 }
-*/
+
+extern "C" Matrix *MulConstant(Matrix *a, float b, int direction)
+{
+    Matrix *c = createMatrixGpu(a->rows, a->columns);
+    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, MUL);
+
+    return c;
+}
+
+extern "C" Matrix *DivideConstant(Matrix * a, float b, int direction)
+{
+    Matrix *c = createMatrixGpu(a->rows, a->columns);
+    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, DIV);
+
+    return c;
+}
+
+extern "C" Matrix *Subtract(Matrix *a, Matrix *b)
+{
+    Matrix *c = createMatrixGpu(a->rows, b->columns);
+    SimpleOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, SUB);
+
+    return c;
+}
+
+extern "C" Matrix *SubtractConstant(Matrix *a, float b, int direction)
+{
+    Matrix *c = createMatrixGpu(a->rows, a->columns);
+    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, SUB);
+
+    return c;
+}
+
+// Add the remaning operators = Victory :)
+
 
 // https://developer.nvidia.com/blog/cuda-dynamic-parallelism-api-principles/
 // https://stackoverflow.com/questions/49687130/pass-by-reference-in-device-function-cuda

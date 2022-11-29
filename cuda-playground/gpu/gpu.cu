@@ -38,7 +38,7 @@ int main(){
     Matrix *c = MatrixMatMul(a, b);
 
     c = MatrixAdd(c, c);
-    c = AddConstant(c, 4.0);
+    c = AddConstant(c, 4.0, 0);
 
     sendToHost(c);
 

@@ -1,8 +1,8 @@
-#ifndef shared_H_   
-#define shared_H_
+#ifndef kernel_H_   
+#define kernel_H_
 
 enum OPERATOR {
-    SUBTRACT,
+    SUB,
     ADD,
     MUL,
     DIV
@@ -26,7 +26,15 @@ __global__ void setElement(float *a, int columns, int row, int col, float value)
 extern "C" Matrix* MatrixMatMul(Matrix*a, Matrix *b);
 
 extern "C" Matrix* MatrixAdd(Matrix*a, Matrix *b);
-extern "C" Matrix *AddConstant(Matrix *a, float b);
+extern "C" Matrix *AddConstant(Matrix *a, float b, int direction);
+
+extern "C" Matrix *Mul(Matrix *a, Matrix *b);
+extern "C" Matrix *MulConstant(Matrix *a, float b, int direction);
+
+extern "C" Matrix *DivideConstant(Matrix * a, float b, int direction);
+
+extern "C" Matrix *Subtract(Matrix *a, Matrix *b);
+extern "C" Matrix *SubtractConstant(Matrix *a, float b, int direction);
 
 Matrix *createMatrixGpu(int rows, int columns);
 
