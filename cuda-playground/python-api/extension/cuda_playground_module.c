@@ -26,8 +26,6 @@ tensor(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    printf("Size (%i, %i)\n", i, j);
-
     TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
     obj->matrix = createMatrix(i, j);
 
@@ -54,8 +52,7 @@ static PyObject *parse_array(PyObject *self, PyObject *args)
 
     int *indexArray = malloc(sizeOfPointer(size_array) * sizeof(int*));
     memset(indexArray, 0, sizeOfPointer(size_array) * sizeof(int*));
-    printf("arr_size = %i\n", sizeOfPointer(size_array));
-  //  printf("%i %i\n", *indexArray, *(indexArray + 1));
+
     copy_recursive(
         PyTuple_GetItem(args, 0), 
         0,
@@ -63,8 +60,6 @@ static PyObject *parse_array(PyObject *self, PyObject *args)
         sizeOfPointer(size_array),
         obj->matrix
     );
-    // setElementN(b, (int[]){1, 0}, -7);
-
 
     return (PyObject*)obj;
 }
@@ -89,7 +84,11 @@ torch_exp(PyObject *self, PyObject *args)
     }
 
     TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
-    obj->matrix = Exp(o->matrix);
+    if (((TensorObject*)self)->matrix->device == 0) {
+        obj->matrix = Exp(o->matrix);
+    } else if (((TensorObject*)self)->matrix->device == 1) {
+        obj->matrix = GpuExp(o->matrix);
+    }
 
     return (PyObject*)obj;
 }

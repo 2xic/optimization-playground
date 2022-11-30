@@ -35,10 +35,10 @@ int main(){
     sendToGpu(b);
 
     // Results
-    Matrix *c = MatrixMatMul(a, b);
+    Matrix *c = GpuMatrixMatMul(a, b);
 
-    c = MatrixAdd(c, c);
-    c = AddConstant(c, 4.0, 0);
+    c = GpuAdd(c, c);
+    c = GpuAddConstant(c, 4.0, 0);
 
     sendToHost(c);
 

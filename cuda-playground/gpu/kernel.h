@@ -23,18 +23,22 @@ __global__ void MatMul(float *a, float *b, float *c, int columns, int rows);
 __global__ void createMatrix(void ** device, int rows, int columns);
 __global__ void setElement(float *a, int columns, int row, int col, float value);
 
-extern "C" Matrix* MatrixMatMul(Matrix*a, Matrix *b);
+extern "C" Matrix* GpuMatrixMatMul(Matrix*a, Matrix *b);
 
-extern "C" Matrix* MatrixAdd(Matrix*a, Matrix *b);
-extern "C" Matrix *AddConstant(Matrix *a, float b, int direction);
+extern "C" Matrix* GpuAdd(Matrix*a, Matrix *b);
+extern "C" Matrix* GpuAddConstant(Matrix *a, float b, int direction);
 
-extern "C" Matrix *Mul(Matrix *a, Matrix *b);
-extern "C" Matrix *MulConstant(Matrix *a, float b, int direction);
+extern "C" Matrix* GpuMul(Matrix *a, Matrix *b);
+extern "C" Matrix* GpuMulConstant(Matrix *a, float b, int direction);
 
-extern "C" Matrix *DivideConstant(Matrix * a, float b, int direction);
+extern "C" Matrix* GpuDivideConstant(Matrix * a, float b, int direction);
 
-extern "C" Matrix *Subtract(Matrix *a, Matrix *b);
-extern "C" Matrix *SubtractConstant(Matrix *a, float b, int direction);
+extern "C" Matrix* GpuSubtract(Matrix *a, Matrix *b);
+extern "C" Matrix* GpuSubtractConstant(Matrix *a, float b, int direction);
+
+extern "C" Matrix* GpuTranspose(Matrix*a);
+
+extern "C" Matrix *GpuExp(Matrix *a);
 
 Matrix *createMatrixGpu(int rows, int columns);
 
