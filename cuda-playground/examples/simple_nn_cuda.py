@@ -21,8 +21,8 @@ for i in range(10_000):
 
     syn1 += l1.T().matmul(l2_delta)
     syn0 += X.T().matmul(l1_delta)
-    if i % 100 == 0:
-        print(i)
+#    if i % 100 == 0:
+#        print(i)
  #   break
 
 l1 = 1/(1+(-((X.matmul(syn0)))).exp())
@@ -31,6 +31,13 @@ l2.host().print()
 print(f"time: {time.time() - start}")
 
 """
+Cpu reference
+time: 0.9088916778564453
+time: 0.5728225708007812
+time: 0.7247507572174072
+
+----
+
 #0f66aea1564a631ee17541335f3e12f9b3179493
 time: 56.64261269569397
 
@@ -43,4 +50,7 @@ time: 20.08816432952881
 # Made setElement not be called
 time: 1.7329158782958984
 
+# 9a6cf28ffdf1770a595e41ab256fcf612e19958f
+time: 1.750114917755127
+-> Still 2 slow!!!!
 """

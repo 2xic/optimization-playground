@@ -53,7 +53,6 @@ def test_transpose():
 
     assert z.isEqual(z_dot)
 
-    """
     X = pare_array([
         [-2, 1],
         [2, -1],
@@ -63,4 +62,19 @@ def test_transpose():
         [1, -1]
     ])
     assert z.isEqual(X.T().host())
-    """
+
+def test_matmul():
+    X = pare_array([
+        [-2, 1],
+        [0, 4]
+    ]).cuda()
+    y = pare_array([
+        [6, 5],
+        [-7, 1]
+    ]).cuda()
+
+    z = pare_array([
+        [-19, -9],
+        [-28, 4]
+    ])
+    assert z.isEqual(X.matmul(y).host())

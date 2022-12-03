@@ -5,7 +5,6 @@
 #include "shared.h"
 #include "extensions.c"
 
-
 void print_array(float *ptr, int length)
 {
     printf("[");
@@ -34,8 +33,8 @@ void setElement(Matrix *a, int row, int col, float value)
 
 void setElementN(Matrix *a, int *location, int length, float value)
 {
-    size_t inputSize = length; // getSize(location);
-    size_t arrSize = length;   // getSize(a->size);
+    size_t inputSize = length; 
+    size_t arrSize = length;   
     if (inputSize != arrSize)
     {
         return;
@@ -52,9 +51,7 @@ void setElementN(Matrix *a, int *location, int length, float value)
         {
             tensorLocation = tensorLocation * a->size[i] + locI;
         }
-    //    printf("tensor == %i %i %i\n", i, tensorLocation, a->size[i]);
     }
-//    printf("%i\n", tensorLocation);
     a->data[tensorLocation] = value;
 }
 
@@ -62,7 +59,6 @@ int isEqual(Matrix *a, Matrix *b)
 {
     if (a->rows != b->rows || b->columns != a->columns)
     {
-    //    printf("Not equal dimensions\n");
         return -1;
     }
 
@@ -75,9 +71,12 @@ int isEqual(Matrix *a, Matrix *b)
             isEqual = (getElement(a, row, column) == getElement(b, row, column));
             if (!isEqual)
             {
-            //    printf("%f != %f \n", getElement(a, row, column), getElement(b, row, column));
                 break;
             }
+        }
+        if (!isEqual)
+        {
+            break;
         }
     }
 
@@ -86,7 +85,6 @@ int isEqual(Matrix *a, Matrix *b)
 
 void freeMatrix(Matrix *a)
 {
-//    printf("Freeing the matrix\n");
     free(a->data);
     if (a->size != NULL)
     {
@@ -110,29 +108,24 @@ Matrix *createMatrix(int rows, int columns)
 
     int size = rows * columns * sizeof(float *);
     matrix->data = (float *)malloc(size);
-    //printf("should fill ? %i (%i, %i)\n", size, rows, columns);
     memset(matrix->data, 0, size);
-   // printf("memset :)\n");
 
     return matrix;
 }
 
 void fillRandom(Matrix *a)
 {
-    int size = a->rows * a->columns; // * sizeof(int *);
-//    printf("filling randomly %i (%i, %i) \n", size, a->rows, a->columns);
+    int size = a->rows * a->columns;
     for (int i = 0; i < size; i++)
     {
         float random = 1 * ((float)rand()) / (float)RAND_MAX;
-    //    printf("value %f\n", random);
         a->data[i] = random;
     }
 }
 
 void fill(Matrix *a, int value)
 {
-    int size = a->rows * a->columns; // * sizeof(int *);
-//    printf("filling %i (%i, %i) \n", size, a->rows, a->columns);
+    int size = a->rows * a->columns;
     for (int i = 0; i < size; i++)
     {
         a->data[i] = value;
@@ -153,11 +146,10 @@ Matrix *createMatrixN(int size[], int length)
     }
 
     int nSize = 0;
-    int arrSize = length; // getSize(size);
-//    printf("length size %i\n", arrSize);
+    int arrSize = length;
+
     for (int i = 0; i < arrSize; i++)
     {
-    //    printf("\tsize[i] == %i\n", size[i]);
 
         if (i == 0)
         {
@@ -175,7 +167,6 @@ Matrix *createMatrixN(int size[], int length)
     }
 
     int dataSize = nSize * sizeof(int *);
-//    printf("dataSize = %i\n", dataSize);
 
     matrix->device = 0;
     matrix->data = (float *)malloc(dataSize);
@@ -193,7 +184,6 @@ Matrix *ApplyOperator(Matrix *a, Matrix *b, float *constant, int direction, int 
         for (int j = 0; j < a->rows; j++)
         {
             float (*getter)(int i, int j) = create_subtract_extension(b, constant);
-
 
             float value = getter(i, j);
 
@@ -215,7 +205,7 @@ Matrix *ApplyOperator(Matrix *a, Matrix *b, float *constant, int direction, int 
 
 Matrix *Add(Matrix *a, Matrix *b)
 {
-      return ApplyOperator(
+    return ApplyOperator(
         a,
         b,
         NULL,
@@ -225,7 +215,7 @@ Matrix *Add(Matrix *a, Matrix *b)
 
 Matrix *AddConstant(Matrix *a, float b, int direction)
 {
-      return ApplyOperator(
+    return ApplyOperator(
         a,
         NULL,
         &b,
@@ -285,7 +275,7 @@ Matrix *DivideConstant(Matrix *a, float b, int direction)
 
 Matrix *Exp(Matrix *a)
 {
-//    printf("EXP:)\n");
+    //    printf("EXP:)\n");
     Matrix *c = createMatrix(a->rows, a->columns);
     for (int i = 0; i < a->columns; i++)
     {
@@ -300,12 +290,9 @@ Matrix *Exp(Matrix *a)
 
 Matrix *MatMul(Matrix *a, Matrix *b)
 {
-//    printf("(%d, %d) @ (%d, %d)\n", a->rows, a->columns, b->rows, b->columns);
-    // printf("%d is equal\n", (a->columns != b->rows));
 
     if (a->columns != b->rows)
     {
-    //    printf("Not equal dimensions\n");
         return NULL;
     }
     Matrix *results = createMatrix(

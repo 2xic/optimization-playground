@@ -5,8 +5,8 @@ import time
 
 start = time.time()
 # TODO: Fix both directional support -> 
-syn0 = p.tensor((3,4)).rand()# - 1
-syn1 = p.tensor((4,1)).rand()# - 1
+syn0 = p.tensor((3,4)).rand()
+syn1 = p.tensor((4,1)).rand()
 
 X = p.pare_array([ [0,0,1],[0,1,1],[1,0,1],[1,1,1] ])
 y = p.pare_array([[0,1,1,0]]).T()
@@ -20,8 +20,6 @@ for i in range(10_000):
 
     syn1 += l1.T().matmul(l2_delta)
     syn0 += X.T().matmul(l1_delta)
-
-#    break
 
 l1 = 1/(1+(-((X.matmul(syn0)))).exp())
 l2 = 1/(1+(-((l1.matmul(syn1)))).exp())

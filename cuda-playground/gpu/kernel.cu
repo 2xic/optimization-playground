@@ -32,7 +32,6 @@ Matrix *createMatrixGpu(int rows, int columns)
 
 extern "C" void sendToHost(Matrix *m)
 {
-    // printf("Sending it to host \n");
     float *c_host;
     int SIZE = m->rows * m->columns;
     c_host = (float *)malloc(SIZE * sizeof(float));
@@ -46,7 +45,6 @@ extern "C" void sendToHost(Matrix *m)
 
 extern "C" void sendToGpu(Matrix *m)
 {
-    //  printf("Sending it to host \n");
     int SIZE = m->rows * m->columns;
     float *c_device;
     cudaMalloc(&c_device, SIZE * sizeof(float));
@@ -61,7 +59,10 @@ extern "C" void sendToGpu(Matrix *m)
 extern "C" Matrix *GpuMatrixMatMul(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    MatMul<<<1, 1>>>(a->data, b->data, c->data, a->rows, b->columns);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    MatMul<<<dimGrid, dimBlock>>>(a->data, b->data, c->data, a->rows, b->columns);
 
     return c;
 }
@@ -347,28 +348,22 @@ __global__ void MatMul(float *a, float *b, float *c, int columns, int rows)
         *results = value;
     };
 
-    float accumulator;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
 
-    for (int row = 0; row < rows; row++)
+    float accumulator = 0;
+    for (int current_colum = 0; current_colum < columns; current_colum++)
     {
-        for (int column = 0; column < columns; column++)
-        {
-            accumulator = 0;
-            // float accumulator = 0;
-            for (int current_colum = 0; current_colum < columns; current_colum++)
-            {
-                getElement(a, columns, row, current_colum, &a_item);
-                getElement(b, columns, current_colum, column, &b_item);
+        getElement(a, columns, row, current_colum, &a_item);
+        getElement(b, columns, current_colum, col, &b_item);
 
-                accumulator += a_item * b_item;
-            }
-
-            set(
-                c,
-                columns,
-                row,
-                column,
-                accumulator);
-        }
+        accumulator += a_item * b_item;
     }
+
+    set(
+        c,
+        columns,
+        row,
+        col,
+        accumulator);
 }
