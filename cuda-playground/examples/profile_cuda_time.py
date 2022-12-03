@@ -11,6 +11,7 @@ def time_it(func):
 
     print(f"Time used : {time_usage}")
 
+
 print("Cpu")
 syn0 = p.tensor((3,4)).rand()# - 1
 time_it(lambda: (syn0 + syn0)) 

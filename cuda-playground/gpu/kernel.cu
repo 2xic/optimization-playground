@@ -293,6 +293,32 @@ extern "C" Matrix *GpuSubtractConstant(Matrix *a, float b, int direction)
     return c;
 }
 
+
+"""
+Time usage :
+
+EXP
+
+Cpu
+Time used : 0.01662468910217285
+Gpu
+Time used : 0.11232900619506836
+
+Transpose
+
+Cpu
+Time used : 0.004513978958129883
+Gpu
+Time used : 0.06209087371826172
+
+Matmul
+Cpu
+Time used : 0.006204366683959961
+Gpu
+Time used : 0.06139945983886719
+"""
+
+
 extern "C" Matrix *GpuTranspose(Matrix *a)
 {
     Matrix *c = createMatrixGpu(a->columns, a->rows);

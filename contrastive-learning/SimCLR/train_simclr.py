@@ -3,6 +3,7 @@ from model import Net, Projection, SimClrModel
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import torch
+from transfer_trained_simclr import test_model
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
