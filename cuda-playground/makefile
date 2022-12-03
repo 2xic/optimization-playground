@@ -29,5 +29,8 @@ test: test_build
 
 python: cpu_library gpu_library
 	cd python-api && ./build.sh
+
+profile_cuda: python
+	python3 examples/profile_cuda_time.py
 	
 .PHONY: gpu cpu test gpu_library cpu_library

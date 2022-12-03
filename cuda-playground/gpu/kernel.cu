@@ -81,7 +81,7 @@ __device__ void getElement(float *data, int row, int colsize, int col, float *va
     *value = data[row_idx + col];
 }
 
-__global__ void SimpleOperator(float *a, float *b, float constant, float *c, int rows, int cols, int operator_val)
+__global__ void SimpleMatrixOperator(float *a, float *b, float constant, float *c, int rows, int cols, int operator_val)
 {
     auto get = [](int cols, int i, int j, float *M, float C, float *res)
     {
@@ -136,10 +136,55 @@ __global__ void SimpleOperator(float *a, float *b, float constant, float *c, int
     }
 }
 
+__global__ void FastSimpleMatrixAddOperator(float *a, float *b, float constant, float *c, int rows, int cols, int operator_val)
+{
+    auto get = [](int cols, int i, int j, float *M, float C, float *res)
+    {
+        if (M != NULL)
+        {
+            getElement(M, cols, i, j, res);
+        }
+        else
+        {
+            *res = C;
+        }
+    };
+
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+/*
+    for (int i = 0; i < rows; i++)
+    {
+        for (int j = 0; j < cols; j++)
+        {*/
+            float value = 0;
+
+            if (operator_val == ADD)
+            {
+                get(cols, i, j, a, constant, &a_item);
+                get(cols, i, j, b, constant, &b_item);
+                value = a_item + b_item;
+            }
+
+            setElement<<<1, 1>>>(
+                c,
+                cols,
+                i,
+                j,
+                value);
+     //   }
+   // }
+}
+
 extern "C" Matrix *GpuAdd(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    SimpleOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
+    
+    dim3 dimBlock(a->rows, b->columns); 
+    dim3 dimGrid(1, 1);
+
+    FastSimpleMatrixAddOperator<<<dimGrid, dimBlock>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
+//    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
 
     return c;
 }
@@ -147,7 +192,7 @@ extern "C" Matrix *GpuAdd(Matrix *a, Matrix *b)
 extern "C" Matrix *GpuAddConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, ADD);
+    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, ADD);
 
     return c;
 }
@@ -155,7 +200,7 @@ extern "C" Matrix *GpuAddConstant(Matrix *a, float b, int direction)
 extern "C" Matrix *GpuMul(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    SimpleOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, MUL);
+    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, MUL);
 
     return c;
 }
@@ -163,7 +208,7 @@ extern "C" Matrix *GpuMul(Matrix *a, Matrix *b)
 extern "C" Matrix *GpuMulConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, MUL);
+    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, MUL);
 
     return c;
 }
@@ -171,7 +216,7 @@ extern "C" Matrix *GpuMulConstant(Matrix *a, float b, int direction)
 extern "C" Matrix *GpuDivideConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, DIV);
+    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, DIV);
 
     return c;
 }
@@ -179,7 +224,7 @@ extern "C" Matrix *GpuDivideConstant(Matrix *a, float b, int direction)
 extern "C" Matrix *GpuSubtract(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    SimpleOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, SUB);
+    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, SUB);
 
     return c;
 }
@@ -187,7 +232,7 @@ extern "C" Matrix *GpuSubtract(Matrix *a, Matrix *b)
 extern "C" Matrix *GpuSubtractConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, SUB);
+    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, SUB);
 
     return c;
 }
