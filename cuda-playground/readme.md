@@ -18,3 +18,4 @@ Just taking a quick look at this blogpost it seems actually quite straightforwar
 Docs
 - https://developer.nvidia.com/blog/cuda-refresher-cuda-programming-model/
 - https://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html
+- http://selkie.macalester.edu/csinparallel/modules/GPUProgramming/build/html/CUDA2D/CUDA2D.html

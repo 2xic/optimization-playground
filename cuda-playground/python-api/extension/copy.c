@@ -5,7 +5,6 @@ void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length
 {
     if (PyList_Check(list_or_data) != 1)
     {
-        printf("NEVER CALLED\n");
         return;
     }
     int size = PyList_Size(list_or_data);
@@ -22,7 +21,6 @@ void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length
         if (PyList_Check(temp_p) != 1)
         {
             float value = PyFloat_AsDouble(temp_p);
-            printf("%f\n", value);
             setElementN(m, Index, length, value);
         }
         else
@@ -47,11 +45,7 @@ int sizeOfPointer(int *arr)
 
 Matrix *makeMatrix(int *arr)
 {
-    printf("%p\n", arr);
     int length = sizeOfPointer(arr);
-    printf("%p\n", arr);
-    printf("%i\n", length);
-
     int stackArr[length + 1];
     for (int i = 0; i < length; i++)
     {
@@ -81,8 +75,9 @@ void parse_array_recursive(PyObject *args, int *size_array)
             return;
         }
 
-        /* Check if temp_p is numeric */
-        if (PyList_Check(temp_p) != 1)
+        int is_not_list = PyList_Check(temp_p) != 1;
+
+        if (is_not_list)
         {
             return;
         }

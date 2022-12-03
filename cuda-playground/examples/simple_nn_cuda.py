@@ -29,3 +29,18 @@ l1 = 1/(1+(-((X.matmul(syn0)))).exp())
 l2 = 1/(1+(-((l1.matmul(syn1)))).exp())
 l2.host().print()
 print(f"time: {time.time() - start}")
+
+"""
+#0f66aea1564a631ee17541335f3e12f9b3179493
+time: 56.64261269569397
+
+# Made exp a proper kernel function
+time: 31.971983194351196
+
+# Made transpose a proper kernel function
+time: 20.08816432952881
+
+# Made setElement not be called
+time: 1.7329158782958984
+
+"""

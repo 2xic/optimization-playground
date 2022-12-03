@@ -1,11 +1,16 @@
 #ifndef kernel_H_   
 #define kernel_H_
 
-enum OPERATOR {
+enum SimplePairWiseOperator {
     SUB,
     ADD,
     MUL,
-    DIV
+    DIV,
+};
+
+enum DirectOperator {
+    EXP,
+    TRANSPOSE,
 };
 
 

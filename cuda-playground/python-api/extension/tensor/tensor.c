@@ -109,7 +109,8 @@ tensor_exp_direct(TensorObject *self, PyObject *Py_UNUSED(ignored))
     } else if (self->matrix->device == 1) {
         obj->matrix = GpuExp(self->matrix);
     } else {
-        printf("it's UNKNOWN???!!!\n");
+        // Throw error
+        return NULL;
     }
     return obj;
 }
@@ -174,10 +175,8 @@ tensor_subtract(PyObject *a, PyObject *b)
 
         if (device == 0) {
             obj->matrix = Subtract(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-            obj->matrix->device = self->matrix->device;
         } else if (device == 1) {
             obj->matrix = GpuSubtract(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-            obj->matrix->device = self->matrix->device;
         }
 
         return (PyObject*)obj;
@@ -191,10 +190,8 @@ tensor_negative(TensorObject *self)
 
     if (self->matrix->device == 0) {
         obj->matrix = MulConstant(((TensorObject *)self)->matrix, -1, 0);
-        obj->matrix->device = self->matrix->device;
     } else if (self->matrix->device == 1) {
         obj->matrix = GpuMulConstant(((TensorObject *)self)->matrix, -1, 0);
-        obj->matrix->device = self->matrix->device;
     }
 
     return (PyObject*)obj;
@@ -356,9 +353,7 @@ tensor_transpose(TensorObject *self)
             }
         }
     } else if (self->matrix->device == 1) {
-        //Matrix *results = createMatrixGpu(self->matrix->columns, self->matrix->columns);
         obj->matrix = GpuTranspose(self->matrix);
-        obj->matrix->device = self->matrix->device;
     }
 
     return (PyObject*)obj;
@@ -397,7 +392,7 @@ tensor_matmul(PyObject *a, PyObject *b)
             obj->matrix = GpuMatrixMatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
             obj->matrix->device = device;
         } else {
-            // Throw error
+            return NULL;
         }
         
         return (PyObject*)obj;
@@ -445,14 +440,18 @@ int getDevice(Matrix *a, Matrix *b) {
 static PyObject *
 tensor_cuda(TensorObject *self)
 {
-    sendToGpu(self->matrix);
+    if (self->matrix->device != 1) {
+        sendToGpu(self->matrix);
+    }
     return (PyObject*)self;
 }
 
 static PyObject *
 tensor_host(TensorObject *self)
 {
-    sendToHost(self->matrix);
+    if (self->matrix->device != 0){
+        sendToHost(self->matrix);
+    }
 
     return (PyObject*)self;
 }

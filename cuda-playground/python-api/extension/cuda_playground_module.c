@@ -5,7 +5,7 @@
 
 Matrix *makeMatrix(int *arr);
 void parse_array_recursive(PyObject *args, int *size_array);
-void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length, Matrix* m);
+void copy_recursive(PyObject *list_or_data, int indexLoc, int *Index, int length, Matrix *m);
 int sizeOfPointer(int *arr);
 
 static PyObject *
@@ -26,11 +26,10 @@ tensor(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
+    TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
     obj->matrix = createMatrix(i, j);
 
-
-    return (PyObject*)obj;
+    return (PyObject *)obj;
 }
 
 static PyObject *parse_array(PyObject *self, PyObject *args)
@@ -42,28 +41,26 @@ static PyObject *parse_array(PyObject *self, PyObject *args)
         printf("I only want one array!\n");
         return NULL;
     }
+ 
     int *size_array = malloc(128 * sizeof(int));
     parse_array_recursive(PyTuple_GetItem(args, 0), size_array);
 
-    TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
+    TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
     Matrix *m = makeMatrix(size_array);
     obj->matrix = m;
 
-
-    int *indexArray = malloc(sizeOfPointer(size_array) * sizeof(int*));
-    memset(indexArray, 0, sizeOfPointer(size_array) * sizeof(int*));
+    int *indexArray = malloc(sizeOfPointer(size_array) * sizeof(int *));
+    memset(indexArray, 0, sizeOfPointer(size_array) * sizeof(int *));
 
     copy_recursive(
-        PyTuple_GetItem(args, 0), 
+        PyTuple_GetItem(args, 0),
         0,
         indexArray,
         sizeOfPointer(size_array),
-        obj->matrix
-    );
+        obj->matrix);
 
-    return (PyObject*)obj;
+    return (PyObject *)obj;
 }
-
 
 static PyObject *
 torch_exp(PyObject *self, PyObject *args)
@@ -83,23 +80,23 @@ torch_exp(PyObject *self, PyObject *args)
         return NULL;
     }
 
-    TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
-    if (((TensorObject*)self)->matrix->device == 0) {
+    TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+    if (((TensorObject *)self)->matrix->device == 0)
+    {
         obj->matrix = Exp(o->matrix);
-    } else if (((TensorObject*)self)->matrix->device == 1) {
+    }
+    else if (((TensorObject *)self)->matrix->device == 1)
+    {
         obj->matrix = GpuExp(o->matrix);
     }
 
-    return (PyObject*)obj;
+    return (PyObject *)obj;
 }
 
 static PyMethodDef CudaplaygroundMethods[] = {
-    {"tensor", tensor, METH_VARARGS,
-     "Execute a shell command."},
-    {"pare_array", parse_array, METH_VARARGS,
-     "Execute a shell command."},
-    {"exp", torch_exp, METH_VARARGS,
-     "Execute a shell command."},
+    {"tensor", tensor, METH_VARARGS, "*TODO"},
+    {"pare_array", parse_array, METH_VARARGS, "*TODO"},
+    {"exp", torch_exp, METH_VARARGS, "*TODO"},
     {NULL, NULL, 0, NULL}};
 
 static struct PyModuleDef Cudaplaygroundmodule = {

@@ -2,9 +2,6 @@
 #include "kernel.h"
 #include <stdio.h>
 
-__device__ float a_item;
-__device__ float b_item;
-
 void print_array(float *ptr, int length)
 {
     printf("[");
@@ -81,97 +78,139 @@ __device__ void getElement(float *data, int row, int colsize, int col, float *va
     *value = data[row_idx + col];
 }
 
-__global__ void SimpleMatrixOperator(float *a, float *b, float constant, float *c, int rows, int cols, int operator_val)
+__global__ void AdvancedMatrixOperator(float *matrix_a, float *results_matrix, int cols, int rows, DirectOperator operator_val)
 {
-    auto get = [](int cols, int i, int j, float *M, float C, float *res)
+    float a_item;
+
+    auto getDataPointer = [](float *data, int columns, int row, int col)
+    {
+        int rowIndex = columns * row;
+        float *pointer = &data[rowIndex + col];
+        return pointer;
+    };
+
+    auto get = [&](int cols, int row, int col, float *M, float C, float *results)
     {
         if (M != NULL)
         {
-            getElement(M, cols, i, j, res);
+            *results = *getDataPointer(M, cols, row, col);
         }
         else
         {
-            *res = C;
+            *results = C;
         }
     };
 
-    for (int i = 0; i < rows; i++)
+    auto set = [&](float *data, int columns, int row, int col, float value)
     {
-        for (int j = 0; j < cols; j++)
-        {
-            float value = 0;
+        float *results = getDataPointer(data, columns, row, col);
+        *results = value;
+    };
 
-            if (operator_val == ADD)
-            {
-                get(cols, i, j, a, constant, &a_item);
-                get(cols, i, j, b, constant, &b_item);
-                value = a_item + b_item;
-            }
-            else if (operator_val == SUB)
-            {
-                get(cols, i, j, a, constant, &a_item);
-                get(cols, i, j, b, constant, &b_item);
-                value = a_item - b_item;
-            }
-            else if (operator_val == MUL)
-            {
-                get(cols, i, j, a, constant, &a_item);
-                get(cols, i, j, b, constant, &b_item);
-                value = a_item * b_item;
-            }
-            else if (operator_val == DIV)
-            {
-                get(cols, i, j, a, constant, &a_item);
-                get(cols, i, j, b, constant, &b_item);
-                value = a_item / b_item;
-            }
+    int col = blockIdx.y * blockDim.y + threadIdx.y;
+    int row = blockIdx.x * blockDim.x + threadIdx.x;
 
-            setElement<<<1, 1>>>(
-                c,
-                cols,
-                i,
-                j,
-                value);
-        }
+    if (operator_val == EXP)
+    {
+        get(cols, row, col, matrix_a, -1, &a_item);
+        set(
+            results_matrix,
+            cols,
+            row,
+            col,
+            a_item);
+    }
+    else if (operator_val == TRANSPOSE)
+    {
+        // TODO: something seems wrong here
+        get(rows, col, row, matrix_a, 0xdeadbeef, &a_item);
+        set(
+            results_matrix,
+            rows,
+            row,
+            col,
+            a_item);
+    }
+    else
+    {
+        // Unknown operator
+        return;
     }
 }
 
-__global__ void FastSimpleMatrixAddOperator(float *a, float *b, float constant, float *c, int rows, int cols, int operator_val)
+__global__ void SimpleMatrixOperator(float *matrix_a, float *matrix_b, float constant_value, float *results_matrix, int cols, SimplePairWiseOperator operator_val, int value_direction)
 {
-    auto get = [](int cols, int i, int j, float *M, float C, float *res)
+    float a_item;
+    float b_item;
+
+    auto getDataPointer = [](float *data, int columns, int row, int col)
+    {
+        int rowIndex = columns * row;
+        float *pointer = &data[rowIndex + col];
+        return pointer;
+    };
+
+    auto get = [&](int cols, int row, int col, float *M, float C, float *res)
     {
         if (M != NULL)
         {
-            getElement(M, cols, i, j, res);
+            *res = *getDataPointer(M, cols, row, col);
         }
         else
         {
             *res = C;
         }
     };
-    auto set = [](float *data, int columns, int row, int col, float value)
+
+    auto set = [&](float *data, int columns, int row, int col, float value)
     {
-        int rowIndex = columns * row;
-        data[rowIndex + col] = value;
+        float *results = getDataPointer(data, columns, row, col);
+        *results = value;
     };
 
-    int i = blockIdx.y * blockDim.y + threadIdx.y;
-    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
 
     float value = 0;
 
+    if (value_direction == 0)
+    {
+        get(cols, row, col, matrix_a, constant_value, &a_item);
+        get(cols, row, col, matrix_b, constant_value, &b_item);
+    }
+    else
+    {
+        get(cols, row, col, matrix_b, constant_value, &a_item);
+        get(cols, row, col, matrix_a, constant_value, &b_item);
+    }
+
     if (operator_val == ADD)
     {
-        get(cols, i, j, a, constant, &a_item);
-        get(cols, i, j, b, constant, &b_item);
         value = a_item + b_item;
+    }
+    else if (operator_val == SUB)
+    {
+        value = a_item - b_item;
+    }
+    else if (operator_val == MUL)
+    {
+        value = a_item * b_item;
+    }
+    else if (operator_val == DIV)
+    {
+        value = a_item / b_item;
+    }
+    else
+    {
+        // Unknown opcode throw an error
+        return;
     }
 
     set(
-        c,
+        results_matrix,
         cols,
-        i,
-        j,
+        row,
+        col,
         value);
 }
 
@@ -182,8 +221,7 @@ extern "C" Matrix *GpuAdd(Matrix *a, Matrix *b)
     dim3 dimBlock(a->rows, b->columns);
     dim3 dimGrid(1, 1);
 
-    FastSimpleMatrixAddOperator<<<dimGrid, dimBlock>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
-    //    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, b->data, -1, c->data, b->columns, ADD, 0);
 
     return c;
 }
@@ -191,7 +229,10 @@ extern "C" Matrix *GpuAdd(Matrix *a, Matrix *b)
 extern "C" Matrix *GpuAddConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, ADD);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, nullptr, b, c->data, a->columns, ADD, direction);
 
     return c;
 }
@@ -199,7 +240,10 @@ extern "C" Matrix *GpuAddConstant(Matrix *a, float b, int direction)
 extern "C" Matrix *GpuMul(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, MUL);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, b->data, -1, c->data, b->columns, MUL, 0);
 
     return c;
 }
@@ -207,7 +251,10 @@ extern "C" Matrix *GpuMul(Matrix *a, Matrix *b)
 extern "C" Matrix *GpuMulConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, MUL);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, nullptr, b, c->data, a->columns, MUL, direction);
 
     return c;
 }
@@ -215,7 +262,10 @@ extern "C" Matrix *GpuMulConstant(Matrix *a, float b, int direction)
 extern "C" Matrix *GpuDivideConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, DIV);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, nullptr, b, c->data, a->columns, DIV, direction);
 
     return c;
 }
@@ -223,7 +273,10 @@ extern "C" Matrix *GpuDivideConstant(Matrix *a, float b, int direction)
 extern "C" Matrix *GpuSubtract(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, SUB);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, b->data, -1, c->data, b->columns, SUB, 0);
 
     return c;
 }
@@ -231,66 +284,71 @@ extern "C" Matrix *GpuSubtract(Matrix *a, Matrix *b)
 extern "C" Matrix *GpuSubtractConstant(Matrix *a, float b, int direction)
 {
     Matrix *c = createMatrixGpu(a->rows, a->columns);
-    SimpleMatrixOperator<<<1, 1>>>(a->data, nullptr, b, c->data, a->rows, a->columns, SUB);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    SimpleMatrixOperator<<<dimGrid, dimBlock>>>(a->data, nullptr, b, c->data, a->columns, SUB, direction);
 
     return c;
-}
-
-__global__ void _transpose(float *target, float *source, int columns, int rows)
-{
-    for (int i = 0; i < rows; i++)
-    {
-        for (int j = 0; j < columns; j++)
-        {
-            getElement(source, columns, i, j, &a_item);
-            //   printf("Hei! %f\n", a_item);
-            setElement<<<1, 1>>>(target, columns, j, i, a_item);
-        }
-    }
 }
 
 extern "C" Matrix *GpuTranspose(Matrix *a)
 {
-    // printf("Test! (%i, %i)\n", a->columns, a->rows);
-
     Matrix *c = createMatrixGpu(a->columns, a->rows);
-    _transpose<<<1, 1>>>(c->data, a->data, a->columns, a->rows);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
+
+    AdvancedMatrixOperator<<<dimGrid, dimBlock>>>(a->data, c->data, a->columns, a->rows, TRANSPOSE);
 
     return c;
-}
-
-__global__ void _Exp(float *target, float *source, int columns, int rows)
-{
-    for (int i = 0; i < rows; i++)
-    {
-        for (int j = 0; j < columns; j++)
-        {
-            getElement(source, columns, i, j, &a_item);
-            //   printf("Hei! %f\n", a_item);
-            setElement<<<1, 1>>>(target, columns, j, i, exp(a_item));
-        }
-    }
 }
 
 extern "C" Matrix *GpuExp(Matrix *a)
 {
-    // printf("Test! (%i, %i)\n", a->columns, a->rows);
+    Matrix *c = createMatrixGpu(a->rows, a->columns);
+    dim3 dimBlock(a->rows, a->columns);
+    dim3 dimGrid(1, 1);
 
-    Matrix *c = createMatrixGpu(a->columns, a->rows);
-    _Exp<<<1, 1>>>(c->data, a->data, a->columns, a->rows);
+    AdvancedMatrixOperator<<<dimGrid, dimBlock>>>(a->data, c->data, a->columns, a->rows, EXP);
 
     return c;
 }
 
-// Add the remaning operators = Victory :)
-
 // https://developer.nvidia.com/blog/cuda-dynamic-parallelism-api-principles/
 // https://stackoverflow.com/questions/49687130/pass-by-reference-in-device-function-cuda
 //  -> Looks like there is some improved synchronization I can do
-__device__ float accumulator;
 __global__ void MatMul(float *a, float *b, float *c, int columns, int rows)
 {
-    //    printf("hello world \n");
+    float a_item;
+    float b_item;
+
+    auto getDataPointer = [](float *data, int columns, int row, int col)
+    {
+        int rowIndex = columns * row;
+        float *pointer = &data[rowIndex + col];
+        return pointer;
+    };
+
+    auto get = [&](int cols, int row, int col, float *M, float C, float *res)
+    {
+        if (M != NULL)
+        {
+            *res = *getDataPointer(M, cols, row, col);
+        }
+        else
+        {
+            *res = C;
+        }
+    };
+
+    auto set = [&](float *data, int columns, int row, int col, float value)
+    {
+        float *results = getDataPointer(data, columns, row, col);
+        *results = value;
+    };
+
+    float accumulator;
+
     for (int row = 0; row < rows; row++)
     {
         for (int column = 0; column < columns; column++)
@@ -304,7 +362,8 @@ __global__ void MatMul(float *a, float *b, float *c, int columns, int rows)
 
                 accumulator += a_item * b_item;
             }
-            setElement<<<1, 1>>>(
+
+            set(
                 c,
                 columns,
                 row,

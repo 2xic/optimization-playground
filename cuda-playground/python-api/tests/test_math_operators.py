@@ -1,6 +1,5 @@
 from cudaplayground import tensor, pare_array
 
-
 def test_subtract():
     a = tensor((2, 2)).ones()
 
@@ -136,7 +135,7 @@ def test_transpose():
     assert z.isEqual(X.T())
 
 
-def test_tranpsposematmul():
+def test_transpose_matmul():
     w = tensor((2, 3)).ones()
     v = tensor((3, 2)).ones()
     z = pare_array([

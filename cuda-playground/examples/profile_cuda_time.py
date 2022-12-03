@@ -72,8 +72,9 @@ Gpu
 Time used : 1.9371531009674072
 
 ---
+(now faster than CPU implementation)
 
-#
+# 0f66aea1564a631ee17541335f3e12f9b3179493
 Cpu
 Time used : 0.0623171329498291
 Gpu
@@ -88,6 +89,5 @@ Cpu
 Time used : 0.0851283073425293
 Gpu
 Time used : 0.060800790786743164
-
 
 """
