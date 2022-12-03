@@ -35,7 +35,7 @@ Matrix *createMatrixGpu(int rows, int columns)
 
 extern "C" void sendToHost(Matrix *m)
 {
-    //printf("Sending it to host \n");
+    // printf("Sending it to host \n");
     float *c_host;
     int SIZE = m->rows * m->columns;
     c_host = (float *)malloc(SIZE * sizeof(float));
@@ -49,7 +49,7 @@ extern "C" void sendToHost(Matrix *m)
 
 extern "C" void sendToGpu(Matrix *m)
 {
-  //  printf("Sending it to host \n");
+    //  printf("Sending it to host \n");
     int SIZE = m->rows * m->columns;
     float *c_device;
     cudaMalloc(&c_device, SIZE * sizeof(float));
@@ -149,42 +149,41 @@ __global__ void FastSimpleMatrixAddOperator(float *a, float *b, float constant, 
             *res = C;
         }
     };
+    auto set = [](float *data, int columns, int row, int col, float value)
+    {
+        int rowIndex = columns * row;
+        data[rowIndex + col] = value;
+    };
 
     int i = blockIdx.y * blockDim.y + threadIdx.y;
     int j = blockIdx.x * blockDim.x + threadIdx.x;
-/*
-    for (int i = 0; i < rows; i++)
+
+    float value = 0;
+
+    if (operator_val == ADD)
     {
-        for (int j = 0; j < cols; j++)
-        {*/
-            float value = 0;
+        get(cols, i, j, a, constant, &a_item);
+        get(cols, i, j, b, constant, &b_item);
+        value = a_item + b_item;
+    }
 
-            if (operator_val == ADD)
-            {
-                get(cols, i, j, a, constant, &a_item);
-                get(cols, i, j, b, constant, &b_item);
-                value = a_item + b_item;
-            }
-
-            setElement<<<1, 1>>>(
-                c,
-                cols,
-                i,
-                j,
-                value);
-     //   }
-   // }
+    set(
+        c,
+        cols,
+        i,
+        j,
+        value);
 }
 
 extern "C" Matrix *GpuAdd(Matrix *a, Matrix *b)
 {
     Matrix *c = createMatrixGpu(a->rows, b->columns);
-    
-    dim3 dimBlock(a->rows, b->columns); 
+
+    dim3 dimBlock(a->rows, b->columns);
     dim3 dimGrid(1, 1);
 
     FastSimpleMatrixAddOperator<<<dimGrid, dimBlock>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
-//    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
+    //    SimpleMatrixOperator<<<1, 1>>>(a->data, b->data, -1, c->data, a->rows, b->columns, ADD);
 
     return c;
 }
@@ -244,19 +243,18 @@ __global__ void _transpose(float *target, float *source, int columns, int rows)
         for (int j = 0; j < columns; j++)
         {
             getElement(source, columns, i, j, &a_item);
-         //   printf("Hei! %f\n", a_item);
-            setElement<<<1,1>>>(target, columns, j, i, a_item);
+            //   printf("Hei! %f\n", a_item);
+            setElement<<<1, 1>>>(target, columns, j, i, a_item);
         }
     }
 }
 
-
 extern "C" Matrix *GpuTranspose(Matrix *a)
 {
-   // printf("Test! (%i, %i)\n", a->columns, a->rows);
+    // printf("Test! (%i, %i)\n", a->columns, a->rows);
 
     Matrix *c = createMatrixGpu(a->columns, a->rows);
-    _transpose<<<1,1>>>(c->data, a->data, a->columns, a->rows);
+    _transpose<<<1, 1>>>(c->data, a->data, a->columns, a->rows);
 
     return c;
 }
@@ -268,22 +266,21 @@ __global__ void _Exp(float *target, float *source, int columns, int rows)
         for (int j = 0; j < columns; j++)
         {
             getElement(source, columns, i, j, &a_item);
-         //   printf("Hei! %f\n", a_item);
-            setElement<<<1,1>>>(target, columns, j, i, exp(a_item));
+            //   printf("Hei! %f\n", a_item);
+            setElement<<<1, 1>>>(target, columns, j, i, exp(a_item));
         }
     }
 }
 
 extern "C" Matrix *GpuExp(Matrix *a)
 {
-   // printf("Test! (%i, %i)\n", a->columns, a->rows);
+    // printf("Test! (%i, %i)\n", a->columns, a->rows);
 
     Matrix *c = createMatrixGpu(a->columns, a->rows);
-    _Exp<<<1,1>>>(c->data, a->data, a->columns, a->rows);
+    _Exp<<<1, 1>>>(c->data, a->data, a->columns, a->rows);
 
     return c;
 }
-
 
 // Add the remaning operators = Victory :)
 
@@ -293,7 +290,7 @@ extern "C" Matrix *GpuExp(Matrix *a)
 __device__ float accumulator;
 __global__ void MatMul(float *a, float *b, float *c, int columns, int rows)
 {
-//    printf("hello world \n");
+    //    printf("hello world \n");
     for (int row = 0; row < rows; row++)
     {
         for (int column = 0; column < columns; column++)
