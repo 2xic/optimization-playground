@@ -1,5 +1,4 @@
-# Token Turing machines
-[https://arxiv.org/pdf/2211.09119.pdf](https://arxiv.org/pdf/2211.09119.pdf)
+[Token Turing machines](https://arxiv.org/pdf/2211.09119.pdf)
 
 - Autoregressive transformer model with memory
   - Inspired by Neural Turing machines

@@ -1,4 +1,4 @@
-[https://arxiv.org/pdf/1509.06461.pdf](https://arxiv.org/pdf/1509.06461.pdf)
+[Deep Reinforcement Learning with Double Q-learning](https://arxiv.org/pdf/1509.06461.pdf)
 
 - Q-Learning is known to overestimate action values under certain conditions
 - Douce Dqn reduces overestimation, and results in improved performance
