@@ -3,36 +3,8 @@
 #include <Python.h>
 #include "../../../cpu/shared.h"
 #include "external_library.h"
-
-typedef struct
-{
-    PyObject_HEAD int size;
-    Matrix *matrix;
-} TensorObject;
-
-static PyObject *tensor_add(PyObject *self, PyObject *args);
-static PyObject *tensor_mul(PyObject *self, PyObject *args);
-static PyObject *tensor_divide(PyObject *self, PyObject *args);
-static PyObject *tensor_subtract(PyObject *self, PyObject *args);
-static PyObject *tensor_transpose(TensorObject *self);
-static PyObject *tensor_matmul(PyObject *self, PyObject *args);
-static PyObject *tensor_negative(TensorObject *self);
-static PyObject *tensor_isEqual(PyObject *a, PyObject *b);
-static PyObject *tensor_exp_direct(TensorObject *self, PyObject *Py_UNUSED(ignored));
-
-static PyObject *Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored));
-static PyObject *Ones(TensorObject *self, PyObject *Py_UNUSED(ignored));
-static PyObject *Rand(TensorObject *self, PyObject *Py_UNUSED(ignored));
-static PyObject *Print(TensorObject *self, PyObject *Py_UNUSED(ignored));
-
-static PyObject *tensor_cuda(TensorObject *self);
-static PyObject *tensor_host(TensorObject *self);
-
-int getDevice(Matrix *a, Matrix *b);
-void getTensorPointer(PyObject *a, PyObject *b, PyObject **tensor, PyObject **args, int*direction );
-
-void tp_dealloc(TensorObject *self);
-void tp_free(void *self);
+#include "tensor.h"
+#include "helper.c"
 
 PyNumberMethods magic_num_methods = {
     .nb_add = tensor_add,
@@ -56,33 +28,27 @@ static PyMethodDef tensor_methods[] = {
 };
 
 static PyTypeObject TensorType = {
-    PyObject_HEAD_INIT(NULL)
+    PyVarObject_HEAD_INIT(NULL, 0)
         .tp_name = "tensor",
     .tp_doc = PyDoc_STR("Tensor objects"),
     .tp_basicsize = sizeof(TensorObject),
     .tp_itemsize = sizeof(Matrix),
     .tp_new = PyType_GenericNew,
     .tp_free = tp_free,
-    //  .tp_dealloc=tp_dealloc,
     .tp_as_number = &magic_num_methods,
     .tp_methods = tensor_methods,
 };
 
-void tp_dealloc(TensorObject *self)
+void tp_free(void *selfx)
 {
-    //    free(self->matrix);
-   // printf("deallocate +\n");
-}
 
-void tp_free(void *self)
-{
- //   printf("free the beef? +\n");
+    //   printf("free the beef? +\n");
 }
 
 static PyObject *
 Zeros(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    return (PyObject*)self;
+    return (PyObject *)self;
 }
 
 static PyObject *
@@ -90,29 +56,34 @@ Ones(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
     fill(self->matrix, 1);
     self->size = 42;
-    return (PyObject*)self;
+    return (PyObject *)self;
 }
 
 static PyObject *
 Rand(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
     fillRandom(self->matrix);
-    return (PyObject*)self;
+    return (PyObject *)self;
 }
 
 static PyObject *
 tensor_exp_direct(TensorObject *self, PyObject *Py_UNUSED(ignored))
 {
-    TensorObject *obj = (TensorObject*)PyObject_CallObject((PyObject *)&TensorType, NULL);
-    if (self->matrix->device == 0) {
+    TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+    if (self->matrix->device == 0)
+    {
         obj->matrix = Exp(self->matrix);
-    } else if (self->matrix->device == 1) {
+    }
+    else if (self->matrix->device == 1)
+    {
         obj->matrix = GpuExp(self->matrix);
-    } else {
-        // Throw error
+    }
+    else
+    {
+        // Throw an error
         return NULL;
     }
-    return obj;
+    return (PyObject *)obj;
 }
 
 static PyObject *
@@ -133,198 +104,225 @@ Print(TensorObject *self, PyObject *Py_UNUSED(ignored))
         printf("\n");
     }
 
-    return (PyObject*)self;
+    return (PyObject *)self;
 }
 
 static PyObject *
 tensor_subtract(PyObject *a, PyObject *b)
 {
-    TensorObject *self;
+    PyObject *self;
     PyObject *args;
     int direction;
 
     getTensorPointer(
         a, b,
-        &self, &args, &direction
-    );
+        &self, &args, &direction);
 
     if (PyType_Ready(&TensorType))
     {
         return NULL;
     }
 
+    TensorObject *tensorSelf = (TensorObject *)self;
+
     if (PyLong_Check(args))
     {
         float value = PyFloat_AsDouble(args);
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        int device = getDevice(((TensorObject*)self)->matrix, NULL);
+        int device = getDevice(tensorSelf->matrix, NULL);
 
-        if (device == 0) {
-            obj->matrix = SubtractConstant(((TensorObject *)self)->matrix, value, direction);
-        } else if (device == 1) {
-            obj->matrix = GpuSubtractConstant(((TensorObject *)self)->matrix, value, direction);
+        if (device == 0)
+        {
+            obj->matrix = SubtractConstant(tensorSelf->matrix, value, direction);
         }
-    
-        return (PyObject*)obj;
+        else if (device == 1)
+        {
+            obj->matrix = GpuSubtractConstant(tensorSelf->matrix, value, direction);
+        }
+
+        return (PyObject *)obj;
     }
     else
     {
-        
-        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        int device = getDevice(((TensorObject*)self)->matrix, ((TensorObject*)args)->matrix);
 
-        if (device == 0) {
-            obj->matrix = Subtract(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-        } else if (device == 1) {
-            obj->matrix = GpuSubtract(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+        TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
+        int device = getDevice(tensorSelf->matrix, ((TensorObject *)args)->matrix);
+
+        if (device == 0)
+        {
+            obj->matrix = Subtract(tensorSelf->matrix, ((TensorObject *)args)->matrix);
+        }
+        else if (device == 1)
+        {
+            obj->matrix = GpuSubtract(tensorSelf->matrix, ((TensorObject *)args)->matrix);
         }
 
-        return (PyObject*)obj;
+        return (PyObject *)obj;
     }
 }
 
 static PyObject *
-tensor_negative(TensorObject *self)
+tensor_negative(PyObject *self)
 {
     TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-
-    if (self->matrix->device == 0) {
-        obj->matrix = MulConstant(((TensorObject *)self)->matrix, -1, 0);
-    } else if (self->matrix->device == 1) {
-        obj->matrix = GpuMulConstant(((TensorObject *)self)->matrix, -1, 0);
+    TensorObject *tensorSelf = ((TensorObject *)self);
+    if (tensorSelf->matrix->device == 0)
+    {
+        obj->matrix = MulConstant(tensorSelf->matrix, -1, 0);
+    }
+    else if (tensorSelf->matrix->device == 1)
+    {
+        obj->matrix = GpuMulConstant(tensorSelf->matrix, -1, 0);
     }
 
-    return (PyObject*)obj;
+    return (PyObject *)obj;
 }
 
 static PyObject *
 tensor_add(PyObject *a, PyObject *b)
 {
-    TensorObject *self;
+    PyObject *self;
     PyObject *args;
     int direction;
 
     getTensorPointer(
         a, b,
-        &self, &args, &direction
-    );
-
+        &self, &args, &direction);
 
     if (PyType_Ready(&TensorType))
     {
         return NULL;
     }
 
+    TensorObject *tensor_self = (TensorObject *)self;
+
     if (PyLong_Check(args))
     {
         float value = PyFloat_AsDouble(args);
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        int device = getDevice(((TensorObject*)self)->matrix, NULL);
+        int device = getDevice(tensor_self->matrix, NULL);
 
-        if (device == 0) {
-            obj->matrix = AddConstant(((TensorObject *)self)->matrix, value, direction);
-        } else if (device == 1) {
-            obj->matrix = GpuAddConstant(((TensorObject *)self)->matrix, value, direction);
+        if (device == 0)
+        {
+            obj->matrix = AddConstant(tensor_self->matrix, value, direction);
+        }
+        else if (device == 1)
+        {
+            obj->matrix = GpuAddConstant(tensor_self->matrix, value, direction);
         }
 
-        return (PyObject*)obj;
+        return (PyObject *)obj;
     }
     else
     {
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        int device = getDevice(((TensorObject*)self)->matrix, ((TensorObject*)args)->matrix);
+        int device = getDevice(tensor_self->matrix, ((TensorObject *)args)->matrix);
 
-        if (device == 0) {
-            obj->matrix = Add(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-        } else if (device == 1) {
-            obj->matrix = GpuAdd(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+        if (device == 0)
+        {
+            obj->matrix = Add(tensor_self->matrix, ((TensorObject *)args)->matrix);
+        }
+        else if (device == 1)
+        {
+            obj->matrix = GpuAdd(tensor_self->matrix, ((TensorObject *)args)->matrix);
         }
 
-        return (PyObject*)obj;
+        return (PyObject *)obj;
     }
 }
 
 static PyObject *
 tensor_mul(PyObject *a, PyObject *b)
 {
-    TensorObject *self;
+    PyObject *self;
     PyObject *args;
     int direction;
 
     getTensorPointer(
         a, b,
-        &self, &args, &direction
-    );
+        &self, &args, &direction);
 
     if (PyType_Ready(&TensorType))
     {
         return NULL;
     }
 
+    TensorObject *tensor_self = (TensorObject *)self;
+
     if (PyLong_Check(args))
     {
         float value = PyFloat_AsDouble(args);
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        int device = getDevice(((TensorObject*)self)->matrix, NULL);
+        int device = getDevice(tensor_self->matrix, NULL);
 
-        if (device == 0) {
-            obj->matrix = MulConstant(((TensorObject *)self)->matrix, value, direction);
-        } else if (device == 1) {
-            obj->matrix = GpuMulConstant(((TensorObject *)self)->matrix, value, direction);
+        if (device == 0)
+        {
+            obj->matrix = MulConstant(tensor_self->matrix, value, direction);
+        }
+        else if (device == 1)
+        {
+            obj->matrix = GpuMulConstant(tensor_self->matrix, value, direction);
         }
 
-        return (PyObject*)obj;
+        return (PyObject *)obj;
     }
     else
     {
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
-        int device = getDevice(((TensorObject*)self)->matrix, ((TensorObject*)args)->matrix);
+        int device = getDevice(tensor_self->matrix, ((TensorObject *)args)->matrix);
 
-        if (device == 0) {
-            obj->matrix = Mul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-        } else if (device == 1) {
-            obj->matrix = GpuMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
+        if (device == 0)
+        {
+            obj->matrix = Mul(tensor_self->matrix, ((TensorObject *)args)->matrix);
+        }
+        else if (device == 1)
+        {
+            obj->matrix = GpuMul(tensor_self->matrix, ((TensorObject *)args)->matrix);
         }
 
-        return (PyObject*)obj;
+        return (PyObject *)obj;
     }
 }
 
 static PyObject *
 tensor_divide(PyObject *a, PyObject *b)
 {
-    TensorObject *self;
+    PyObject *self;
     PyObject *args;
     int direction;
 
     getTensorPointer(
         a, b,
-        &self, &args, &direction
-    );
+        &self, &args, &direction);
 
     if (PyType_Ready(&TensorType))
     {
         return NULL;
     }
 
+    TensorObject *tensorSelf = (TensorObject *)self;
+
     if (PyLong_Check(args))
     {
         float value = PyFloat_AsDouble(args);
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
 
-        int device = getDevice(((TensorObject*)self)->matrix, NULL);
+        int device = getDevice((tensorSelf)->matrix, NULL);
 
-        if (device == 0) {
-            obj->matrix = DivideConstant(((TensorObject *)self)->matrix, value, direction);
-        } else if (device == 1) {
-            obj->matrix = GpuDivideConstant(((TensorObject *)self)->matrix, value, direction);
+        if (device == 0)
+        {
+            obj->matrix = DivideConstant((tensorSelf)->matrix, value, direction);
+        }
+        else if (device == 1)
+        {
+            obj->matrix = GpuDivideConstant((tensorSelf)->matrix, value, direction);
         }
 
-        return (PyObject*)obj;
+        return (PyObject *)obj;
     }
     else
     {
-        // TODO
+        // TODO set error
         return NULL;
     }
 }
@@ -341,7 +339,8 @@ tensor_transpose(TensorObject *self)
     TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
     int s[] = {self->matrix->columns, self->matrix->rows};
 
-    if (self->matrix->device == 0) {
+    if (self->matrix->device == 0)
+    {
         Matrix *results = createMatrixN(s, 2);
         obj->matrix = results;
 
@@ -352,18 +351,20 @@ tensor_transpose(TensorObject *self)
                 setElement(obj->matrix, j, i, getElement(self->matrix, i, j));
             }
         }
-    } else if (self->matrix->device == 1) {
+    }
+    else if (self->matrix->device == 1)
+    {
         obj->matrix = GpuTranspose(self->matrix);
     }
 
-    return (PyObject*)obj;
+    return (PyObject *)obj;
 }
 
 static PyObject *
 tensor_matmul(PyObject *a, PyObject *b)
 {
     PyObject *self = a;
-    PyObject *args= b;
+    PyObject *args = b;
 
     if (PyType_Ready(&TensorType))
     {
@@ -372,30 +373,29 @@ tensor_matmul(PyObject *a, PyObject *b)
 
     if (PyLong_Check(args))
     {
-        /*
-            This is illegal throw an error
-        */
-        long value = PyLong_AsLong(args);
-        printf("Add a constant value :) %li\n", value);
+        // TODO this is illegal throw an error
         return NULL;
     }
     else
     {
 
-        int device = getDevice(((TensorObject*)a)->matrix, ((TensorObject*)b)->matrix);
+        int device = getDevice(((TensorObject *)a)->matrix, ((TensorObject *)b)->matrix);
         TensorObject *obj = (TensorObject *)PyObject_CallObject((PyObject *)&TensorType, NULL);
 
-        if (device == 0) {
+        if (device == 0)
+        {
             obj->matrix = MatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-            obj->matrix->device = device;
-        } else if (device == 1) {
+        }
+        else if (device == 1)
+        {
             obj->matrix = GpuMatrixMatMul(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix);
-            obj->matrix->device = device;
-        } else {
+        }
+        else
+        {
             return NULL;
         }
-        
-        return (PyObject*)obj;
+
+        return (PyObject *)obj;
     }
 }
 
@@ -403,7 +403,7 @@ static PyObject *
 tensor_isEqual(PyObject *a, PyObject *b)
 {
     PyObject *self = a;
-    PyObject *args= b;
+    PyObject *args = b;
 
     if (PyType_Ready(&TensorType))
     {
@@ -413,45 +413,23 @@ tensor_isEqual(PyObject *a, PyObject *b)
     return PyBool_FromLong(isEqual(((TensorObject *)self)->matrix, ((TensorObject *)args)->matrix));
 }
 
-// One of the objects will always be 
-void getTensorPointer(PyObject *a, PyObject *b, PyObject **tensor, PyObject **args, int*direction ) {
-    if (PyLong_Check(a)) {
-        *tensor = b;
-        *args = a; 
-        *direction = 1;
-    } else {
-        *tensor = a;
-        *args = b; 
-        *direction = 0;
-    }
-}
-
-int getDevice(Matrix *a, Matrix *b) {
-    if (a != NULL && b != NULL && a->device == b->device){
-        return a->device;
-    } else if (a != NULL && b == NULL){
-        return a->device;
-    } else {
-        return -1;
-    }
-}
-
-
 static PyObject *
 tensor_cuda(TensorObject *self)
 {
-    if (self->matrix->device != 1) {
+    if (self->matrix->device != 1)
+    {
         sendToGpu(self->matrix);
     }
-    return (PyObject*)self;
+    return (PyObject *)self;
 }
 
 static PyObject *
 tensor_host(TensorObject *self)
 {
-    if (self->matrix->device != 0){
+    if (self->matrix->device != 0)
+    {
         sendToHost(self->matrix);
     }
 
-    return (PyObject*)self;
+    return (PyObject *)self;
 }

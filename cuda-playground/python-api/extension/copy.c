@@ -35,10 +35,9 @@ int sizeOfPointer(int *arr)
     int *copyArr = arr;
     int length = 0;
 
-    while (*copyArr != '\0')
+    while (*(copyArr + length) != '\0')
     {
         length++;
-        *copyArr++;
     }
     return length;
 }

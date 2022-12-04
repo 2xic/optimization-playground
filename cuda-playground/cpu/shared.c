@@ -33,26 +33,27 @@ void setElement(Matrix *a, int row, int col, float value)
 
 void setElementN(Matrix *a, int *location, int length, float value)
 {
-    size_t inputSize = length; 
-    size_t arrSize = length;   
-    if (inputSize != arrSize)
+    size_t input_length = length; 
+    size_t array_length = length;   
+    if (input_length != array_length)
     {
         return;
     }
-    int tensorLocation = 0;
-    for (int i = 0; i < arrSize; i++)
+
+    int tensor_location = 0;
+    for (int i = 0; i < array_length; i++)
     {
         int locI = *(location + i);
         if (0 == i)
         {
-            tensorLocation = locI;
+            tensor_location = locI;
         }
         else
         {
-            tensorLocation = tensorLocation * a->size[i] + locI;
+            tensor_location = tensor_location * a->size[i] + locI;
         }
     }
-    a->data[tensorLocation] = value;
+    a->data[tensor_location] = value;
 }
 
 int isEqual(Matrix *a, Matrix *b)
@@ -62,25 +63,26 @@ int isEqual(Matrix *a, Matrix *b)
         return -1;
     }
 
-    int isEqual = 1;
+    int is_equal = 1;
+    float eps = 0.00001;
 
     for (int row = 0; row < a->rows; row++)
     {
         for (int column = 0; column < a->columns; column++)
         {
-            isEqual = (getElement(a, row, column) == getElement(b, row, column));
-            if (!isEqual)
+            is_equal = abs(getElement(a, row, column) - getElement(b, row, column)) < eps;
+            if (!is_equal)
             {
                 break;
             }
         }
-        if (!isEqual)
+        if (!is_equal)
         {
             break;
         }
     }
 
-    return isEqual;
+    return is_equal;
 }
 
 void freeMatrix(Matrix *a)
@@ -146,9 +148,9 @@ Matrix *createMatrixN(int size[], int length)
     }
 
     int nSize = 0;
-    int arrSize = length;
+    int array_length = length;
 
-    for (int i = 0; i < arrSize; i++)
+    for (int i = 0; i < array_length; i++)
     {
 
         if (i == 0)
@@ -275,7 +277,6 @@ Matrix *DivideConstant(Matrix *a, float b, int direction)
 
 Matrix *Exp(Matrix *a)
 {
-    //    printf("EXP:)\n");
     Matrix *c = createMatrix(a->rows, a->columns);
     for (int i = 0; i < a->columns; i++)
     {
