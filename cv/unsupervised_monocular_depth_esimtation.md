@@ -10,9 +10,12 @@
 
 
 Method
-- Use two images corresponding to left and right color images from calibrated camera pair
+- Use two images corresponding to left and right color images from calibrated camera pairdistane
   - Goal is to find dense that correspondence fields that when applied to the left image would enable us to reconstruct the right image
   - The same should be true for the other way also! I.e apply d to right and get left
+- Given a baseline distance b between the cameras and the focal length
+  - d = b * f / d
+  - 
 - Loss has four output scales (EQ 1 / FIG 2)
 - 
 
