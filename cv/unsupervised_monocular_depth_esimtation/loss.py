@@ -1,6 +1,8 @@
 import torch
 import numpy as np
 import cv2
+import torch.nn.functional as F
+
 """
 training loss
 
@@ -105,10 +107,12 @@ def SSIM(i, j):
 def SSIM_block(image_i, image_j, block_size=8):
     """
         This is slow.
+
+        Switched to piqa instead.
     """
     image = torch.zeros((image_i.shape[0], image_i.shape[1]))
-    for i in range(image_i.shape[0] - 1):
-        for j in range(image_i.shape[1] - 1):
+    for i in range(image_i.shape[-2] - 1):
+        for j in range(image_i.shape[-1] - 1):
             image[i, j] = SSIM(
                 image_i[i:i+block_size, j:j+block_size],
                 image_j[i:i+block_size, j:j+block_size]
@@ -117,47 +121,45 @@ def SSIM_block(image_i, image_j, block_size=8):
 
 
 def c_ap(image_i, image_r):
-    block_image = SSIM_block(
-        image_i,
-        image_r
-    )
-    alpha = 1
+    from piqa import SSIM
+    # TODO fix problem with numbewr scaling
+    block_image = SSIM().forward(torch.sigmoid(image_i), torch.sigmoid(image_r))
+    alpha = 0.7
     output = torch.zeros(image_i.shape)
-    for i in range(image_i.shape[0]):
-        for j in range(image_r.shape[1]):
-            output[i, j] = alpha * (
-                1 - block_image[i][j]
-            ) / 2\
-                + (
-                1 - alpha
-            )\
-                *\
-                torch.norm(
-                image_i[i][j] - image_r[i][j]
-            )
-    return output.mean()
+
+    output += (
+        1 - block_image
+    ) / 2 + (1 - alpha) * torch.norm((image_i - image_r), dim=0)
+
+    return (alpha * output).mean()
 
 
 def gradient(image):
-    kernel_x = np.array([
+    kernel_x = torch.tensor([
         [1, 0, -1],
         [1, 0, -1],
         [1, 0, -1]
-    ])
-    kernel_y = np.array([
+    ]).reshape((1, 3, 3))
+    kernel_y = torch.tensor([
         [1, 1, 1],
         [0, 0, 0],
         [-1, -1, -1]
-    ])
-    image = image.numpy().astype(np.uint8)
-    print(image.shape)
-    if len(image.shape) == 2:
-        image = np.concatenate((
-            image,
-        ), axis=0).astype(np.uint8)
+    ]).reshape((1, 3, 3))
+    kernel_x = torch.concat((
+        kernel_x,
+        kernel_x,
+        kernel_x
+    ),
+        dim=0).reshape((1, 3, 3, 3)).float()
+    kernel_y = torch.concat((
+        kernel_y,
+        kernel_y,
+        kernel_y
+    ),
+        dim=0).reshape((1, 3, 3, 3)).float()
 
-    dx = cv2.filter2D(image, cv2.CV_8U, kernel_x)
-    dy = cv2.filter2D(image, cv2.CV_8U, kernel_y)
+    dx = F.conv2d(image, kernel_x, padding=1)
+    dy = F.conv2d(image, kernel_y, padding=1)
 
     return (
         dx,
@@ -166,23 +168,22 @@ def gradient(image):
 
 
 def c_ds(image, disparities):
-    output = torch.zeros(image.shape)
     dx_image, dy_image = gradient(image)
     dx_disparities, dy_disparities = gradient(disparities)
+    output = torch.zeros(image.shape)
 
-    for i in range(image.shape[0]):
-        for j in range(image.shape[1]):
-            def norm(x): return x
-            output[i][j] = torch.tensor((
-                abs(dx_disparities[i][j]) * np.exp(
-                    -norm(dx_image[i][j])
-                )
-            ) + (
-                abs(dy_disparities[i][j]) * np.exp(
-                    -norm(dy_image[i][j])
-                )
-            ))
+    assert not torch.any((dx_image == torch.nan))
+    assert not torch.any((dy_image == torch.nan))
+    assert not torch.any((dx_disparities == torch.nan))
+    assert not torch.any((dy_disparities == torch.nan))
+
+    output = (
+        dx_disparities * torch.exp(-torch.norm(dx_image, dim=0)) +
+        dy_disparities * torch.exp(-torch.norm(dy_image, dim=0))
+    )
+
     return output.mean()
+
 
 def c_lr(image, disparities):
     # d^l (i, j) -> makes sense
@@ -193,27 +194,32 @@ def c_lr(image, disparities):
     return torch.zeros((1))
 
 
-def loss(image, image_reconstruction):
+def loss(
+        image_l, image_reconstruction_l,
+        image_r, image_reconstruction_r,
+    ):
+    # (batch, channel, width, height)
+    assert len(image_l.shape) == 4
+    assert len(image_reconstruction_l.shape) == 4
     """
     TODO: This should be applied for each of the losses,
     and not just the final loss.
-
-    TODO: This should be applied for both left and right,
-            not just one side.
     """
     lambda_ap = 1
-    results_c_ap = c_ap(image, image_reconstruction)
+    results_c_ap = c_ap(image_l, image_reconstruction_l) +\
+                    c_ap(image_r, image_reconstruction_r)
 
     r = 6
     lambda_ds = 1 / r
-    results_c_ds = c_ds(image, image_reconstruction)
-
+    results_c_ds = c_ds(image_l, image_reconstruction_l)+\
+                    c_ds(image_r, image_reconstruction_r)
     lambda_lr = 1
-    results_c_lr = c_lr(image, image_reconstruction)
+    results_c_lr = c_lr(image_l, image_reconstruction_l)
 
     return lambda_ap * (results_c_ap) +\
-           lambda_ds * (results_c_ds) +\
-           lambda_lr * (results_c_lr)
+        lambda_ds * (results_c_ds) +\
+        lambda_lr * (results_c_lr)
+
 
 if __name__ == "__main__":
     x = torch.ones((100, 100))
