@@ -301,7 +301,7 @@ class Model(nn.Module):
             ),
             dim=1
         )))
-        pr_loss_1 = torch.sigmoid(self.pr_1(iconv1))
+        pr_loss_1 = (self.pr_1(iconv1))
         scaled_up_pr_loss_1 = F.interpolate(
             pr_loss_1, scale_factor=2, mode='bilinear', align_corners=False)
 
@@ -313,6 +313,9 @@ class Model(nn.Module):
         """
 
         return pr_loss_1, {
+           # "d": scaled_up_pr_loss_1, #F.interpolate(scaled_up_pr_loss_1, scale_factor=2, mode='bilinear', align_corners=False), 
+            "pr_loss_1": pr_loss_1,
+            #(F.interpolate(scaled_up_pr_loss_1, scale_factor=2, mode='bilinear', align_corners=False)[:, :, :384, :768]),
             "d_l": (F.interpolate(scaled_up_pr_loss_1, scale_factor=2, mode='bilinear', align_corners=False)[:, :, :384, :768]),
             "d_r": (F.interpolate(scaled_up_pr_loss_1, scale_factor=2, mode='bilinear', align_corners=False)[:, :, 384:, 768:]),
             "losses": [
@@ -326,23 +329,75 @@ class Model(nn.Module):
 
     def forward_apply(self, left, right):
         _, metadata = self.forward(left)
-        d = metadata["d_r"][0]
+        d_r = metadata["d_r"] #[:, 0, :, :]
 
         # Is this correct ? Looks like they use matmul
-        right_reconstructed = d * left
+ #       print(d_r.shape)
+#        print(left.shape)
+        right_reconstructed = self.apply_depth_mpa_github_v(left, d_r)
 
-        _, metadata = self.forward(right)
+ #       _, metadata = self.forward(right)
+        d_l = metadata["d_l"] #[:, 0, :, :]
+        left_reconstruction = self.apply_depth_mpa_github_v(left, d_l) 
 
-        d = metadata["d_l"][0]
-        left_reconstruction = d * right
+        # assert torch.max(left) <= 1, torch.max(left)
+        # assert torch.max(right) <= 1, torch.max(right)
+        # assert torch.max(left_reconstruction) <= 1, torch.max(left_reconstruction)
+        # assert torch.max(right_reconstructed) <= 1, torch.max(right_reconstructed)
 
         return {
             "left_input": left,
             "left_reconstructed": left_reconstruction,
+            "left_d": d_l,
             "right_input": right,
-            "right_reconstructed": right_reconstructed
+            "right_reconstructed": right_reconstructed,
+            "right_d": d_r,
         }
 
+    def apply_depth_map(self, X, D):
+        # https://stackoverflow.com/questions/54408420/constructing-right-view-image-from-left-view-image-and-disparity-map
+        # https://towardsdatascience.com/understanding-transformations-in-computer-vision-b001f49a9e61
+        # https://www.uio.no/studier/emner/matnat/its/nedlagte-emner/UNIK4690/v16/forelesninger/lecture_5_1-the-camera-matrix-p.pdf
+        #   I think I actually should be applying something like the camera matrix for this, but not sure
+        #   Hm, looking at alternative implementation it does not seem to be necessary.
+        #       https://github.com/OniroAI/MonoDepth-PyTorch/blob/0b7d60bd1dab0e8b6a7a1bab9c0eb68ebda51c5c/loss.py#L40
+        #   
+        output = torch.zeros((X.shape))
+        
+        for i in range(X.shape[0]):
+            x, y = torch.meshgrid(
+                torch.arange(0, X.shape[2]),
+                torch.arange(0, X.shape[3]),
+                indexing='ij'
+            )
+            grid_tensor = torch.dstack([x, y]).float()
+            grid_tensor[:, :, 1] *= D[0, 0]
+            grid_tensor = grid_tensor.long()
+            grid_tensor[:, : 1][grid_tensor[:, : 1] < 0] = 0
+            grid_tensor[:, : 1][grid_tensor[:, : 1] > X.shape[3]] = 0
+
+            output[i, :, :, :] = X[i, :, grid_tensor[:, :, 0], grid_tensor[:, :, 1]]
+        return output
+
+    # TESTING BASED ON 
+    #       https://github.com/OniroAI/MonoDepth-PyTorch/blob/0b7d60bd1dab0e8b6a7a1bab9c0eb68ebda51c5c/loss.py#L40
+    def apply_depth_mpa_github_v(self, X, D):
+        batch_size, _, height, width = X.size()
+
+        # Original coordinates of pixels
+        x_base = torch.linspace(0, 1, width).repeat(batch_size,
+                    height, 1).type_as(X)
+        y_base = torch.linspace(0, 1, height).repeat(batch_size,
+                    width, 1).transpose(1, 2).type_as(X)
+
+        # Apply shift in X direction
+        x_shifts = D[:, 0, :, :]  # Disparity is passed in NCHW format with 1 channel
+        flow_field = torch.stack((x_base + x_shifts, y_base), dim=3)
+        # In grid_sample coordinates are assumed to be between -1 and 1
+        output = F.grid_sample(X, 2*flow_field - 1, mode='bilinear',
+                               padding_mode='zeros')
+
+        return output
 
 if __name__ == "__main__":
     model = Model()
