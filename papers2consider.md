@@ -3,11 +3,13 @@
 ## Sources
 - [https://spinningup.openai.com/en/latest/spinningup/keypapers.html](https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
 - [https://lilianweng.github.io/](https://lilianweng.github.io/)
-
+- [https://www.vicarious.com/publications/](https://www.vicarious.com/publications/)
+- [https://openai.com/publications/](https://openai.com/publications/)
 
 # Some I'm considering
 ### Computer vision
 [What You Get Is What You See: A Visual Markup Decompiler](https://arxiv.org/pdf/1609.04938v1.pdf)
+[https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
 
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
@@ -20,7 +22,8 @@
 [Multi-Adversarial Variational Autoencoder Networks](https://arxiv.org/pdf/1906.06430.pdf)
 
 ## NN architecture
-:)
+[https://arxiv.org/abs/2001.08361](Scaling Laws for Neural Language Models)
+[https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)
 
 ## Recommendations
 [Monolith: Real Time Recommendation System With Collisionless Embedding Table](https://arxiv.org/pdf/2209.07663.pdf)

@@ -1,0 +1,44 @@
+[https://proceedings.neurips.cc/paper/2015/file/86df7dcfd896fcaf2674f757a2463eba-Paper.pdf](https://proceedings.neurips.cc/paper/2015/file/86df7dcfd896fcaf2674f757a2463eba-Paper.pdf)
+
+- Not all debt is bad, but all debt has to be served
+  - Technical debt need to be served
+    - Refactoring code
+    - Improving tests
+    - Deleting dead code
+    - etc
+- Authors argue that ML have their own specific problems in addition to the classical technical debt issues 
+    - i.e small changes in data pipelines can throw the models off
+      - high entanglement in the ml system
+    - transfer learning on other models can create unwanted dependencies 
+    - undeclared consumers
+      - Depending on how you make the output available, it might be used by other system without you knowing
+        - me: Not sure if I agree so much with this point, but the other made sense
+    - Data dependencies
+      - Unstable signals from data pipelines (i.e data that updates over time)
+        - can be solved with data version tracking
+    - Underutilized data dependencies
+      - legacy features
+      - epsilon features (added for a small accuracy boost)
+      - correlated features
+    - Feedback loops
+      - Model might affect the training data in some way
+    - Anti patterns
+      - Making code dependent on glue code because of 2 general packages
+        - use abstract interfaces!!!
+      - Pipeline jungels
+        - lol
+- Monitor and testing
+  - Monitor
+    - Action limit
+      - if a certaint action is preformed 2 much in real world, send a warning
+    - Prediction bias
+      - Check that distribution of predicted labels is matching that of the observed labels
+      - 
+  - Testing
+    - End to end testing is important
+    - Unit testing is important
+- Good question 2 ask
+  - How easily can a new algorithm be trained on this stack ?
+  - How precisely can changes to the system be measured ?
+  - How easily can a new person learn the stack ?
+  -  
