@@ -22,8 +22,7 @@
 [Multi-Adversarial Variational Autoencoder Networks](https://arxiv.org/pdf/1906.06430.pdf)
 
 ## NN architecture
-[https://arxiv.org/abs/2001.08361](Scaling Laws for Neural Language Models)
 [https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)
 
 ## Recommendations
-[Monolith: Real Time Recommendation System With Collisionless Embedding Table](https://arxiv.org/pdf/2209.07663.pdf)
+:)

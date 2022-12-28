@@ -1,0 +1,72 @@
+[Monolith: Real Time Recommendation System With Collisionless Embedding Table](https://arxiv.org/pdf/2209.07663.pdf)
+
+- General purpose frameworks ( Tensorflow / PyTorch ) fall short 
+  - They are designed for batch training stage and serving stage, and never something in between
+    - This prevents update in realtime based on user feedback
+- Why the recommender usecase is different from other problems
+  - Distribution of data is non-stationary (always changing)
+  - Features are sparse, and also changing over time
+    - Some with very low frequency
+  - Common practice is to map features into a high-dimensional embedding space 
+    - Challenges
+      - Users and ranking items are large, and the embedding table would not fit into a single host memory
+        - It would also grow over time as users and items are added
+          - BUT tensorflow and pytorch expect a fixed-size dense variable to represent the embedding table
+- Monolith
+  - Tailored for online training, and to allow close to real-time updates
+  - Features
+    - Collisionsless hash table, and dynamic features size mechanism
+    - Closed loop to allow feedback to be put into training in real-time
+  - Design
+    - Worker-ParameterServer design
+        - Machines are designed for specific roles and work together
+          - Parameter server machines stores parameters and updates them according to gradients computed by a the workers
+    - Hash table
+      - Weights = Desnse
+      - Embedding tables = Spare
+      - First principle is to avoid mixing information from different independent distributions (IDS)  into the same embedding 
+      - Cuckoo Hashmap is used under the hood
+        - https://en.wikipedia.org/wiki/Cuckoo_hashing
+      - Observation of real production models lead to two conclusion
+        - IDs that appears few times have limited contributions to model quality
+        - Storing stale IDs from the past (inactive users / old videos) does not usually help the model
+      - ^ Based on those observations several features filtering heuristics were added for more memory efficient implementation
+        - IDs are filtered before added into the embedding table
+          - Filtered by occurrence
+          - In additional to a probabilistic filter 
+        - IDs are timed will be expired if being inactive for a predefined period of time
+    - Stages of online training
+      - Batch training stage
+        - Traditional mini-batch training
+      - Online training stage
+        - Instead of reading mini-batch from storage, it reads realtime data from a kafka queue
+      - Streaming engine
+        - Uses Kafka
+          - one queue - streams action logs
+          - one queue - feature joiner
+      - Online joiner
+        - Actions and features are streamed into online joiner
+          - Time and order is not guaranteed, and therefore they have a shared unique key
+        - Actions can occur at a much later timestep, so it can't all fit into memory
+          - Therefore an on-disk key-value storage is used to store features
+        - Another problem is the ratio between negative and positive feedback
+          - Negative sampling is a method to compensate for this
+            - which can tweak the distribution
+              - uses log odds correction to compensate
+                - https://arxiv.org/pdf/2110.13048.pdf 
+        - Parameter synchronization
+          - Challenges
+            - Model cannot stop being served while updating
+              - The model size is several TB, so could take some time to update
+              - transferring several tb between the workers can cost a lot of network bandwidth -> not good!
+          - Solution
+            - Incremental on-the-fly periodic parameter synchronization
+    - Fault tolerance
+      - One solution is periodic saving the model
+        - Problematic because of size of model
+          - So it only stores the Parameter server every day
+    - See section 3 for evaluation
+      - Looks good
+      - 
+
+

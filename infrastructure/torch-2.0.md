@@ -4,7 +4,7 @@
 
 ## Torch.compile()
 [docs](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html)
-[blg](https://pytorch.org/blog/Accelerating-Hugging-Face-and-TIMM-models/?utm_source=twitter&utm_medium=organic_social&utm_campaign=pytorch_conference)]
+[blog](https://pytorch.org/blog/Accelerating-Hugging-Face-and-TIMM-models/?utm_source=twitter&utm_medium=organic_social&utm_campaign=pytorch_conference)]
 
 - Uses jit to speed up PyTorch code
 - Dev team expects a 30%- 2x speed up 
