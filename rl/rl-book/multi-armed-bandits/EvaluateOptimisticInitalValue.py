@@ -3,34 +3,28 @@ from envs.StaticBandit import StaticBandit
 from helper.Parameter import Parameter
 from helper.Plot import plot_average_reward, plot_optimal_action
 from SimpleBanditAgent import SimpleBanditAgent
-from action_policy.Ucb import UpperConfidenceBound
 from action_policy.Epsilon import EpsilonGreedy
 """
 Parameters
 """
 K = 10
-EVALUATION_RUNS = 100
+EVALUATION_RUNS = 2_000
 EPOCH_LENGTH = 1_000
 
 parameters = [
-    Parameter("ucb", 0.2),
-#    Parameter("ucb", 0.1),
-    Parameter("eps", 0.1),
+    (Parameter("q_0=2.5 eps", 0), 2.5, 0.1),
+    (Parameter("q_0=0.0 eps", 0.1), 0, 0.1),
 ]
 
-for eps_parameter in parameters:
+for (eps_parameter, q_0, lr) in parameters:
     eps = eps_parameter.value
     for _ in range(EVALUATION_RUNS):
         agent = SimpleBanditAgent(
             K=K,
-            policy=(
-                UpperConfidenceBound(K, eps_parameter.value)
-                if eps_parameter.name == "ucb"
-                else
-                EpsilonGreedy(K, eps_parameter.value)
-            )
+            policy=EpsilonGreedy(K, eps=eps),
+            q_0=q_0
         )
-    
+
         with eps_parameter as results:
             bandit = StaticBandit(K)
             for _ in range(EPOCH_LENGTH):
@@ -44,11 +38,9 @@ for eps_parameter in parameters:
 
                 agent.update(
                     action=action, 
-                    reward=reward
+                    reward=reward,
+                    lr=lr
                 )
 
-#print(parameters[0].metrics["reward"].Q)
-
-plot_average_reward(parameters, "eps_vs_ucb")
-# plot_optimal_action(parameters[:1], "eps_vs_ucb")
+plot_optimal_action(list(map(lambda x: x[0], parameters)), "optimistic_initial_value")
 

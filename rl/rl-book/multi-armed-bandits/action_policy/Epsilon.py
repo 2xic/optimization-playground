@@ -7,7 +7,9 @@ class EpsilonGreedy:
         self.eps = eps
 
     def __call__(self, agent):
-        if np.random.rand() > self.eps :
+        if np.random.rand() >= self.eps :
             return agent.on_policy()
         else:
+            if self.eps == 0:
+                raise Exception("Something is wrong")
             return random.randint(0, self.actions - 1)

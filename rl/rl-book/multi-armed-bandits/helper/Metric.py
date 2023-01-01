@@ -7,16 +7,14 @@ class Metric:
 
     def add_value(self, value):
         if len(self.Q) <= self.index:
-            self.Q.append(value)
-            self.N.append(1)
+            self.Q.append(float(value))
+            self.N.append(1.0)
         else:
             self.N[self.index] += 1
             estimated_avg = 1/(
                 self.N[self.index]
             )
-            self.Q[self.index] += estimated_avg * (
+            self.Q[self.index] += estimated_avg * float(
                 value - self.Q[self.index]  
             )
             self.index += 1
-
-            
