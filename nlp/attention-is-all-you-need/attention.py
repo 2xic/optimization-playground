@@ -8,28 +8,39 @@ Currently it's hardcoded to one.
 class AttentionLayer(nn.Module):
     def __init__(self, size_in, size_out):
         super().__init__()
-        self.size_in, self.size_out = size_in, size_out
-        channel_size = 32
-        channel_size_2 = 64
+        #self.size_in, self.size_out = size_in, size_out
 
-        self.q = nn.Linear(channel_size, size_out, bias=False)
-        self.k = nn.Linear(channel_size, channel_size_2, bias=False)
-        self.v = nn.Linear(channel_size_2, size_out, bias=False)
-        self.w = nn.Linear(size_out, size_out, bias=False)
+        self.q = nn.Linear(size_in, size_out, bias=False)
+        self.k = nn.Linear(size_in, size_out, bias=False)
+        self.v = nn.Linear(size_in, size_out, bias=False)
+        #self.w = nn.Linear(size_out, size_out, bias=False)
 
     def forward(self, x):
         dot_attention = attention(
-            self.q, self.k, self.v
-        ) @ self.w.weight
-        return (x @ dot_attention.T)
+            self.q(x), 
+            self.k(x), 
+            self.v(x)
+        )
+        return dot_attention
 
 def attention(q: torch.nn.Linear, k: torch.nn.Linear, v: torch.nn.Linear) -> torch.Tensor:
     results = torch.softmax(
-        q.weight @ k.weight.T
+        q @ k.T
         /
-        k.weight.shape[0],
+        k.shape[0],
         dim=1
     )
-    return results @ v.weight.T
-    
+    return results @ v
 
+if __name__ == "__main__":
+    size_in = 256
+    example = torch.rand((10, size_in))
+
+    attention_layer = AttentionLayer(size_in, 128)
+    output = attention_layer(example)
+    print(output.shape)
+
+    """
+    Was a bug in the implementation
+    TODO: retrain and see if it still works nicely
+    """

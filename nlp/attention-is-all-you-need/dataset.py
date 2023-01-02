@@ -17,7 +17,7 @@ class CustomTokenizer:
 
         }
         self.DEBUG_MODE = True
-        self.LIMIT = 150
+        self.LIMIT = 10000
 
         self.beginning_token = self.add("<s>")
         self.end_token = self.add("</s>")
@@ -29,15 +29,18 @@ class CustomTokenizer:
             self.words[word] = idx
             self.idx_to_words[idx] = word
             return idx
-        else:
-            return self.words.get(word, self.UNKNOWN)
+        elif word not in self.words and self.DEBUG_MODE:
+            print(len(self.words))
+            raise Exception("Bug ? ")
+        return self.words.get(word, self.UNKNOWN)
         
     def encode(self, words):
         idx = []
         for i in words.split(" "):
             idx.append(self.add(i))
+        length = len(idx)
         idx.append(self.end_token)
-        return idx
+        return idx, length
 
     def decode(self, idx):
         words = []
@@ -59,12 +62,11 @@ class Wmt16Dataloader(Dataset):
             "wmt16",
             "de-en",
         )
-        mname = "allenai/wmt16-en-de-dist-12-1"
+#        mname = "allenai/wmt16-en-de-dist-12-1"
 #        self.tokenizer: FSMTTokenizer = FSMTTokenizer.from_pretrained(mname)
         self.tokenizer = CustomTokenizer()
         self.beginning_token = self.tokenizer.beginning_token
         self.end_token = self.tokenizer.end_token
-        self.vocab_size = self.tokenizer.vocab_size + 1
 
         # Standard version
         builder.download_and_prepare()
@@ -72,6 +74,14 @@ class Wmt16Dataloader(Dataset):
         self.data = self.ds["train"] if train else self.ds["test"]
         self.try_to_overfit = try_to_overfit != -1
         self.try_to_fit_size = try_to_overfit
+
+        for i in range(self.try_to_fit_size):
+            self.__getitem__(i)
+        self.tokenizer.DEBUG_MODE = False
+        self.vocab_size = self.tokenizer.vocab_size + 1
+        self.tokenizer.LIMIT = (self.vocab_size)
+      #  print(self.tokenizer.LIMIT)
+       # exit(0)
 
     def decode(self, token_ids):
         return self.tokenizer.decode(token_ids)
@@ -83,8 +93,9 @@ class Wmt16Dataloader(Dataset):
 
     def __getitem__(self, idx):
         data = self.data[idx]["translation"]
-        encoded_de, encoded_en = self.tokenizer.encode(data["de"]), self.tokenizer.encode(data["en"])
-        return encoded_en, encoded_de
+        encoded_de, _ = self.tokenizer.encode(data["de"])
+        encoded_en, decode_length = self.tokenizer.encode(data["en"])
+        return encoded_en, encoded_de, decode_length
 
 def get_data_loader(try_to_overfit):
     train = Wmt16Dataloader(train=True, try_to_overfit=try_to_overfit)
