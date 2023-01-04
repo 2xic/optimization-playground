@@ -18,6 +18,7 @@
 
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
+[https://arxiv.org/pdf/2106.04399.pdf](https://arxiv.org/pdf/2106.04399.pdf)
 
 ## NLP 
 [Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)

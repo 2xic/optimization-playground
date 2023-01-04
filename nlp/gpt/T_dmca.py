@@ -48,7 +48,7 @@ class AttentionLayer(nn.Module):
             q, k, v,
         )
         #return dot_attention
-        print(dot_attention.shape)
+     #s   print(dot_attention.shape)
         out = dot_attention.transpose(1, 2).reshape(x.shape)
         return self.out(out)
 
