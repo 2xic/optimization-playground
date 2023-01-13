@@ -3,6 +3,7 @@ import torch
 from T_dmca import AttentionLayer
 from vocab import Vocab
 from train_loop import train_loop
+from optimization_utils.logging.EpochRuns import EpochRuns
 
 def count_parameters(model):
     total_params = 0
@@ -39,6 +40,10 @@ class Model(nn.Module):
         ])
         self.lm_head = nn.Linear(self.embedding_dim * self.SEQ_SIZE, vocab_size, bias=False)
         self.log_softmax = nn.LogSoftmax(dim=1)
+        
+        self.epoch_information = EpochRuns(
+            "gpt-like"
+        )
 
     def forward(self, text, position):
         h_0 = self.word_embedding(text) + self.position_embedding(position)

@@ -3,6 +3,9 @@ import torch
 from vocab import Vocab
 from ClassicalAttention import ClassicalAttentionLayer
 from train_loop import train_loop
+from optimization_utils.logging.EpochRuns import EpochRuns
+from MutltiHeadAttention import MutltiHeadAttention
+from classical_attention_alt import Attention
 
 def count_parameters(model):
     total_params = 0
@@ -24,7 +27,7 @@ class Model(nn.Module):
 
 #        USE_ATTENTION = False
 
-        self.ATTENTION_SHAPE = 32 # 1024
+        self.ATTENTION_SHAPE = 1024 // 3
         self.LINEAR_SHAPE = self.embedding_dim * self.SEQ_SIZE
 
         self.word_embedding = nn.Embedding(
@@ -38,30 +41,39 @@ class Model(nn.Module):
         #    padding_idx=-1
         )
 
-        self.block_converter = nn.Linear(self.LINEAR_SHAPE, self.ATTENTION_SHAPE)
+        self.block_converter = lambda x: x# nn.Linear(self.LINEAR_SHAPE, self.ATTENTION_SHAPE)
 
         self.blocks = torch.nn.Sequential(*(
                 [
                     nn.Sigmoid(),
-                    ClassicalAttentionLayer(self.ATTENTION_SHAPE, self.ATTENTION_SHAPE),
-                ]             
+                    Attention(self.embedding_dim),
+                    #MutltiHeadAttention(self.ATTENTION_SHAPE, self.ATTENTION_SHAPE),                    
+                ]    
                 if USE_ATTENTION 
                 else [
                     nn.Sigmoid()
                 ]
             )
         )
-        self.lm_head = nn.Linear(self.ATTENTION_SHAPE, vocab_size, bias=False)
+        self.lm_head = nn.Linear(self.embedding_dim * self.SEQ_SIZE, vocab_size, bias=False)
         self.log_softmax = nn.LogSoftmax(dim=1)
+        
+        self.epoch_information = EpochRuns(
+            "classical_attention" if USE_ATTENTION else "non_attention_linear"
+        )
+
 
     def forward(self, text, position):
         #print("shape ", text.shape)
         h_0 = self.word_embedding(text) + self.position_embedding(position)
-        h_0 = h_0.reshape((h_0.shape[0], self.embedding_dim * self.SEQ_SIZE))
-        h_0 = torch.sigmoid(self.block_converter(h_0))
+     #   h_0 = h_0.reshape((h_0.shape[0], self.embedding_dim * self.SEQ_SIZE))
+     #   h_0 = torch.sigmoid(self.block_converter(h_0))
 
-        h_1 = self.blocks(h_0)
-        h_1 = torch.sigmoid(h_1)
+        h_1 = self.blocks(h_0).reshape((h_0.shape[0], self.embedding_dim * self.SEQ_SIZE))
+      #  print(h_0.shape)
+     #   print(h_1.shape)
+    #    exit(0)
+   #     h_1 = torch.sigmoid(h_1)
    #     print(text.shape)
   #      print(h_1.shape)
  #       print(self)

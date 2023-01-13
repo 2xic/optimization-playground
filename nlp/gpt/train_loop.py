@@ -39,7 +39,11 @@ def train_loop(
             loss_item += loss.item()
             optimizer.step()
         print(loss_item, epoch)
-      
+        model.epoch_information.log(
+            "train_loss", loss_item, 
+            epoch
+        )
+
     for i in [X[0], X[1], X[2]]:
         i = i.reshape((1, ) + i.shape)
         for index in range(0, 5):
@@ -50,5 +54,6 @@ def train_loop(
                 print([vocab.decode(i) for i in i[0, index:index+SEQ_SIZE].tolist()])
             print(f"{vocab.decode(next_token.item())} ({next_token.item()})")
         print("")
-
+    model.epoch_information.store()
+    
 
