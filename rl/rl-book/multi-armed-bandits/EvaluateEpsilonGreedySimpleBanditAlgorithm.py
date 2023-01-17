@@ -3,7 +3,7 @@ from envs.StaticBandit import StaticBandit
 from helper.Parameter import Parameter
 from helper.Plot import plot_average_reward, plot_optimal_action
 from SimpleBanditAgent import SimpleBanditAgent
-from action_policy.Epsilon import EpsilonGreedy
+from helpers.action_policy.Epsilon import EpsilonGreedy
 """
 Parameters
 """

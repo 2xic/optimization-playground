@@ -5,9 +5,11 @@ class SoftmaxSoftPolicy:
     def __init__(self) -> None:
         pass
 
-    def __call__(self, vector, legal_actions):
-        for i in legal_actions:
-            vector[i] = 0
+    def __call__(self, vector, legal_actions=None):
+        if type(legal_actions) == list:
+            for i in legal_actions:
+                vector[i] = 0
+        vector = np.asarray(vector)
         softmax = self.softmax(vector)
 
         action = np.random.choice(vector.shape[-1], 1, p=softmax)[0]

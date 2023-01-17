@@ -2,9 +2,8 @@ import numpy as np
 from envs.StaticBandit import StaticBandit
 from helper.Parameter import Parameter
 from helper.PlotParameter import PlotParameter
-from helper.Plot import plot_average_reward, plot_optimal_action
+from helper.Plot import plot_optimal_action
 from GradientBanditAgent import GradientBanditAgent
-from action_policy.Epsilon import EpsilonGreedy
 """
 Parameters
 """

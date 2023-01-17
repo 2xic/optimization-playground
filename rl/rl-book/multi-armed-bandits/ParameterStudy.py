@@ -3,8 +3,8 @@ from SimpleBanditAgent import SimpleBanditAgent
 from helper.ParameterStudy import ParameterStudy
 from helper.Parameter import Parameter
 from GradientBanditAgent import GradientBanditAgent
-from action_policy.Epsilon import EpsilonGreedy
-from action_policy.Ucb import UpperConfidenceBound
+from helpers.action_policy.Epsilon import EpsilonGreedy
+from helpers.action_policy.Ucb import UpperConfidenceBound
 import matplotlib.pyplot as plt
 from helper.RunningAverage import RunningAverage
 
