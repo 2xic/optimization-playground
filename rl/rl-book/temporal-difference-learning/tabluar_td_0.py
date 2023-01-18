@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 from helpers.State import State
 from helpers.action_policy.Epsilon import EpsilonGreedy
 import random
+from helpers.play_tic_tac_toe_vs_random_agent import play_tic_tac_toe
+import os
 
 class Tabluar_td_0:
     def __init__(self, action) -> None:
@@ -13,14 +15,12 @@ class Tabluar_td_0:
         self.epsilon = EpsilonGreedy(
             actions=-1,
             eps=1,
-            decay=0.01,
+            decay=0.999,
             search=self.search
         )
 
         self.is_training = True
-
         self.state_actions_reward_pairs = []
-        self.accumulated_reward = 0
 
     def eval(self):
         self.is_training = False
@@ -64,43 +64,6 @@ class Tabluar_td_0:
                     )
                     - self.v_s[state]
                 )
-        agent.accumulated_reward += soft_reward
-
 
 if __name__ == "__main__":
-    env = TicTacToe(n=4, is_auto_mode=True)
-    agent = Tabluar_td_0(env.action_space)
-    epochs = 5_000
-
-    agent_y = []
-    for epochs in range(epochs):
-        agent.train(env)
-        env.reset()
-
-        agent_y.append(agent.accumulated_reward)
-
-        if epochs % 1_000 == 0:
-            print(epochs)
-
-    random_y = []
-    for epochs in range(epochs):
-        while not env.done:
-            env.play(random.sample(env.legal_actions, k=1)[0])
-
-        reward = 0 if env.winner is None else env.winner
-        prev = 0 if(len(random_y) == 0) else random_y[-1]
-        accumulated = reward + prev
-
-        random_y.append(
-            accumulated
-        )
-
-        env.reset()
-
-        if epochs % 1_000 == 0:
-            print(epochs)
-
-    plt.plot(agent_y, label="agent")
-    plt.plot(random_y, label="random")
-    plt.legend(loc="upper left")
-    plt.show()
+    play_tic_tac_toe(Tabluar_td_0, dirname=os.path.dirname(os.path.abspath(__file__)))

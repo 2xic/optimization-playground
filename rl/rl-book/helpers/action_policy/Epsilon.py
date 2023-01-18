@@ -6,6 +6,7 @@ class EpsilonGreedy:
         self.actions = actions
         self.eps = eps
         self.decay = decay
+        self.eps_decay_limit = 0.01
         self.search = (lambda : random.randint(0, self.actions - 1))\
                                 if search is None\
                                 else search
@@ -18,5 +19,6 @@ class EpsilonGreedy:
             if self.eps == 0:
                 raise Exception("Something is wrong")
             # decay
-            self.eps *= self.decay # 0.01
+            if self.eps > self.eps_decay_limit:
+                self.eps *= self.decay
             return self.search()

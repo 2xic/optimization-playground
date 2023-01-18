@@ -15,3 +15,10 @@ class StateValue:
 
     def argmax(self):
         return np.argmax(self.np())
+
+    def max(self):
+        return self.value[self.argmax()]
+    
+    def __str__(self):
+        return str(self.value)
+        
