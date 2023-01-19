@@ -1,6 +1,6 @@
 import numpy as np
 from envs.StaticBandit import StaticBandit
-from helper.Parameter import Parameter
+from helpers.analysis.Parameter import Parameter
 from helper.Plot import plot_average_reward, plot_optimal_action
 from SimpleBanditAgent import SimpleBanditAgent
 from helpers.action_policy.Epsilon import EpsilonGreedy

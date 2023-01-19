@@ -2,54 +2,61 @@ from optimization_utils.envs.TicTacToe import TicTacToe
 import matplotlib.pyplot as plt
 import random
 import os
+from optimization_utils.diagnostics.Diagnostics import Diagnostics
+from helpers.analysis.Parameter import Parameter
 
+def play_tic_tac_toe(agent_instance, dirname="."):
+    EVALUATION_RUNS = 10
+    EPOCHS = 10_000
 
-def play_tic_tac_toe(agent, dirname="."):
-    env = TicTacToe(n=4, is_auto_mode=True)
-    agent = agent(env.action_space)
-    epochs = 10_000
+    env = TicTacToe(n=3, is_auto_mode=True)
+    agent_parameter = Parameter(None, None)
 
-    agent_y = []
-    accumulated = 0
-    for epochs in range(epochs):
-        agent.train(env)
-        reward = 0 if env.winner is None else env.winner
-        accumulated += reward
+    for _ in range(EVALUATION_RUNS):
+        agent = agent_instance(env.action_space)
+        agent_diagnostics = Diagnostics()
 
-        agent_y.append((
-            accumulated
-        ))
+        with agent_parameter as p:
+            accumulated_reward = 0
+            for epoch in range(EPOCHS):
+                agent.train(env)
+                reward = 0 if env.winner is None else env.winner
 
-        env.reset()
+                agent_diagnostics.reward(reward)
+                agent_diagnostics.track_raw_metric("eps", agent.epsilon.eps)
+                accumulated_reward += reward
 
-        if epochs % 1_000 == 0:
-            print(epochs)
+                p.add_reward(accumulated_reward)
 
-    random_y = []
-    accumulated = 0
-    for epochs in range(epochs):
-        while not env.done:
-            env.play(random.sample(env.legal_actions, k=1)[0])
+                env.reset()
 
-        reward = 0 if env.winner is None else env.winner
-        accumulated += reward
+                if epoch % 1_000 == 0:
+                    agent_diagnostics.print(epoch)
 
-        random_y.append(
-            accumulated
-        )
+    random_parameter = Parameter(None, None)
+    for _ in range(EVALUATION_RUNS):
+        with random_parameter as p:
+            accumulated_reward = 0
+            for epoch in range(EPOCHS):
+                while not env.done:
+                    env.play(random.sample(env.legal_actions, k=1)[0])
 
-        env.reset()
+                reward = 0 if env.winner is None else env.winner
+                accumulated_reward += reward
+                p.add_reward(accumulated_reward)
 
-        if epochs % 1_000 == 0:
-            print(epochs)
+                env.reset()
 
-    plt.plot(agent_y, label=agent.__class__.__name__)
-    plt.plot(random_y, label="Random actions")
-    plt.title("Accumulated reward for tic tac toe")
+                if epoch % 1_000 == 0:
+                    print(epoch)
+
+    plt.plot(agent_parameter.get_reward(), label=agent_instance.__name__)
+    plt.plot(random_parameter.get_reward(), label="Random actions")
+    plt.title(f"Average accumulated reward for tic tac toe (epochs {EPOCHS}, runs {EVALUATION_RUNS})")
     plt.legend(loc="upper left")
     plt.savefig(
         os.path.join(
             dirname,
-            agent.__class__.__name__ + '_tic_tac_toe.png'
+            agent_instance.__name__ + '_tic_tac_toe.png'
         )
     )

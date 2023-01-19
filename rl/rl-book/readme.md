@@ -32,9 +32,9 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 ### Chapter 6 - Temporal-Difference learning
 [Algorithm - Tabular TD (0) for estimating value_policy](./temportal-differene/tabluar_td_0.py)
 
-(todo) Algorithm - Sarsa (On-policy TD control) for estimating Q
+[Algorithm - Sarsa (On-policy TD control) for estimating](./temportal-differene/sarsa.py)
 
-(todo) Algorithm - Q-Learning (Off-policy TD-control) for estimating policy
+[Algorithm - Q-Learning (Off-policy TD-control) for estimating policy](./temportal-differene/q_learning.p)
 
 (todo) Figure ??? - Q-Learning vs Sarsa
 

@@ -18,7 +18,7 @@ class Sarsa:
         self.epsilon = EpsilonGreedy(
             actions=-1,
             eps=1,
-            decay=0.999,
+            decay=0.9999,
             search=self.search
         )
 
@@ -48,7 +48,7 @@ class Sarsa:
         gamma = 0.8
         self.env = env
 
-        action = self.get_action(env)
+        action = self.get_action()
         state = str(env.state)
         while not env.done:
             reward = env.play(action)
@@ -57,11 +57,7 @@ class Sarsa:
             next_action = -1
 
             if not env.done:
-                next_action = self.get_action(env)
-                #env.play(next_action)
-            #elif env.is_done():
-             #   for i in range(0, env.action_space):
-              #      self.q[state][i] = 0
+                next_action = self.get_action()
 
             if self.is_training:
                 self.q[state][action] += alpha * (

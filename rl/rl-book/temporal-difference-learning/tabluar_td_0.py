@@ -15,10 +15,9 @@ class Tabluar_td_0:
         self.epsilon = EpsilonGreedy(
             actions=-1,
             eps=1,
-            decay=0.999,
+            decay=0.9999,
             search=self.search
         )
-
         self.is_training = True
         self.state_actions_reward_pairs = []
 

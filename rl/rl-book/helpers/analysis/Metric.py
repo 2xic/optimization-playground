@@ -5,6 +5,9 @@ class Metric:
         self.N = []
         self.index = 0
 
+    def get_value(self):
+        return self.Q
+
     def add_value(self, value):
         if len(self.Q) <= self.index:
             self.Q.append(float(value))

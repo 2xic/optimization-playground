@@ -8,6 +8,9 @@ class Parameter:
             "reward": Metric("Reward")
         }
 
+    def get_reward(self):
+        return self.metrics["reward"].get_value()
+        
     def add_reward(self, value):
         self.metrics["reward"].add_value(value)
 
