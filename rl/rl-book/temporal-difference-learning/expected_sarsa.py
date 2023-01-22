@@ -1,5 +1,5 @@
 """
-Section 6.5 -> page 131
+Section 6.6 -> page 133
 """
 from optimization_utils.envs.TicTacToe import TicTacToe
 import matplotlib.pyplot as plt
@@ -8,17 +8,17 @@ from helpers.action_policy.Epsilon import EpsilonGreedy
 from helpers.action_policy.softmax_soft_policy import SoftmaxSoftPolicy
 import random
 from helpers.play_tic_tac_toe_vs_random_agent import play_tic_tac_toe
-from helpers.play_grid_world_vs_random_agent import play_grid_world
 from helpers.State import State
 import os
 
-class Q_learning:
-    def __init__(self, action, eps=1, decay=0.9999) -> None:
+
+class ExpectedSarsa:
+    def __init__(self, action) -> None:
         self.q = State(action)
         self.epsilon = EpsilonGreedy(
             actions=-1,
-            eps=eps,
-            decay=decay,
+            eps=1,
+            decay=0.9999,
             search=self.search
         )
         self.is_training = True
@@ -39,7 +39,6 @@ class Q_learning:
         gamma = 0.8
         self.env = env
 
-        sum_rewards = 0
         while not env.done:
             state = str(env.state)
             action = self.get_action()
@@ -48,12 +47,17 @@ class Q_learning:
             next_state = str(env.state)
 
             self.q[state][action] += alpha * (
-                reward + gamma * self.q[next_state].max() - 
-                            self.q[state][action]
+                reward + gamma * sum(
+                    [
+                        self.q[next_state][action] *
+                        self.softmax.softmax(self.q[next_state].np())[action]
+                        for action in range(env.action_space)
+                    ]
+                ) -
+                self.q[state][action]
             )
-            sum_rewards += reward
-        return sum_rewards
+
 
 if __name__ == "__main__":
-    play_tic_tac_toe(Q_learning, dirname=os.path.dirname(os.path.abspath(__file__)))
-    
+    play_tic_tac_toe(ExpectedSarsa, dirname=os.path.dirname(
+        os.path.abspath(__file__)))

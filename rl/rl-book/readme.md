@@ -30,17 +30,17 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 [Algorithm - Off-policy MC control, for estimating policy](./monte_carlo_methods/off_policy_mc_control.py)
 
 ### Chapter 6 - Temporal-Difference learning
-[Algorithm - Tabular TD (0) for estimating value_policy](./temportal-differene/tabluar_td_0.py)
+[Algorithm - Tabular TD (0) for estimating value_policy](./temporal-difference-learning/tabluar_td_0.py)
 
-[Algorithm - Sarsa (On-policy TD control) for estimating](./temportal-differene/sarsa.py)
+[Algorithm - Sarsa (On-policy TD control) for estimating](./temporal-difference-learning/sarsa.py)
 
-[Algorithm - Q-Learning (Off-policy TD-control) for estimating policy](./temportal-differene/q_learning.p)
+[Algorithm - Q-Learning (Off-policy TD-control) for estimating policy](./temporal-difference-learning/q_learning.py)
 
-(todo) Figure ??? - Q-Learning vs Sarsa
+[Figure on page 132 - Q-Learning vs Sarsa (does not match the book plot well currently)](./temporal-difference-learning/Q_learning_Sarsa_cliff_walking.png)
 
 (todo) Figure 6.3 - TD-Control performance
 
 (todo) Figure 6.5 - Comparison of Q-Learning and Double Q-Learning
 
-(todo) Algorithm - Double Q-Learning for estimating Q
+[Algorithm - Double Q-Learning for estimating Q](./temporal-difference-learning/double_q_learning.py)
 

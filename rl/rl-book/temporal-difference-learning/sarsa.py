@@ -1,5 +1,5 @@
 """
-Section 6.2 -> page 130
+Section 6.3 -> page 130
 """
 from optimization_utils.envs.TicTacToe import TicTacToe
 import matplotlib.pyplot as plt
@@ -13,12 +13,12 @@ from helpers.State import State
 import os
 
 class Sarsa:
-    def __init__(self, action) -> None:
+    def __init__(self, action, eps=1, decay=0.9999) -> None:
         self.q = State(action)
         self.epsilon = EpsilonGreedy(
             actions=-1,
-            eps=1,
-            decay=0.9999,
+            eps=eps,
+            decay=decay,
             search=self.search
         )
 
@@ -50,6 +50,7 @@ class Sarsa:
 
         action = self.get_action()
         state = str(env.state)
+        sum_rewards = 0
         while not env.done:
             reward = env.play(action)
 
@@ -66,6 +67,8 @@ class Sarsa:
                 )
             action = next_action
             state = next_state
+            sum_rewards += reward
+        return sum_rewards
 
 if __name__ == "__main__":
     play_tic_tac_toe(Sarsa, dirname=os.path.dirname(os.path.abspath(__file__)))

@@ -1,12 +1,14 @@
 # optimization playground
 
 
-| **Paper / Project**                                      | **Goal**                                                      | **Done ?**                                                                                                   |
-| -------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| **RL**                                                   |                                                               |                                                                                                              |
-| [Rl-book](http://incompleteideas.net/book/the-book.html) | Reproduce plots, and implement methods                        | WIP - [rl/rl-book](https://github.com/2xic/optimization-playground/tree/main/rl/rl-book/multi-armed-bandits) |
-| **NLP**                                                  |                                                               |                                                                                                              |
-| GPT                                                      | Implement the GPT model, and train it on tweets for embedding | WIP - nlp/gpt                                                                                                |
+| **Paper / Project**                                      | **Goal**                                                                   | **Location**                | **Status** |
+| -------------------------------------------------------- | -------------------------------------------------------------------------- | --------------------------- | ---------- |
+| **RL**                                                   |                                                                            |                             |            |
+| [Rl-book](http://incompleteideas.net/book/the-book.html) | Reproduce plots, and implement methods                                     | [rl/rl-book](./rl/rl-book/) | WIP        |
+| **NLP**                                                  |                                                                            |                             |            |
+| GPT                                                      | Look at components for the GPT model, and train it on tweets for embedding | [nlp/gpt](.nlp/gpt)         | Deadline   |
+| **CV**                                                   |                                                                            |                             |            |
+| [CLIP](https://openai.com/blog/clip/)                    | Look at components for the CLIP model, and create a mvp model              | todo                        | todo       |
 
 
 ### Reflection from 2022
