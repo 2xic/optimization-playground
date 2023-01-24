@@ -9,8 +9,6 @@ data_transform = transforms.Compose([
     transforms.RandomResizedCrop(512),
     transforms.RandomHorizontalFlip(),
     transforms.ToTensor(),
-#    transforms.Normalize(mean=[0.485, 0.456, 0.406],
- #                           std=[0.229, 0.224, 0.225])
 ])
 
 path = os.path.join(
@@ -21,7 +19,7 @@ path = os.path.join(
 os.makedirs(path, exist_ok=True)
 
 class Flickr8Parser(Dataset):
-    def __init__(self) -> None:
+    def __init__(self, max_dataset_size=50) -> None:
         image_caption = defaultdict(list)
         self.dataset = []
         with open(os.path.join(path, "Flicker8k_Dataset/Flickr8k.lemma.token.txt"), "r") as file:
@@ -33,8 +31,8 @@ class Flickr8Parser(Dataset):
                     self.dataset.append(
                         [file_name, image_caption[-1]]
                     )
-        self.dataset = self.dataset[:25]
-    
+        self.dataset = self.dataset[:max_dataset_size]
+
     def get_path(self, filename):
         return os.path.join(
                 path, "Flicker8k_Dataset", filename
@@ -51,5 +49,3 @@ class Flickr8Parser(Dataset):
             )),
             text
         )
-
-

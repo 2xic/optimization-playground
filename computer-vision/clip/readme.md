@@ -1,4 +1,6 @@
-# Contrastive language image- pre-training (CLIP) 
+# Contrastive language image- pre-training (CLIP)
+
+![Example](./example.png)
 
 # [Blog post](https://openai.com/blog/clip/)
 The network does not directly optimize for a given benchmark, and as a result it gains improved capabilites over other exissting methods. It' has shown ot be capable of "zero-shot" learning like with GPT models.
