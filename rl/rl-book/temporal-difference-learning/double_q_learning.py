@@ -24,13 +24,15 @@ class Double_Q_learning:
         )
         self.is_training = True
         self.softmax = SoftmaxSoftPolicy()
+        self.alpha = 0.4
+        self.gamma = 0.8
 
     def search(self):
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
         return self.softmax((
-            self.q_1[str(self.env)].np() + 
+            self.q_1[str(self.env)].np() +
             self.q_2[str(self.env)].np()
         ), legal_actions=self.env.legal_actions)
 
@@ -39,8 +41,6 @@ class Double_Q_learning:
         return action
 
     def train(self, env: TicTacToe):
-        alpha = 0.4
-        gamma = 0.8
         self.env = env
 
         sum_rewards = 0
@@ -52,19 +52,19 @@ class Double_Q_learning:
             next_state = str(env.state)
 
             if 0.5 < np.random.rand():
-                self.q_1[state][action] += alpha * (
-                    reward + gamma * 
+                self.q_1[state][action] += self.alpha * (
+                    reward + self.gamma *
                     self.q_2[next_state][
                         self.q_1[next_state].argmax()
-                    ] - 
+                    ] -
                     self.q_1[state][action]
                 )
             else:
-                self.q_2[state][action] += alpha * (
-                    reward + gamma * 
+                self.q_2[state][action] += self.alpha * (
+                    reward + self.gamma *
                     self.q_1[next_state][
                         self.q_2[next_state].argmax()
-                    ] - 
+                    ] -
                     self.q_2[state][action]
                 )
             sum_rewards += reward
@@ -72,4 +72,3 @@ class Double_Q_learning:
 
 if __name__ == "__main__":
     play_tic_tac_toe(Double_Q_learning, dirname=os.path.dirname(os.path.abspath(__file__)))
-    

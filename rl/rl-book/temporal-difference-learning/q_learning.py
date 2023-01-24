@@ -23,6 +23,8 @@ class Q_learning:
         )
         self.is_training = True
         self.softmax = SoftmaxSoftPolicy()
+        self.alpha = 0.8
+        self.gamma = 0.8
 
     def search(self):
         return random.sample(self.env.legal_actions, k=1)[0]
@@ -35,8 +37,6 @@ class Q_learning:
         return action
 
     def train(self, env: TicTacToe):
-        alpha = 0.8
-        gamma = 0.8
         self.env = env
 
         sum_rewards = 0
@@ -47,8 +47,8 @@ class Q_learning:
 
             next_state = str(env.state)
 
-            self.q[state][action] += alpha * (
-                reward + gamma * self.q[next_state].max() - 
+            self.q[state][action] += self.alpha * (
+                reward + self.gamma * self.q[next_state].max() -
                             self.q[state][action]
             )
             sum_rewards += reward
@@ -56,4 +56,4 @@ class Q_learning:
 
 if __name__ == "__main__":
     play_tic_tac_toe(Q_learning, dirname=os.path.dirname(os.path.abspath(__file__)))
-    
+

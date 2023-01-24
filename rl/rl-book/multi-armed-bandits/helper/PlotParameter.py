@@ -1,4 +1,4 @@
-from .Parameter import Parameter
+from helpers.analysis.Parameter import Parameter
 
 class PlotParameter:
     def __init__(self, parameter: Parameter, config={}) -> None:

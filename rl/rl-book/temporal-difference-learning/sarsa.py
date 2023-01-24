@@ -27,6 +27,8 @@ class Sarsa:
         self.state_actions_reward_pairs = []
         self.accumulated_reward = 0
         self.softmax = SoftmaxSoftPolicy()
+        self.alpha = 0.7
+        self.gamma = 0.8
 
     def eval(self):
         self.is_training = False
@@ -44,8 +46,6 @@ class Sarsa:
         )
 
     def train(self, env: TicTacToe):
-        alpha = 0.7
-        gamma = 0.8
         self.env = env
 
         action = self.get_action()
@@ -61,8 +61,8 @@ class Sarsa:
                 next_action = self.get_action()
 
             if self.is_training:
-                self.q[state][action] += alpha * (
-                    reward + gamma * self.q[next_state][next_action] - 
+                self.q[state][action] += self.alpha * (
+                    reward + self.gamma * self.q[next_state][next_action] -
                                 self.q[state][action]
                 )
             action = next_action
@@ -73,4 +73,4 @@ class Sarsa:
 if __name__ == "__main__":
     play_tic_tac_toe(Sarsa, dirname=os.path.dirname(os.path.abspath(__file__)))
     #play_grid_world(Sarsa, dirname=os.path.dirname(os.path.abspath(__file__)))
-    
+

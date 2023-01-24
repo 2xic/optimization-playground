@@ -23,6 +23,8 @@ class ExpectedSarsa:
         )
         self.is_training = True
         self.softmax = SoftmaxSoftPolicy()
+        self.alpha = 0.8
+        self.gamma = 0.8
 
     def search(self):
         return random.sample(self.env.legal_actions, k=1)[0]
@@ -35,10 +37,8 @@ class ExpectedSarsa:
         return action
 
     def train(self, env: TicTacToe):
-        alpha = 0.8
-        gamma = 0.8
         self.env = env
-
+        sum_reward = 0
         while not env.done:
             state = str(env.state)
             action = self.get_action()
@@ -46,8 +46,8 @@ class ExpectedSarsa:
 
             next_state = str(env.state)
 
-            self.q[state][action] += alpha * (
-                reward + gamma * sum(
+            self.q[state][action] += self.alpha * (
+                reward + self.gamma * sum(
                     [
                         self.q[next_state][action] *
                         self.softmax.softmax(self.q[next_state].np())[action]
@@ -56,6 +56,9 @@ class ExpectedSarsa:
                 ) -
                 self.q[state][action]
             )
+            sum_reward += reward
+
+        return sum_reward
 
 
 if __name__ == "__main__":

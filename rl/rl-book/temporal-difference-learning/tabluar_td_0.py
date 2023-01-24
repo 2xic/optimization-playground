@@ -20,6 +20,8 @@ class Tabluar_td_0:
         )
         self.is_training = True
         self.state_actions_reward_pairs = []
+        self.alpha = 0.4
+        self.gamma = 0.8
 
     def eval(self):
         self.is_training = False
@@ -38,9 +40,8 @@ class Tabluar_td_0:
         return list(max(self.query_state_reward(self.env), key=lambda x: x[1]))[0]
 
     def train(self, env: TicTacToe):
-        alpha = 0.4
-        gamma = 0.8
         self.env = env
+        sum_reward = 0
         while not env.done:
             state = str(env.state)
 
@@ -50,19 +51,22 @@ class Tabluar_td_0:
                     self
                 )
 
-            env.play(action)
+            env_reward = env.play(action)
             next_state = str(env.state)
 
             soft_reward = env.winner if env.winner is not None else 0
             reward = soft_reward * 10 if env.winner is not None else -1
 
             if self.is_training:
-                self.v_s[state] += alpha * (
+                self.v_s[state] += self.alpha * (
                     reward + (
-                        gamma * self.v_s[next_state]
+                        self.gamma * self.v_s[next_state]
                     )
                     - self.v_s[state]
                 )
+            sum_reward += env_reward
+
+        return sum_reward
 
 if __name__ == "__main__":
     play_tic_tac_toe(Tabluar_td_0, dirname=os.path.dirname(os.path.abspath(__file__)))
