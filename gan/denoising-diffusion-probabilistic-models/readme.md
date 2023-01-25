@@ -16,3 +16,5 @@ The training algorithm is described as
 
 [  The Annotated Diffusion Model ](https://huggingface.co/blog/annotated-diffusion)
 
+[Generating images with DDPMs: A PyTorch Implementation]( https://medium.com/mlearning-ai/enerating-images-with-ddpms-a-pytorch-implementation-cef5a2ba8cb1  )
+- Looked at this, but still does not have convergence :/
