@@ -27,6 +27,11 @@
 ## GAN
 [Multi-Adversarial Variational Autoencoder Networks](https://arxiv.org/pdf/1906.06430.pdf)
 
+### DALE ? 
+I have CLIP, and I want some DAL-E like model
+- https://arxiv.org/pdf/2204.08583.pdf <- VQ-GAN+CLIP
+  - https://medium.com/nightcafe-creator/vqgan-clip-tutorial-a411402cf3ad
+
 ## NN architecture
 [https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)
 

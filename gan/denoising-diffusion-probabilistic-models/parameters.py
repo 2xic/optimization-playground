@@ -10,88 +10,46 @@ Described mostly in section 3.2
 
 
 # Timesteps between full noise and image
-T = 1000
-
+T = 1_000
 B_0 = 10 ** -4
-B_T = 0.2
+B_T = 0.02
 size = 28
-
-loc = torch.zeros((size, size), device=device)
-scale_diag = torch.ones((size, size), device=device)
 
 """
 The beta, lambda terms can just be precomputed and looked up
 """
-betas = torch.linspace(B_0, B_T, T + 1, device=device)
+betas = torch.linspace(B_0, B_T, T, device=device)
 alphas = 1 - betas
 alpha_bars = torch.tensor([torch.prod(alphas[:i + 1]) for i in range(len(alphas))], device=device)
 
 
 # Eq. 4
-def qt_mean(X_0, t):
-    single_shape = alpha_bars[t]
-    single_shape = torch.concat((
-        single_shape,
-    ) * 28 * 28, dim=1).reshape((X_0.shape)).to(device)
-
-    mean = single_shape ** 0.5 * X_0
-    var = 1 - single_shape
-
-    return mean, var
-    
 def qt_sample(X_0, t, noise):
-    mean, var = qt_mean(X_0, t)
+    a_bar = alpha_bars[t].reshape(X_0.shape[0], 1, 1, 1)
+    mean = (a_bar.sqrt()) * X_0
+    sigma = ((1 - a_bar).sqrt()) * noise
 
     return (
-        mean + (var ** 0.5) * noise
+        mean + sigma
     )
 
-# Eq. 7
-def mu(x_0, t, x_t):
-    first = (
-        math.sqrt(
-            alpha_bars[(t - 1)]
-        ) * betas[t] /
-        (1 - alpha_bars[(t)])
-    ) * x_0
-    second = (
-        (alphas[t]) ** 0.5 * 
-        (1 - alphas[(t - 1)])
-    ) / (1 - alphas[(t)]) * x_t
+def model_sample(predicted_noise, x_t, single_t, shape):
+    alpha_bar = alpha_bars[single_t]
+    alpha = alphas[single_t]
 
-    return (
-        first + second
-    )
+    fraction = 1 / (alpha.sqrt() )
 
-def sample(eps, x_t, t, z):
-    single_shape = alpha_bars[t]
-    single_shape = torch.concat((
-        single_shape,
-    ) * 28 * 28, dim=1).reshape((eps.shape)).to(device)
-
-    single_shape_alphas = alphas[t]
-    single_shape_alphas = torch.concat((
-        single_shape_alphas,
-    ) * 28 * 28, dim=1).reshape((eps.shape)).to(device)
-
-    fraction = 1 / (single_shape_alphas) ** 0.5
     eps_fraction = (
-        (1 - single_shape_alphas) / 
-        # todo -> should this zero out ? 
-        (1 - single_shape) ** 0.5 
+        (1 - alpha) /
+        (1 - alpha_bar).sqrt()
     )
-    #print(fraction.shape)
-    #print(eps.shape)
-    #print(eps_fraction.shape)
-    mean = fraction * (x_t - eps * eps_fraction )
+    mean = fraction * (x_t - eps_fraction * predicted_noise )
 
-    single_shape_betas = betas[t]
-    single_shape_betas = torch.concat((
-        single_shape_betas,
-    ) * 28 * 28, dim=1).reshape((eps.shape)).to(device)
+    if single_t > 0:
+        beta = betas[single_t]
+        var = beta.sqrt()
 
-    var = single_shape_betas ** 0.5 * z
-
-    return (
-        mean + var 
-    )
+        Z = torch.randn(shape, device=device)
+        return mean + var * Z
+    else:
+        return mean

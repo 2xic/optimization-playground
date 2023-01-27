@@ -1,78 +1,150 @@
 """
-https://amaarora.github.io/2020/09/13/unet.html
--> Thank you sir.
+Same as https://github.com/BrianPulfer/PapersReimplementations/blob/main/ddpm/models.py
+
+Thank you sir.
 """
 
-import torch.nn as nn
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
 
-class Block(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super().__init__()
-        self.conv1 = nn.Conv2d(in_ch, out_ch, 1)
-        self.relu  = nn.ReLU()
-        self.conv2 = nn.Conv2d(out_ch, out_ch, 1)
-    
+def sinusoidal_embedding(n, d):
+    # Returns the standard positional embedding
+    embedding = torch.tensor([[i / 10_000 ** (2 * j / d) for j in range(d)] for i in range(n)])
+    sin_mask = torch.arange(0, n, 2)
+
+    embedding[sin_mask] = torch.sin(embedding[sin_mask])
+    embedding[1 - sin_mask] = torch.cos(embedding[sin_mask])
+
+    return embedding
+
+class MyBlock(nn.Module):
+    def __init__(self, shape, in_c, out_c, kernel_size=3, stride=1, padding=1, activation=None, normalize=True):
+        super(MyBlock, self).__init__()
+        self.ln = nn.LayerNorm(shape)
+        self.conv1 = nn.Conv2d(in_c, out_c, kernel_size, stride, padding)
+        self.conv2 = nn.Conv2d(out_c, out_c, kernel_size, stride, padding)
+        self.activation = nn.SiLU() if activation is None else activation
+        self.normalize = normalize
+
     def forward(self, x):
-        return self.conv2(self.relu(self.conv1(x)))
-
-
-class Encoder(nn.Module):
-    def __init__(self, chs=(1,64,128,256,512)):
-        super().__init__()
-        self.enc_blocks = nn.ModuleList([Block(chs[i], chs[i+1]) for i in range(len(chs)-1)])
-        self.pool       = nn.MaxPool2d(2)
-        self.fc_t = nn.Embedding(1001, 64 * 28 * 28)
-
-    
-    def forward(self, x, t):
-        ftrs = []
-        for index, block in enumerate(self.enc_blocks):
-            x = block(x)
-            if index == 0:
-                x += torch.tanh(self.fc_t(t)).reshape((x.shape[0], 64, 28, 28))
-            ftrs.append(x)
-            x = self.pool(x)
-        return ftrs
-
-
-class Decoder(nn.Module):
-    def __init__(self, chs=(512, 256, 128, 64)):
-        super().__init__()
-        self.chs         = chs
-        self.upconvs    = nn.ModuleList([nn.ConvTranspose2d(chs[i], chs[i+1], 2, 2) for i in range(len(chs)-1)])
-        self.dec_blocks = nn.ModuleList([Block(chs[i], chs[i+1]) for i in range(len(chs)-1)]) 
-        
-    def forward(self, x, encoder_features):
-        for i in range(len(self.chs)-1):
-            x        = self.upconvs[i](x)
-            enc_ftrs = self.crop(encoder_features[i], x)
-            x        = torch.cat([x, enc_ftrs], dim=1)
-            x        = self.dec_blocks[i](x)
-        return x
-    
-    def crop(self, enc_ftrs, x):
-        _, _, H, W = x.shape
-        enc_ftrs   = torchvision.transforms.CenterCrop([H, W])(enc_ftrs)
-        return enc_ftrs
+        out = self.ln(x) if self.normalize else x
+        out = self.conv1(out)
+        out = self.activation(out)
+        out = self.conv2(out)
+        out = self.activation(out)
+        return out
 
 
 class UNet(nn.Module):
-    def __init__(self, enc_chs=(1,64,128,256,512), dec_chs=(512, 256, 128, 64), num_class=1, retain_dim=False, out_sz=(28,28)):
-        super().__init__()
-        self.encoder     = Encoder(enc_chs)
-        self.decoder     = Decoder(dec_chs)
-        self.head        = nn.Conv2d(dec_chs[-1], num_class, 1)
-        self.retain_dim  = retain_dim
-        self.out_sz = out_sz
+    def __init__(self, n_steps=1000, time_emb_dim=100):
+        super(UNet, self).__init__()
+
+        # Sinusoidal embedding
+        self.time_embed = nn.Embedding(n_steps, time_emb_dim)
+        self.time_embed.weight.data = sinusoidal_embedding(n_steps, time_emb_dim)
+        self.time_embed.requires_grad_(False)
+
+        # First half
+        self.te1 = self._make_te(time_emb_dim, 1)
+        self.b1 = nn.Sequential(
+            MyBlock((1, 28, 28), 1, 10),
+            MyBlock((10, 28, 28), 10, 10),
+            MyBlock((10, 28, 28), 10, 10)
+        )
+        self.down1 = nn.Conv2d(10, 10, 4, 2, 1)
+
+        self.te2 = self._make_te(time_emb_dim, 10)
+        self.b2 = nn.Sequential(
+            MyBlock((10, 14, 14), 10, 20),
+            MyBlock((20, 14, 14), 20, 20),
+            MyBlock((20, 14, 14), 20, 20)
+        )
+        self.down2 = nn.Conv2d(20, 20, 4, 2, 1)
+
+        self.te3 = self._make_te(time_emb_dim, 20)
+        self.b3 = nn.Sequential(
+            MyBlock((20, 7, 7), 20, 40),
+            MyBlock((40, 7, 7), 40, 40),
+            MyBlock((40, 7, 7), 40, 40)
+        )
+        self.down3 = nn.Sequential(
+            nn.Conv2d(40, 40, 2, 1),
+            nn.SiLU(),
+            nn.Conv2d(40, 40, 4, 2, 1)
+        )
+
+        # Bottleneck
+        self.te_mid = self._make_te(time_emb_dim, 40)
+        self.b_mid = nn.Sequential(
+            MyBlock((40, 3, 3), 40, 20),
+            MyBlock((20, 3, 3), 20, 20),
+            MyBlock((20, 3, 3), 20, 40)
+        )
+
+        # Second half
+        self.up1 = nn.Sequential(
+            nn.ConvTranspose2d(40, 40, 4, 2, 1),
+            nn.SiLU(),
+            nn.ConvTranspose2d(40, 40, 2, 1)
+        )
+
+        self.te4 = self._make_te(time_emb_dim, 80)
+        self.b4 = nn.Sequential(
+            MyBlock((80, 7, 7), 80, 40),
+            MyBlock((40, 7, 7), 40, 20),
+            MyBlock((20, 7, 7), 20, 20)
+        )
+
+        self.up2 = nn.ConvTranspose2d(20, 20, 4, 2, 1)
+        self.te5 = self._make_te(time_emb_dim, 40)
+        self.b5 = nn.Sequential(
+            MyBlock((40, 14, 14), 40, 20),
+            MyBlock((20, 14, 14), 20, 10),
+            MyBlock((10, 14, 14), 10, 10)
+        )
+
+        self.up3 = nn.ConvTranspose2d(10, 10, 4, 2, 1)
+        self.te_out = self._make_te(time_emb_dim, 20)
+        self.b_out = nn.Sequential(
+            MyBlock((20, 28, 28), 20, 10),
+            MyBlock((10, 28, 28), 10, 10),
+            MyBlock((10, 28, 28), 10, 10, normalize=False)
+        )
+
+        self.conv_out = nn.Conv2d(10, 1, 3, 1, 1)
 
     def forward(self, x, t):
-        enc_ftrs = self.encoder(x, t)
-        out      = self.decoder(enc_ftrs[::-1][0], enc_ftrs[::-1][1:])
-        out      = self.head(out)
-#        out      = torch.nn.SiLU()(self.head(out))
-       # print(out.shape)
-        out = F.interpolate(out, self.out_sz)
+        #print(x.shape)
+        #print(t.shape)
+        #print(x.dtype)
+        #print(t.dtype)
+
+        # x is (N, 2, 28, 28) (image with positional embedding stacked on channel dimension)
+        t = self.time_embed(t)
+        n = len(x)
+        out1 = self.b1(x + self.te1(t).reshape(n, -1, 1, 1))  # (N, 10, 28, 28)
+        out2 = self.b2(self.down1(out1) + self.te2(t).reshape(n, -1, 1, 1))  # (N, 20, 14, 14)
+        out3 = self.b3(self.down2(out2) + self.te3(t).reshape(n, -1, 1, 1))  # (N, 40, 7, 7)
+
+        out_mid = self.b_mid(self.down3(out3) + self.te_mid(t).reshape(n, -1, 1, 1))  # (N, 40, 3, 3)
+
+        out4 = torch.cat((out3, self.up1(out_mid)), dim=1)  # (N, 80, 7, 7)
+        out4 = self.b4(out4 + self.te4(t).reshape(n, -1, 1, 1))  # (N, 20, 7, 7)
+
+        out5 = torch.cat((out2, self.up2(out4)), dim=1)  # (N, 40, 14, 14)
+        out5 = self.b5(out5 + self.te5(t).reshape(n, -1, 1, 1))  # (N, 10, 14, 14)
+
+        out = torch.cat((out1, self.up3(out5)), dim=1)  # (N, 20, 28, 28)
+        out = self.b_out(out + self.te_out(t).reshape(n, -1, 1, 1))  # (N, 1, 28, 28)
+
+        out = self.conv_out(out)
+
         return out
+
+    def _make_te(self, dim_in, dim_out):
+        return nn.Sequential(
+            nn.Linear(dim_in, dim_out),
+            nn.SiLU(),
+            nn.Linear(dim_out, dim_out)
+        )
