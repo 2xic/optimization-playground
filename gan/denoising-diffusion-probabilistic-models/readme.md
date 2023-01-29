@@ -18,9 +18,9 @@ The training algorithm is described as
 
 ### Links
 
-[ What are Diffusion Models? ](https://lilianweng.github.io/posts/2021-07-11-diffusion-models/)
+[What are Diffusion Models ?](https://lilianweng.github.io/posts/2021-07-11-diffusion-models/)
 
-[  The Annotated Diffusion Model ](https://huggingface.co/blog/annotated-diffusion)
+[The Annotated Diffusion Model](https://huggingface.co/blog/annotated-diffusion)
 
 [Generating images with DDPMs: A PyTorch Implementation]( https://medium.com/mlearning-ai/enerating-images-with-ddpms-a-pytorch-implementation-cef5a2ba8cb1  )
 

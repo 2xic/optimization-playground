@@ -1,8 +1,8 @@
 import numpy as np
 
 class StateValue:
-    def __init__(self, n) -> None:
-        self.value = [np.random.rand(), ] * n
+    def __init__(self, n, initial_value) -> None:
+        self.value = [initial_value(), ] * n
 
     def __setitem__(self, key, value):
         self.value[key] = value

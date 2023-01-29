@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from helpers.analysis.Parameter import Parameter
 from multiprocessing import Process, Lock, Queue
 import os
+from helpers.plot_compress import savefig
 
 SAMPELS = 100
 EPOCHS = 500
@@ -45,23 +46,30 @@ def get_agent_data(lock, agent, queue):
         "label": agent.__name__
     })
 
-lock = Lock()
-processes = []
-queue = Queue()
-for agent in [Double_Q_learning, Q_learning, Sarsa, Tabluar_td_0, ExpectedSarsa]:
-    processes.append(Process(target=get_agent_data, args=(lock, agent, queue)))
-    processes[-1].start()
+def evaluate_agents(agents, name):
+    lock = Lock()
+    processes = []
+    queue = Queue()
+    for agent in agents:
+        processes.append(Process(target=get_agent_data, args=(lock, agent, queue)))
+        processes[-1].start()
 
-for i in processes:
-    i.join()
-    item = queue.get()
-    plt.plot(item["x"], item["y"], label=item["label"])
+    for i in processes:
+        i.join()
+        item = queue.get()
+        plt.plot(item["x"], item["y"], label=item["label"])
 
-plt.legend(loc="upper left")
-plt.ylabel("Reward")
-plt.xlabel("Alpha")
-plt.title('Algorithms alhpa parameter')
-plt.savefig(os.path.join(
-    os.path.dirname(__file__),
-    'alpha_parameter_search.png'
-))
+    plt.legend(loc="upper left")
+    plt.ylabel("Reward")
+    plt.xlabel("Alpha")
+    plt.title('Algorithms alpha parameter')
+    savefig(os.path.join(
+        os.path.dirname(__file__),
+        name
+    ))
+
+if __name__ == "__main__":
+    evaluate_agents(
+        [Double_Q_learning, Q_learning, Sarsa, Tabluar_td_0, ExpectedSarsa],
+        'alpha_parameter_search.png'
+    )

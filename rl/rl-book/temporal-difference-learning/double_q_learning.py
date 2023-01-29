@@ -9,13 +9,15 @@ from helpers.action_policy.softmax_soft_policy import SoftmaxSoftPolicy
 import random
 from helpers.play_tic_tac_toe_vs_random_agent import play_tic_tac_toe
 from helpers.State import State
+from helpers.StateValue import StateValue
+
 import os
 import numpy as np
 
 class Double_Q_learning:
-    def __init__(self, action, eps=1, decay=0.9999) -> None:
-        self.q_1 = State(action)
-        self.q_2 = State(action)
+    def __init__(self, action, eps=1, decay=0.9999, initial_value=np.random.rand) -> None:
+        self.q_1 = State(action, lambda n: StateValue(n, initial_value=initial_value))
+        self.q_2 = State(action, lambda n: StateValue(n, initial_value=initial_value))
         self.epsilon = EpsilonGreedy(
             actions=-1,
             eps=eps,

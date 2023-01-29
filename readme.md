@@ -1,15 +1,15 @@
 # optimization playground
 
 
-| **Paper / Project**                                                                   | **Goal**                                                                   | **Location**                                    | **Status** |
-| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------- | ---------- |
-| **RL**                                                                                |                                                                            |                                                 |            |
-| [Rl-book](http://incompleteideas.net/book/the-book.html)                              | Reproduce plots, and implement methods                                     | [rl/rl-book](./rl/rl-book/)                     | WIP        |
-| **NLP**                                                                               |                                                                            |                                                 |            |
-| GPT                                                                                   | Look at components for the GPT model, and train it on tweets for embedding | [nlp/gpt](.nlp/gpt)                             | Deadline   |
-| **CV**                                                                                |                                                                            |                                                 |            |
-| [CLIP](https://openai.com/blog/clip/)                                                 | Look at components for the CLIP model, and create a mvp model              | [computer-vision/clip](./computer-vision/clip/) | Done       |
-| [Diffusion Models Beat GANs on Image Synthesis](https://arxiv.org/pdf/2105.05233.pdf) | Be able to generate MNIST digit                                            | todo                                            | todo       |
+| **Paper / Project**                                                                   | **Goal**                                                                   | **Location**                                                                                   | **Status** |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---------- |
+| **RL**                                                                                |                                                                            |                                                                                                |            |
+| [Rl-book](http://incompleteideas.net/book/the-book.html)                              | Reproduce plots, and implement methods                                     | [rl/rl-book](./rl/rl-book/)                                                                    | WIP        |
+| **NLP**                                                                               |                                                                            |                                                                                                |            |
+| GPT                                                                                   | Look at components for the GPT model, and train it on tweets for embedding | [nlp/gpt](.nlp/gpt)                                                                            | Deadline   |
+| **CV**                                                                                |                                                                            |                                                                                                |            |
+| [CLIP](https://openai.com/blog/clip/)                                                 | Look at components for the CLIP model, and create a mvp model              | [computer-vision/clip](./computer-vision/clip/)                                                | Done       |
+| [Diffusion Models Beat GANs on Image Synthesis](https://arxiv.org/pdf/2105.05233.pdf) | Be able to generate MNIST digit                                            | [gan/denoising-diffusion-probabilistic-models](./gan/denoising-diffusion-probabilistic-models) | Done       |
 
 
 ### Reflection from 2022

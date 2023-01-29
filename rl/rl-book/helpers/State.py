@@ -1,7 +1,8 @@
 from .StateValue import StateValue
+import numpy as np
 
 class State:
-    def __init__(self, n, value_constructor=lambda n: StateValue(n)) -> None:
+    def __init__(self, n, value_constructor=lambda n: StateValue(n, initial_value=np.random.rand)) -> None:
         self.state = {}
         self.value_constructor = value_constructor
         self.n = n
