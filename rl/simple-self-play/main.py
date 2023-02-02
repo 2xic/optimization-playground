@@ -38,7 +38,7 @@ def play(model: SimpleModel, epsilon: EpsilonGreedyManual, optimizer: torch.opti
 
 
     """
-    Hm, this simple way does nto seem to convergence.
+    Hm, this simple way does nto seem to converge.
     """
     games_sorted = sorted(games, key=lambda x: x.score)
     bad_games = games_sorted[:GAMES_EACH_EPOCH // 2]

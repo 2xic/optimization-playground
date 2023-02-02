@@ -23,3 +23,5 @@ model.pkt
 __pycache__
 .vscode
 .vscode/settings.json
+upload_lambda.py
+.lambda_cli_ip

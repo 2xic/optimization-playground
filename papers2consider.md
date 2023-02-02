@@ -12,7 +12,6 @@
 
 ## Self supervised 
 [Efficient Self-supervised Learning with Contextualized Target Representations for Vision, Speech and Language](https://arxiv.org/pdf/2212.07525.pdf)
-    - [Data2vec 2.0: Highly efficient self-supervised learning for vision, speech and text ](https://ai.facebook.com/blog/ai-self-supervised-learning-data2vec/?utm_source=pocket_reader)
 
 ### Computer vision
 [What You Get Is What You See: A Visual Markup Decompiler](https://arxiv.org/pdf/1609.04938v1.pdf)

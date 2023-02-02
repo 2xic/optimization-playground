@@ -10,5 +10,6 @@
 #### Some lessons I have learned
 - Visualize everything, it's always easier to spot mistakes this way
 - Test what is possible to test and it hard to visualize
-
+- Make it easy to get GPUs
+  - https://github.com/2xic/lambda-labs-api
 

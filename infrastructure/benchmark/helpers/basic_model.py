@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class Net(nn.Module):
+class LinearModel(nn.Module):
     def __init__(self, state_size):
         super().__init__()
         self.fc1 = nn.Linear(state_size, 256)

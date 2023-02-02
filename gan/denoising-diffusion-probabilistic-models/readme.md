@@ -37,5 +37,5 @@ Another thing is the iteration speed, it took way to long to test the mode. Even
 -> This has to be improved.
 
 Bugs that slowed down things a lot
-- One bug was in one of the parameters causing the model to not convergence correctly.
+- One bug was in one of the parameters causing the model to not converge correctly.
 - Another bug that hunted me typing `rand` instead of `randn`. Ton of debugging went into this silly bug!!!

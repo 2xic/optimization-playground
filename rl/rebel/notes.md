@@ -71,7 +71,7 @@ Some notes from video https://www.youtube.com/watch?v=mCldyXOYNok
     - Estimate the value at the leaf nodes
     - "backprop" the value 
     - play until end of game, train on the tree
-  - Thanks to random exploration it should be able to get a good convergence of the true value of a state
+  - Thanks to random exploration it should be able to get a good converge of the true value of a state
 - Assume that the policy is known
   - v(ROck) is not well-defined
   - V([0.8, 0.1, 0.1]) = -0.6
