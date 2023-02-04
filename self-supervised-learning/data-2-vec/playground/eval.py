@@ -1,10 +1,9 @@
-from model import Net
+from components.model import Net
 from dataloader import Cifar10Dataloader
 import torch
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
-from WeightSchedule import WeighSchedule
-from predictor import Predictor
+from components.WeightSchedule import WeighSchedule
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 dataloader = DataLoader(
@@ -17,6 +16,7 @@ dataloader = DataLoader(
 
 def eval_model(model):
     acc = 0
+    rows = 0
     with torch.no_grad():
         for X, y in dataloader:
             X = X.to(device)
@@ -27,4 +27,5 @@ def eval_model(model):
                     1
                 ) == y
             )
-    return acc / len(dataloader)
+            rows += X.shape[0]
+    return (acc / rows) * 100
