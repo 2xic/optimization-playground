@@ -18,8 +18,8 @@ def train_byol():
     set_no_grad(student)
 
     model = CombinedModel([
-            student,
-            predictor
+        student,
+        predictor
     ]).to(device)
 
     optimizer = torch.optim.Adam(
@@ -52,5 +52,5 @@ def train_byol():
                 total_loss += value.item()
 
             acc = eval_model(model)
-            print(f"epoch: {epoch}, total_loss: {total_loss}, acc: {acc}")
+            print(f"byor features model - epoch: {epoch}, total_loss: {total_loss}, acc: {acc}")
             file.write(f"{acc}\n")

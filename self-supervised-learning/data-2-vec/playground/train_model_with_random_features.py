@@ -16,8 +16,8 @@ def train(lock):
     set_no_grad(student)
 
     model = CombinedModel([
-            student,
-            predictor
+        student,
+        predictor
     ]).to(device)
 
     optimizer = torch.optim.Adam(

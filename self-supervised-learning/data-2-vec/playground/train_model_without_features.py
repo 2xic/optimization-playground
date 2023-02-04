@@ -14,8 +14,8 @@ def train(lock):
     predictor = Predictor()
 
     model = CombinedModel([
-            student,
-            predictor
+        student,
+        predictor
     ]).to(device)
 
     optimizer = torch.optim.Adam(
