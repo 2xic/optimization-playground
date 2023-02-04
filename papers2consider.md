@@ -11,7 +11,7 @@
 # Some I'm considering
 
 ## Self supervised 
-[Efficient Self-supervised Learning with Contextualized Target Representations for Vision, Speech and Language](https://arxiv.org/pdf/2212.07525.pdf)
+:)
 
 ### Computer vision
 [What You Get Is What You See: A Visual Markup Decompiler](https://arxiv.org/pdf/1609.04938v1.pdf)
