@@ -2,8 +2,10 @@ from dataloader import Cifar10Dataloader
 import torch
 from torch.utils.data import DataLoader
 from models.PlainModel import PlainModel
-from models.PlainModelBatchNormAugmentation import PlainModelBatchNormAugmentation
+from models.PlainModelDropout import PlainModelDropout
+from models.PlainModelBatchNormAugmentation import PlainModelBatchNormAugmentation, PlainModelBatchNormAugmentationDropout
 from models.PlainModelBatchNorm import PlainModelBatchNorm
+from models.PlainModelResidual import PlainModelResidual
 from eval import eval_model
 from optimization_utils.plotters.SimplePlot import SimplePlot
 from optimization_utils.plotters.LinePlot import LinePlot
@@ -77,7 +79,10 @@ if __name__ == "__main__":
     models = [
         PlainModel().to(device),
         PlainModelBatchNorm().to(device),
-        PlainModelBatchNormAugmentation().to(device)
+        PlainModelBatchNormAugmentation().to(device),
+        PlainModelBatchNormAugmentationDropout().to(device),
+        PlainModelDropout().to(device),
+        PlainModelResidual().to(device),
     ]
 
     lock = Lock()
