@@ -12,7 +12,7 @@ class EpsilonGreedy:
                                 else search        
 
     def __call__(self, agent):
-        if np.random.rand() >= self.eps :
+        if np.random.rand() >= self.eps:
             return agent.on_policy()
         else:
             if self.eps == 0:

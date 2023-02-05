@@ -30,6 +30,7 @@
 
 ## NN architecture
 [https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)
+[https://arxiv.org/pdf/2212.05153.pdf](Algorithmic progress in computer vision)
 
 ## Recommendations
 :)

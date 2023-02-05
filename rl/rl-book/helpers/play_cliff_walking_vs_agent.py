@@ -4,6 +4,8 @@ import os
 from optimization_utils.diagnostics.Diagnostics import Diagnostics
 from helpers.analysis.Parameter import Parameter
 from .random_agents import RandomAgent
+from .State import State
+from .StateValue import StateValue
 
 EVALUATION_RUNS = 30
 EPOCHS = 500
@@ -13,6 +15,9 @@ def evaluate_agent(env, agent_instance):
 
     for _ in range(EVALUATION_RUNS):
         agent = agent_instance(env.action_space, eps=0.1, decay=1)
+        agent.q = State(env.action_space, value_constructor=lambda n: StateValue(n, initial_value=lambda: 0))
+        agent.alpha = 0.1
+        agent.gamma = 1
         agent_diagnostics = Diagnostics()
 
         with agent_parameter as p:
@@ -26,13 +31,14 @@ def evaluate_agent(env, agent_instance):
 
                 if epoch % 1_000 == 0:
                     agent_diagnostics.print(epoch)
+    print("")
     return agent_parameter
     
 def play_cliff_walking(first_agent_instance, second_agent_instance=RandomAgent, dirname="."):
     env = CliffWalking(n=3)
 
     first_agent_parameter = evaluate_agent(env, first_agent_instance)
-    second_agent_parameter = evaluate_agent(env, first_agent_instance)
+    second_agent_parameter = evaluate_agent(env, second_agent_instance)
 
     plt.plot(first_agent_parameter.get_reward(), label=first_agent_instance.__name__)
     plt.plot(second_agent_parameter.get_reward(), label=second_agent_instance.__name__)

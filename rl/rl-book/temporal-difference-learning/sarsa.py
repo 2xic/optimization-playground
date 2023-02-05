@@ -11,6 +11,8 @@ from helpers.play_tic_tac_toe_vs_random_agent import play_tic_tac_toe
 from helpers.play_grid_world_vs_random_agent import play_grid_world
 from helpers.State import State
 import os
+from helpers.action_policy.ArgMaxTieBreak import argmax_tie_break
+import numpy as np
 
 class Sarsa:
     def __init__(self, action, eps=1, decay=0.9999) -> None:
@@ -38,7 +40,14 @@ class Sarsa:
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
-        return self.softmax(self.q[str(self.env)].np(), legal_actions=self.env.legal_actions)
+        p = self.q[str(self.env.state)].np().astype(np.float)
+        for index in range(len(p)):
+            if index not in self.env.legal_actions:
+                p[index] = float('-inf')
+        return argmax_tie_break(
+            p
+        )
+        return self.softmax(self.q[str(self.env.state)].np(), legal_actions=self.env.legal_actions)
 
     def get_action(self):
         return self.epsilon(
@@ -60,7 +69,7 @@ class Sarsa:
             if not env.done:
                 next_action = self.get_action()
 
-            if self.is_training:
+            if self.is_training:# and next_action != -1:
                 self.q[state][action] += self.alpha * (
                     reward + self.gamma * self.q[next_state][next_action] -
                                 self.q[state][action]

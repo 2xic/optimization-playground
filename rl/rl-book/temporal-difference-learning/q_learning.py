@@ -11,6 +11,8 @@ from helpers.play_tic_tac_toe_vs_random_agent import play_tic_tac_toe
 from helpers.play_grid_world_vs_random_agent import play_grid_world
 from helpers.State import State
 import os
+from helpers.action_policy.ArgMaxTieBreak import argmax_tie_break
+import numpy as np
 
 class Q_learning:
     def __init__(self, action, eps=1, decay=0.9999) -> None:
@@ -30,9 +32,13 @@ class Q_learning:
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
-        import numpy as np
-        b = self.q[str(self.env.state)].np()
-        return np.random.choice(np.where(b == b.max())[0])
+        p = self.q[str(self.env.state)].np().astype(np.float)
+        for index in range(len(p)):
+            if index not in self.env.legal_actions:
+                p[index] = float('-inf')
+        return argmax_tie_break(
+            p
+        )
         #return (self.q[str(self.env.state)].np()).argmax()
         return self.softmax(
             self.q[str(self.env.state)].np(), 
@@ -40,8 +46,7 @@ class Q_learning:
         )
 
     def get_action(self):
-        action, _ = self.epsilon(self)
-    #    print((action, random))
+        action = self.epsilon(self)
         return action
 
     def train(self, env: TicTacToe):

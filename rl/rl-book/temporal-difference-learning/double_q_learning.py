@@ -13,6 +13,7 @@ from helpers.StateValue import StateValue
 
 import os
 import numpy as np
+from helpers.action_policy.ArgMaxTieBreak import argmax_tie_break
 
 class Double_Q_learning:
     def __init__(self, action, eps=1, decay=0.9999, initial_value=np.random.rand) -> None:
@@ -33,13 +34,10 @@ class Double_Q_learning:
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
-        b = (
+        return argmax_tie_break(
             self.q_1[str(self.env.state)].np() +
             self.q_2[str(self.env.state)].np()
-        )#.argmax()
-        import numpy as np
-        return np.random.choice(np.where(b == b.max())[0])
-
+        )
         return self.softmax((
             self.q_1[str(self.env.state)].np() +
             self.q_2[str(self.env.state)].np()

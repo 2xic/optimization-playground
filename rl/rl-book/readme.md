@@ -38,7 +38,6 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 [Algorithm - Q-Learning (Off-policy TD-control) for estimating policy](./temporal-difference-learning/q_learning.py)
 
 [Figure on page 132 - Q-Learning vs Sarsa](./temporal-difference-learning/Q_learning_Sarsa_cliff_walking.png)
-- **(does not match the book plot well currently)**
 
 (todo) Figure 6.3 - TD-Control performance
 
