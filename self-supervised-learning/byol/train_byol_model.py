@@ -18,29 +18,31 @@ def train(lock):
 
     teacher = Net().to(device)
     student = Net().to(device)
+    output_shape = 8 * 8
 
-    predictor = Predictor(output=128, output_relu=False)
-    predictor_output = Predictor(output=128, output_relu=False)
-    teacher_predictor_mlp = Predictor(output=128, output_relu=False)
+    student_representation = Predictor(input=output_shape, output=output_shape, output_relu=False)
+    student_prediction_of_teacher = Predictor(input=output_shape, output=output_shape, output_relu=False)
+    teacher_representation = Predictor(input=output_shape, output=output_shape, output_relu=False)
 
     student_predictor = CombinedModel([
         student,
-        predictor,
-        predictor_output
+        student_representation,
+        student_prediction_of_teacher
     ]).to(device)
 
     teacher_predictor = CombinedModel([
         teacher,
-        teacher_predictor_mlp,
+        teacher_representation,
     ]).to(device)
-
 
     optimizer = torch.optim.Adam(
         student.parameters(),
-        lr=0.1
+        lr=0.1,
+        weight_decay=1.5*10e-6
     )
 
     def learning_rate(epoch):
+        return 3e-4
         if epoch < 10:
             return 0.3
         elif epoch < 25:
@@ -63,9 +65,9 @@ def train(lock):
         teacher,
         EPOCHS
     )
-    weigh_schedule_predictor = WeighSchedule(
-        predictor,
-        teacher_predictor_mlp,
+    weigh_schedule_representation = WeighSchedule(
+        student_representation,
+        teacher_representation,
         EPOCHS
     )
 
@@ -108,34 +110,32 @@ def train(lock):
     best_params = BestModelParameters()
 
     def loss(x, y):
-#        norm = lambda x: torch.linalg.norm(x, axis=-1)
         norm = lambda x: F.normalize(x, dim=1)
         norm_x, norm_y = norm(x), norm(y)
- #       print(norm_x.shape)
-#        print(torch.sum(x * y, axis=1).shape)
-        return torch.mean(2 - 2. * torch.sum(norm_x * norm_y, dim=-1))
-#        return -2. * torch.mean(torch.sum(x * y, axis=-1) / (norm_x * norm_y))
+#        return torch.nn.MSELoss()(norm_x, norm_y)
+        norm_sum = torch.sum(norm_x * norm_y, dim=-1)
+        return torch.mean(2 - 2. * norm_sum)
 
     with open("logs/byol_loss.txt", "w") as file:
         for epoch in range(EPOCHS):
             total_loss = torch.tensor(0.0, device=device)
             for (X, _) in dataloader:
-                X = transform(X.to(device))
+                X = (X.to(device))
                 X_masked = transform(X.clone())
 
                 value = loss(student_predictor(X), teacher_no_grad(X_masked))
-                value += loss(student_predictor(X_masked), teacher_no_grad(X))
+                value += loss(teacher_no_grad(X), student_predictor(X_masked))
 
                 optimizer.zero_grad()
                 value.backward()
                 optimizer.step()
 
                 total_loss += value.item()
-                weigh_schedule_predictor.update(epoch)
+                weigh_schedule_representation.update(epoch)
                 weigh_schedule_encoder.update(epoch)
             lock.acquire()
             try:
-                print(f"BYOR - epoch: {epoch}, total_loss: {total_loss}")
+                print(f"BYOL - epoch: {epoch}, total_loss: {total_loss}")
             finally:
                 lock.release()
             best_params.set_loss_param(
@@ -145,8 +145,18 @@ def train(lock):
             file.write(f"{total_loss.item()}\n")
             scheduler.step()
 
+            if epoch % 30 == 0 and epoch > 0:
+                with torch.no_grad():
+                    output = student(X)[:8].cpu().reshape((8, 1, 8, 8))
+
+                    torchvision.utils.save_image(
+                        output,
+                        f"logs/example_student_encoder_epoch_{epoch}.png"
+                    )
+
     torch.save(
         student.state_dict(),
+      #  teacher.state_dict(),
         "student_model" 
     )
 

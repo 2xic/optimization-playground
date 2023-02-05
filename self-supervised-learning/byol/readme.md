@@ -1,5 +1,4 @@
-## Bring your own latent
-
+## [https://arxiv.org/abs/2006.07733](Bootstrap your own latent)
 
 ### Accuracy
 Something is wrong, BYOL should beat random weights.

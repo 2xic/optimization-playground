@@ -14,13 +14,28 @@ def plot_it():
     )
     plot.plot(
         [
-            load_accuracy(path("train_model_with_byol_features.txt"), title="Test accuracy", legend="Byol + predictor", x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100),
+            load_accuracy(path("train_model_with_byol_features_test_acc.txt"), title="Test accuracy", legend="Byol + predictor", x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100),
+            load_accuracy(path("train_model_with_random_features_test_acc.txt"), title="Test accuracy", legend="random features + predictor" , x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100),
             load_accuracy(path("train_model_without_features.txt"), title="Test accuracy", legend="'Plain' model", x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100),
-            load_accuracy(path("train_model_with_random_features.txt"), title="Test accuracy", legend="random features + predictor" , x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100)
         ]
     )
     plot.save(
-        path("accuracy.png")
+        path("test_accuracy.png")
+    )
+
+    plot = SimplePlot()
+    path = lambda file: os.path.join(
+        os.path.dirname(__file__),
+        file
+    )
+    plot.plot(
+        [
+            load_accuracy(path("train_model_with_byol_features_train_acc.txt"), title="Train accuracy", legend="Byol + predictor", x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100),
+            load_accuracy(path("train_model_with_random_features_train_acc.txt"), title="Train accuracy", legend="random features + predictor" , x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100),
+        ]
+    )
+    plot.save(
+        path("train_accuracy.png")
     )
 
     plot = SimplePlot()

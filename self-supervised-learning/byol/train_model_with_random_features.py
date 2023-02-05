@@ -10,13 +10,13 @@ from components.combined import CombinedModel
 
 def train(lock):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    student = Net().to(device)
+    encoder_model = Net().to(device)
     predictor = Predictor()
-    student.eval()
-    set_no_grad(student)
+    encoder_model.eval()
+    set_no_grad(encoder_model)
 
     model = CombinedModel([
-        student,
+        encoder_model,
         predictor
     ]).to(device)
 
@@ -31,31 +31,35 @@ def train(lock):
         shuffle=True,
     )
 
-    with open("logs/train_model_with_random_features.txt", "w") as file:
-        for epoch in range(EPOCHS):
-            total_loss = torch.tensor(0.0, device=device)
-            for (X, y) in dataloader:
-                X = X.to(device)
-                y = y.to(device)
+    with open("logs/train_model_with_random_features_test_acc.txt", "w") as test_acc:
+        with open("logs/train_model_with_random_features_train_acc.txt", "w") as train_acc:
+            for epoch in range(EPOCHS):
+                total_loss = torch.tensor(0.0, device=device)
+                training_acc = torch.tensor(0.0, device=device)
+                rows = 0
+                for (X, y) in dataloader:
+                    X = X.to(device)
+                    y = y.to(device)
 
-                value = torch.nn.NLLLoss()(
-                    F.log_softmax(model(X), dim=1),
-                    y
-                )
+                    value = torch.nn.NLLLoss()(
+                        F.log_softmax(model(X), dim=1),
+                        y
+                    )
+            
+                    optimizer.zero_grad()
+                    value.backward()
+                    optimizer.step()        
 
-                optimizer.zero_grad()
-                value.backward()
-                optimizer.step()        
-
-                total_loss += value.item()
-
-            acc = eval_model(model)
-            lock.acquire()
-            try:
-                print(f"random features - epoch: {epoch}, total_loss: {total_loss}, acc: {acc}")
-            finally:
-                lock.release()
-            file.write(f"{acc}\n")
+                    total_loss += value.item()
+                    training_acc += torch.sum(
+                        y == torch.argmax(model(X), 1)
+                    )
+                    rows += X.shape[0]
+                training_acc =  (training_acc / rows) * 100 
+                acc = eval_model(model)
+                print(f"random features model - epoch: {epoch}, total_loss: {total_loss}, acc: {acc}")
+                test_acc.write(f"{acc}\n")
+                train_acc.write(f"{training_acc}\n")
 
 if __name__ == "__main__":
     from torch.multiprocessing import Lock
