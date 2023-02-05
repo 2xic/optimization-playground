@@ -41,7 +41,7 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 
 (todo) Figure 6.3 - TD-Control performance
 
-![Figure 6.5 - Comparison of Q-Learning and Double Q-Learning](./temporal-difference-learning/bias_q_learning_vs_double_q_learning.png)
+[Figure 6.5 - Comparison of Q-Learning and Double Q-Learning](./temporal-difference-learning/bias_q_learning_vs_double_q_learning.png)
 
 [Algorithm - Double Q-Learning for estimating Q](./temporal-difference-learning/double_q_learning.py)
 
