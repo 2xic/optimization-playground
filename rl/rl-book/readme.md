@@ -12,7 +12,8 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 
 [Figure 2.5 - Gradient bandit](./multi-armed-bandits/gradient_bandit_average_optimal_action.png)
 
-[Figure 2.6 - Parameter study (does not match the book plot well currently)](./multi-armed-bandits/parameter_study.png)
+[Figure 2.6 - Parameter study](./multi-armed-bandits/parameter_study.png)
+- **(does not match the book plot well currently)**
 
 ### Chapter 5 - Monte carlo methods
 (todo) Algorithm - First visit MC prediction, for estimating Value function 
@@ -36,11 +37,12 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 
 [Algorithm - Q-Learning (Off-policy TD-control) for estimating policy](./temporal-difference-learning/q_learning.py)
 
-[Figure on page 132 - Q-Learning vs Sarsa (does not match the book plot well currently)](./temporal-difference-learning/Q_learning_Sarsa_cliff_walking.png)
+[Figure on page 132 - Q-Learning vs Sarsa](./temporal-difference-learning/Q_learning_Sarsa_cliff_walking.png)
+- **(does not match the book plot well currently)**
 
 (todo) Figure 6.3 - TD-Control performance
 
-(todo) Figure 6.5 - Comparison of Q-Learning and Double Q-Learning
+![Figure 6.5 - Comparison of Q-Learning and Double Q-Learning](./temporal-difference-learning/bias_q_learning_vs_double_q_learning.png)
 
 [Algorithm - Double Q-Learning for estimating Q](./temporal-difference-learning/double_q_learning.py)
 

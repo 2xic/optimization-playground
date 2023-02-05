@@ -2,8 +2,8 @@
 Section 6.5 -> page 131
 """
 from optimization_utils.envs.TicTacToe import TicTacToe
-import matplotlib.pyplot as plt
 from helpers.State import State
+from helpers.StateValue import StateValue
 from helpers.action_policy.Epsilon import EpsilonGreedy
 from helpers.action_policy.softmax_soft_policy import SoftmaxSoftPolicy
 import random
@@ -14,7 +14,7 @@ import os
 
 class Q_learning:
     def __init__(self, action, eps=1, decay=0.9999) -> None:
-        self.q = State(action)
+        self.q = State(action)#, value_constructor=lambda n: StateValue(n, initial_value=lambda: 0))
         self.epsilon = EpsilonGreedy(
             actions=-1,
             eps=eps,
@@ -30,10 +30,18 @@ class Q_learning:
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
-        return self.softmax(self.q[str(self.env)].np(), legal_actions=self.env.legal_actions)
+        import numpy as np
+        b = self.q[str(self.env.state)].np()
+        return np.random.choice(np.where(b == b.max())[0])
+        #return (self.q[str(self.env.state)].np()).argmax()
+        return self.softmax(
+            self.q[str(self.env.state)].np(), 
+            legal_actions=self.env.legal_actions
+        )
 
     def get_action(self):
-        action = self.epsilon(self)
+        action, _ = self.epsilon(self)
+    #    print((action, random))
         return action
 
     def train(self, env: TicTacToe):
@@ -48,8 +56,8 @@ class Q_learning:
             next_state = str(env.state)
 
             self.q[state][action] += self.alpha * (
-                reward + self.gamma * self.q[next_state].max() -
-                            self.q[state][action]
+                reward + (self.gamma * self.q[next_state].max() -
+                            self.q[state][action])
             )
             sum_rewards += reward
         return sum_rewards

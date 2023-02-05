@@ -33,13 +33,20 @@ class Double_Q_learning:
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
+        b = (
+            self.q_1[str(self.env.state)].np() +
+            self.q_2[str(self.env.state)].np()
+        )#.argmax()
+        import numpy as np
+        return np.random.choice(np.where(b == b.max())[0])
+
         return self.softmax((
-            self.q_1[str(self.env)].np() +
-            self.q_2[str(self.env)].np()
+            self.q_1[str(self.env.state)].np() +
+            self.q_2[str(self.env.state)].np()
         ), legal_actions=self.env.legal_actions)
 
     def get_action(self):
-        action = self.epsilon(self)
+        action, _ = self.epsilon(self)
         return action
 
     def train(self, env: TicTacToe):

@@ -9,8 +9,7 @@ class EpsilonGreedy:
         self.eps_decay_limit = 0.01
         self.search = (lambda : random.randint(0, self.actions - 1))\
                                 if search is None\
-                                else search
-        
+                                else search        
 
     def __call__(self, agent):
         if np.random.rand() >= self.eps :
