@@ -45,3 +45,19 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 
 [Algorithm - Double Q-Learning for estimating Q](./temporal-difference-learning/double_q_learning.py)
 
+### Chapter 7 - n-step bootstrapping
+(todo) Algorithm - n-step TD for estimating value function
+
+(todo) - Figure 7.2 - Performance of n-step TD methods as a function of alpha, for various values of n, on a 19-state random walk task.
+
+(todo) Algorithm - n-step Sarsa for estimating Q function
+
+(todo) - Figure 7.4 - Visualize the difference in action between one-step Sarsa and 10 step Sarsa
+
+(todo) Algorithm - Off-policy n-step Sarsa for estimating Q function
+
+(todo) Algorithm - n-step Tree backup for estimating Q function
+
+(todo) Algorithm - Off-policy n-step Q(sigma) for estimating Q
+
+
