@@ -40,12 +40,9 @@ class Sarsa:
         return random.sample(self.env.legal_actions, k=1)[0]
 
     def on_policy(self):
-        p = self.q[str(self.env.state)].np().astype(np.float)
-        for index in range(len(p)):
-            if index not in self.env.legal_actions:
-                p[index] = float('-inf')
         return argmax_tie_break(
-            p
+            self.q[str(self.env.state)].np().astype(np.float),
+            non_max=self.env.legal_actions,
         )
         return self.softmax(self.q[str(self.env.state)].np(), legal_actions=self.env.legal_actions)
 

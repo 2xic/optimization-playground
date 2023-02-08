@@ -21,7 +21,7 @@ def play_tic_tac_toe(agent_instance, dirname="."):
             accumulated_reward = 0
             for epoch in range(EPOCHS):
                 agent.train(env)
-                reward = 0 if env.winner is None else env.winner
+                reward = 0 if env.winner is None else max(env.winner, 0)
 
                 agent_diagnostics.reward(reward)
                 agent_diagnostics.track_raw_metric("eps", agent.epsilon.eps)
@@ -31,8 +31,9 @@ def play_tic_tac_toe(agent_instance, dirname="."):
 
                 env.reset()
 
-                if epoch % 1_000 == 0:
-                    agent_diagnostics.print(epoch)
+                #if epoch % 1_000 == 0:
+                #    agent_diagnostics.print(epoch)
+            print(accumulated_reward)
 
     random_parameter = Parameter(None, None)
     for _ in range(EVALUATION_RUNS):
@@ -42,7 +43,8 @@ def play_tic_tac_toe(agent_instance, dirname="."):
                 while not env.done:
                     env.play(random.sample(env.legal_actions, k=1)[0])
 
-                reward = 0 if env.winner is None else env.winner
+#                reward = 0 if env.winner is None else env.winner
+                reward = 0 if env.winner is None else max(env.winner, 0)
                 accumulated_reward += reward
                 p.add_reward(accumulated_reward)
 
@@ -62,6 +64,7 @@ def play_tic_tac_toe(agent_instance, dirname="."):
             agent_instance.__name__ + '_tic_tac_toe.png'
         )
     )
+    os.makedirs(os.path.join(dirname, ".data"), exist_ok=True)
 
     with open(
             os.path.join(dirname, ".data", agent_instance.__name__ + ".json"), "w") as file:

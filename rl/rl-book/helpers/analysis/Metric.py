@@ -12,6 +12,7 @@ class Metric:
         if len(self.Q) <= self.index:
             self.Q.append(float(value))
             self.N.append(1.0)
+            self.index += 1
         else:
             self.N[self.index] += 1
             estimated_avg = 1/(

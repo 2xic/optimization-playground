@@ -37,14 +37,14 @@ class Double_Q_learning:
         return argmax_tie_break(
             self.q_1[str(self.env.state)].np() +
             self.q_2[str(self.env.state)].np()
-        )
+        , non_max=self.env.legal_actions)
         return self.softmax((
             self.q_1[str(self.env.state)].np() +
             self.q_2[str(self.env.state)].np()
         ), legal_actions=self.env.legal_actions)
 
     def get_action(self):
-        action, _ = self.epsilon(self)
+        action = self.epsilon(self)
         return action
 
     def train(self, env: TicTacToe):

@@ -11,6 +11,8 @@ from helpers.play_tic_tac_toe_vs_random_agent import play_tic_tac_toe
 from helpers.State import State
 import os
 
+from helpers.action_policy.ArgMaxTieBreak import argmax_tie_break
+import numpy as np
 
 class ExpectedSarsa:
     def __init__(self, action) -> None:
@@ -33,8 +35,10 @@ class ExpectedSarsa:
         return self.softmax(self.q[str(self.env)].np(), legal_actions=self.env.legal_actions)
 
     def get_action(self):
-        action = self.epsilon(self)
-        return action
+        return argmax_tie_break(
+            self.q[str(self.env.state)].np().astype(np.float),
+            non_max=self.env.legal_actions,
+        )
 
     def train(self, env: TicTacToe):
         self.env = env
