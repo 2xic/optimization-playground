@@ -1,19 +1,16 @@
 from dataloader import Cifar10Dataloader
 import torch
 from torch.utils.data import DataLoader
-from models.PlainModel import PlainModel
-from models.PlainModelDropout import PlainModelDropout
-from models.PlainModelBatchNormAugmentation import PlainModelBatchNormAugmentation, PlainModelBatchNormAugmentationDropout
-from models.PlainModelBatchNorm import PlainModelBatchNorm
-from models.PlainModelResidual import PlainModelResidual
-from models.PlainModelBatchNormDynamicLr import PlainModelBatchNormDynamicLr
+from PlainModel import PlainModel
 from eval import eval_model
 from optimization_utils.plotters.SimplePlot import SimplePlot
 from optimization_utils.plotters.LinePlot import LinePlot
-from ProcessPool import ProcessPool
+from optimization_utils.utils.ProcessPool import ProcessPool
+from zero_initialization import set_model_weights
 
 EPOCHS = 100
 BATCH_SIZE = 256
+NETWORKS_TO_TRAIN = 100
 
 from torch.multiprocessing import Process, Lock, Queue
 import torch.multiprocessing as mp
@@ -40,8 +37,7 @@ def evaluate(lock, model):
     )
     test_accuracy = []
     training_accuracy = []
-    if hasattr(model, 'set_optimizer'):
-        model.set_optimizer(optimizer)
+
     for epoch in range(EPOCHS):
         total_loss = torch.tensor(0.0, device=device)
         acc = torch.tensor(0.0, device=device)
@@ -65,7 +61,7 @@ def evaluate(lock, model):
         eval = eval_model(model) * 100
         lock.acquire()
         try:
-            print(f"model: {model.__class__.__name__}, epoch: {epoch}, total_loss: {total_loss}, test acc: {eval}, training acc: {acc}")
+            print(f"model: {model.name}, epoch: {epoch}, total_loss: {total_loss}, test acc: {eval}, training acc: {acc}")
         finally:
             lock.release()
         test_accuracy.append(eval.item())
@@ -74,26 +70,38 @@ def evaluate(lock, model):
     return {
         "test_accuracy": test_accuracy,
         "training_accuracy": training_accuracy,
-        "label": model.__class__.__name__
+        "label": model.name
     }
 
 if __name__ == "__main__":
-    pool = ProcessPool()
+    pool = ProcessPool(max_workers=5)
 
-    models = [
-        PlainModel().to(device),
-        PlainModelBatchNorm().to(device),
-        PlainModelBatchNormAugmentation().to(device),
-        PlainModelBatchNormAugmentationDropout().to(device),
-        PlainModelDropout().to(device),
-        PlainModelResidual().to(device),
-        PlainModelBatchNormDynamicLr().to(device),
-    ]
+    models = []
+    for i in range(NETWORKS_TO_TRAIN):
+        models.append(PlainModel(i).to(device))
+    
+    zero_name = "ZerO"
 
+    models.append(PlainModel(zero_name).to(device))
+    set_model_weights(models[-1])
+
+    zero_results = []
     for item in pool.execute(evaluate, models):
         training_accuracy, test_accuracy, name = item["training_accuracy"], item["test_accuracy"], item["label"]        
-        training_plots.append(LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
-        test_plots.append(LinePlot(y=test_accuracy, title="Test accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
+        if zero_name == name:
+            training_acc = (LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
+            testing_acc = (LinePlot(y=test_accuracy, title="Test accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
+            zero_results = [training_acc, testing_acc]
+        else:
+            training_plots.append(LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
+            test_plots.append(LinePlot(y=test_accuracy, title="Test accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
+    
+    sorted_by_training_accuracy, sorted_by_testing_accuracy = list(zip(*sorted(
+        zip(training_plots, test_plots),
+        key=lambda x: sum(x[0].y)/len(x[0].y),
+    )))
+    training_plots = [zero_results[0], sorted_by_training_accuracy[0], sorted_by_training_accuracy[-1]]
+    test_plots = [zero_results[1], sorted_by_testing_accuracy[0], sorted_by_testing_accuracy[-1]]
 
     plot = SimplePlot()
     plot.plot(training_plots)
@@ -103,3 +111,4 @@ if __name__ == "__main__":
     plot.plot(test_plots)
     plot.save("test_accuracy.png")
     
+    print("Okidoki -> Plotting now")
