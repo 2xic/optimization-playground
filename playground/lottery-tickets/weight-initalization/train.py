@@ -6,14 +6,11 @@ from eval import eval_model
 from optimization_utils.plotters.SimplePlot import SimplePlot
 from optimization_utils.plotters.LinePlot import LinePlot
 from optimization_utils.utils.ProcessPool import ProcessPool
-from zero_initialization import set_model_weights
+from weight_initialization import set_model_weights, ZerO_Init_on_matrix, xavier_initialization, he_initalization
 
 EPOCHS = 100
 BATCH_SIZE = 256
-NETWORKS_TO_TRAIN = 100
-
-from torch.multiprocessing import Process, Lock, Queue
-import torch.multiprocessing as mp
+RANDOM_NETWORKS_TO_TRAIN = 5
 
 """
 Training logic
@@ -74,34 +71,45 @@ def evaluate(lock, model):
     }
 
 if __name__ == "__main__":
-    pool = ProcessPool(max_workers=5)
+#    pool = ProcessPool(max_workers=5)
 
     models = []
-    for i in range(NETWORKS_TO_TRAIN):
+    for i in range(RANDOM_NETWORKS_TO_TRAIN):
         models.append(PlainModel(i).to(device))
     
     zero_name = "ZerO"
 
-    models.append(PlainModel(zero_name).to(device))
-    set_model_weights(models[-1])
+#    models.append(PlainModel(zero_name).to(device))
+#    set_model_weights(models[-1], ZerO_Init_on_matrix)
 
-    zero_results = []
-    for item in pool.execute(evaluate, models):
+    special_models = [
+        ("Xavier", xavier_initialization),
+        ("ZeRo", ZerO_Init_on_matrix),
+        ("He", he_initalization)
+    ]
+    training_special = []
+    testing_special = []
+    processed_special_models = []
+    for (name, init) in special_models:
+        model = PlainModel(name).to(device)
+        set_model_weights(model, init)
+        models.append(model)
+
+    for item in ProcessPool(max_workers=5).execute(evaluate, models):
         training_accuracy, test_accuracy, name = item["training_accuracy"], item["test_accuracy"], item["label"]        
-        if zero_name == name:
-            training_acc = (LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
-            testing_acc = (LinePlot(y=test_accuracy, title="Test accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
-            zero_results = [training_acc, testing_acc]
+        if not str(name).isnumeric():
+            training_special.append(LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
+            testing_special.append(LinePlot(y=test_accuracy, title="Test accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
         else:
             training_plots.append(LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
             test_plots.append(LinePlot(y=test_accuracy, title="Test accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
-    
+
     sorted_by_training_accuracy, sorted_by_testing_accuracy = list(zip(*sorted(
         zip(training_plots, test_plots),
         key=lambda x: sum(x[0].y)/len(x[0].y),
     )))
-    training_plots = [zero_results[0], sorted_by_training_accuracy[0], sorted_by_training_accuracy[-1]]
-    test_plots = [zero_results[1], sorted_by_testing_accuracy[0], sorted_by_testing_accuracy[-1]]
+    training_plots = training_special + [sorted_by_training_accuracy[0], sorted_by_training_accuracy[-1]]
+    test_plots = testing_special + [sorted_by_testing_accuracy[0], sorted_by_testing_accuracy[-1]]
 
     plot = SimplePlot()
     plot.plot(training_plots)

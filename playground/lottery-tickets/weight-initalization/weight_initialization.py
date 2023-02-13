@@ -4,17 +4,37 @@ import torch
 import math
 from scipy.linalg import hadamard
 import torch.nn as nn
+import torch
 
-def set_model_weights(model):
+def set_model_weights(model, method):
 #    for name, param in model.named_parameters():
     for name, module in model.named_modules():
         print(name)
         if isinstance(module, nn.Linear):
-            module.weight.data = ZerO_Init_on_matrix(module.weight.data)
+            module.weight.data = method(module.weight.data)
             nn.init.constant_(module.bias, 0)
         elif  isinstance(module, nn.Conv2d):
             n = module.weight.data.shape[-1] // 2
-            module.weight.data[:, :, n, n] = ZerO_Init_on_matrix(module.weight.data[:, :, n, n])
+            if method == ZerO_Init_on_matrix:
+                module.weight.data[:, :, n, n] = method(module.weight.data[:, :, n, n])
+            else:
+                module.weight.data = method(module.weight.data, is_conv=True)
+
+def xavier_initialization(matrix_tensor, is_conv=False):
+    if is_conv:
+        _, in_c, k, k = matrix_tensor.shape
+        return torch.randn_like(matrix_tensor) * math.sqrt(2 / (k * k * in_c))
+    else:
+        input, output = matrix_tensor.shape
+        return torch.randn_like(matrix_tensor) * math.sqrt(2 / (input + output))
+
+def he_initalization(matrix_tensor, is_conv=False):
+    if is_conv:
+        _, in_c, _, _ = matrix_tensor.shape
+        return torch.randn_like(matrix_tensor) * math.sqrt(2 / (in_c))
+    else:
+        input, output = matrix_tensor.shape
+        return torch.randn_like(matrix_tensor) * math.sqrt(2 / (input))
 
 # Based from the author https://github.com/jiaweizzhao/ZerO-initialization/blob/main/example_mnist.ipynb
 def ZerO_Init_on_matrix(matrix_tensor):
