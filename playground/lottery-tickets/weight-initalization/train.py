@@ -10,7 +10,7 @@ from weight_initialization import set_model_weights, ZerO_Init_on_matrix, xavier
 
 EPOCHS = 100
 BATCH_SIZE = 256
-RANDOM_NETWORKS_TO_TRAIN = 5
+RANDOM_NETWORKS_TO_TRAIN = 50
 
 """
 Training logic
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         set_model_weights(model, init)
         models.append(model)
 
-    for item in ProcessPool(max_workers=5).execute(evaluate, models):
+    for item in ProcessPool(max_workers=10).execute(evaluate, models):
         training_accuracy, test_accuracy, name = item["training_accuracy"], item["test_accuracy"], item["label"]        
         if not str(name).isnumeric():
             training_special.append(LinePlot(y=training_accuracy, title="Training accuracy", legend=name, x_text="Epochs", y_text="Accuracy", y_min=0, y_max=100))
@@ -118,5 +118,15 @@ if __name__ == "__main__":
     plot = SimplePlot()
     plot.plot(test_plots)
     plot.save("test_accuracy.png")
+
+    variance_count = 6
+    variances = [
+        sorted_by_testing_accuracy[int((len(sorted_by_testing_accuracy) - 1) * ((i) / variance_count))] for i in range(variance_count)
+    ]
+    print(sorted_by_testing_accuracy)
+    print(variances)
+    plot = SimplePlot()
+    plot.plot(variances)
+    plot.save("test_variance_accuracy.png")
     
     print("Okidoki -> Plotting now")
