@@ -14,7 +14,6 @@
 :)
 
 ### Computer vision
-[What You Get Is What You See: A Visual Markup Decompiler](https://arxiv.org/pdf/1609.04938v1.pdf)
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
 
 ### RL 
