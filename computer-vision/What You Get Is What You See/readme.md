@@ -6,6 +6,8 @@ Various things could be done to fix various problems with this implementation, f
 ## Output 
 After a few epcohs the model starts to give resaonble outputs :')
 
+*Update* the model seems to overfit, and does not do well on test dataset :'(
+
 ```
 Output: $(r_ir_j)^\infty$
 Expected: $(r_ir_j)^\infty$

@@ -12,42 +12,20 @@ def get_hidden(hidden_size):
     return torch.zeros(1, 1, hidden_size)
 
 class EncoderModel(nn.Module):
-    def __init__(self):
+    def __init__(self, input_shape):
         super().__init__()
-        self.hidden_size = 256
-        self.conv1 = nn.Conv2d(4, 12, 3)
-        self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = nn.Conv2d(12, 16, 3)
+        self.hidden_size = 144
+        self.embedding = nn.Embedding(input_shape, self.hidden_size)
         self.gru = nn.GRU(self.hidden_size, self.hidden_size)
 
     def forward(self, x, hidden=None):
       #  print(x.shape)
         if hidden == None:
             hidden = get_hidden(self.hidden_size)
-        x = self.pool(F.relu(self.conv1(x)))
-        x = self.pool(F.relu(self.conv2(x)))
+        x = self.embedding(x).view(1, 1, -1)
         x = x.view(1, 1, -1)
 
         output, hidden = self.gru(x, hidden)
-        return output, hidden
-
-class DecoderModel(nn.Module):
-    def __init__(self, hidden_size, output_size):
-        super().__init__()
-        self.hidden_size = hidden_size
-
-        self.embedding = nn.Embedding(output_size, hidden_size)
-
-        self.gru = nn.GRU(hidden_size, hidden_size)
-        self.output = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.LogSoftmax(dim=1)
-
-    def forward(self, input, hidden):
-        x = self.embedding(input).view(1, 1, -1)
-        x = F.relu(x)
-
-        output, hidden = self.gru(x, hidden)
-        output = self.softmax(self.out(output[0]))
         return output, hidden
 
 class DecoderModelAttn(nn.Module):

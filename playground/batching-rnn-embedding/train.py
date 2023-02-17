@@ -32,7 +32,6 @@ models = [
 for model in models:
     size = model.input_size
 
-
     optimizer = torch.optim.Adam(model.parameters())
     X, y = get_batch()
     for i in range(10_000):
