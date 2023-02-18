@@ -1,6 +1,7 @@
 # 2 consider
 
 ## Source for papers 2 consider
+- [https://paperswithcode.com/](https://paperswithcode.com/)
 - [https://spinningup.openai.com/en/latest/spinningup/keypapers.html](https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
 - [https://lilianweng.github.io/](https://lilianweng.github.io/)
 - [https://www.vicarious.com/publications/](https://www.vicarious.com/publications/)
@@ -18,14 +19,15 @@
 
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
-[https://arxiv.org/pdf/2106.04399.pdf](https://arxiv.org/pdf/2106.04399.pdf)
+[Flow Network based Generative Models for Non-Iterative Diverse Candidate Generation](https://arxiv.org/pdf/2106.04399.pdf)
+[Solving rubicks cube with robotic hand](https://arxiv.org/pdf/1910.07113.pdf)
 
 ## NLP 
 [Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
 
 ## GAN
-[Multi-Adversarial Variational Autoencoder Networks](https://arxiv.org/pdf/1906.06430.pdf)
+:)
 
 ## NN architecture
 [https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)

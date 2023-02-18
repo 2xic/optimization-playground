@@ -13,7 +13,7 @@
 | **Self Supervised**                                                                   |                                                                            |                                                                                                      |            |
 | [Bootstrap your own latent](https://arxiv.org/abs/2006.07733)                         | Use BYOL to beat random weights for pre-training on cifar                  | [self-supervised-learning/byol](./self-supervised-learning/byol)                                     | WIP        |
 | **Aritecture**                                                                        |                                                                            |                                                                                                      |            |
-| [ZerO](https://arxiv.org/abs/2110.12661)                                              | look at various network initializations vs random                          | [playground/lottery-tickets/weight-initalization](./playground/lottery-tickets/weight-initalization) | WIP        |
+| [ZerO](https://arxiv.org/abs/2110.12661)                                              | look at various network initializations vs random                          | [playground/lottery-tickets/weight-initalization](./playground/lottery-tickets/weight-initalization) | Done        |
 
 
 ### Reflection from 2022
