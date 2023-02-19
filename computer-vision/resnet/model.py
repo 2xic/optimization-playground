@@ -56,17 +56,13 @@ class Net(nn.Module):
         x = nn.Softmax(dim=1)(x)
         return x
 
-    def skip_connections(self, x1, x2):
-        if self.has_skip_connections:
-            return x1 + x2
-        return x1
-
 class TrainableModel(pl.LightningModule):
-    def __init__(self, skip_connections):
+    def __init__(self, skip_connections, test_loader):
         super().__init__()
         self.epoch_information = EpochRuns(
             "resnet" if skip_connections else "non_resnet"
         )
+        self.test_loader = test_loader
         self.model = Net(skip_connections)
 
     def forward(self, x):
@@ -82,9 +78,11 @@ class TrainableModel(pl.LightningModule):
         self.log("train_loss", loss_value)
 
         self.epoch_information.log(
-            "train_loss", loss_value.item(), self.current_epoch
+            "train_loss", loss_value.item(), self.current_epoch,
         )
-
+        self.epoch_information.log(
+            "training_accuracy", (torch.sum(torch.argmax(z_k_1, 1) == y) / x.shape[0]).item() * 100, self.current_epoch,
+        )
         return loss_value
 
     def configure_optimizers(self):
@@ -92,6 +90,16 @@ class TrainableModel(pl.LightningModule):
         return optimizer
 
     def on_train_epoch_end(self):
+        # run an quick forward of acc on test dataset
+        testing_acc = 0
+        with torch.no_grad():
+            for x, y in self.test_loader:
+                #device = self.model.conv1.device                
+                x = x.to(torch.device('cuda'))
+                y = y.to(torch.device('cuda'))
+                z_k_1 = self.forward(x)
+                testing_acc += (torch.sum(torch.argmax(z_k_1, 1) == y) / x.shape[0]).item() * 100
+        self.epoch_information.log(
+            "testing_accuracy", testing_acc, self.current_epoch,
+        )
         self.epoch_information.store()
-
-

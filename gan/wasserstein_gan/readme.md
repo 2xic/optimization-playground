@@ -2,4 +2,7 @@
 
 https://arxiv.org/pdf/1701.07875.pdf
 
-![example](imgs/img_16.png)
+TODO: make the gan output nicer. 
+
+## Example output after epoch 16
+![Output](imgs/img_16.png)

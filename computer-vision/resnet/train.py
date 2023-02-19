@@ -7,19 +7,24 @@ from dataloader import Cifar10Dataloader
 
 
 for skip_connections in [True, False]:
-    model = TrainableModel(
-        skip_connections=skip_connections
-    )
-
     train_loader = DataLoader(Cifar10Dataloader(),
                             batch_size=64,
                             shuffle=True, 
                             num_workers=8)
-
+    test_loader = DataLoader(Cifar10Dataloader(
+        test=True
+    ),
+                            batch_size=64,
+                            shuffle=True, 
+                            num_workers=8)
+    model = TrainableModel(
+        skip_connections=skip_connections,
+        test_loader=test_loader
+    )
     trainer = pl.Trainer(
-    # accelerator="gpu",
+         accelerator="gpu",
         limit_train_batches=500,
-        max_epochs=5,  # 30,
+        max_epochs=100,
         enable_checkpointing=True,
         default_root_dir="./checkpoints"
     )

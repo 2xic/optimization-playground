@@ -2,4 +2,6 @@
 
 https://arxiv.org/pdf/1406.2661.pdf
 
-PyTorch Lightning is nice 
+TODO: make the gan output nicer. 
+
+![results](./results.png)

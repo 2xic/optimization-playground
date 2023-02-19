@@ -15,35 +15,34 @@ class GanModel(pl.LightningModule):
         self.generator = generator
         self.discriminator = discriminator
 
-    def on_epoch_start(self):
-        noise = torch.normal(mean=0.5, std=torch.arange(1., 101.)).reshape((1, -1))
+    def on_train_epoch_start(self):
+        noise = torch.normal(mean=0.5, std=torch.arange(1., 101.)).reshape((1, -1)).to('cuda')
         image = torchvision.utils.make_grid(self.generator(noise))
         torchvision.utils.save_image(image, f"imgs/img_{self.current_epoch}.png")
 
-    def training_step(self, batch, _batch_idx, optimizer_idx):
-        noise = torch.normal(mean=0.5, std=torch.arange(1., 101.)).reshape((1, -1))
+    def training_step(self, batch, _, optimizer_idx):
+        noise = torch.normal(mean=0.5, std=torch.arange(1., 101.)).reshape((1, -1)).to('cuda')
         real, _ = batch
 
         if optimizer_idx == 0:
             loss = F.binary_cross_entropy(
                 self.discriminator(self.generator(noise)),
-                torch.ones(noise.shape[0], 1)
+                torch.ones(noise.shape[0], 1).to('cuda')
             )
-
         elif optimizer_idx == 1:
            real = F.binary_cross_entropy(
                 self.discriminator(real),
-                torch.ones(real.shape[0], 1)
+                torch.ones(real.shape[0], 1).to('cuda')
            )
            fake = F.binary_cross_entropy(
                 self.discriminator(self.generator(noise).detach()),
-                torch.zeros(noise.shape[0], 1)
+                torch.zeros(noise.shape[0], 1).to('cuda')
            )
            loss = (real + fake) / 2
         return loss
 
     def configure_optimizers(self):
-        lr = 1e-4
+        lr = 1e-3
 
         opt_g = torch.optim.Adam(self.generator.parameters(), lr=lr)
         opt_d = torch.optim.Adam(self.discriminator.parameters(), lr=lr)
@@ -55,9 +54,9 @@ if __name__ == '__main__':
         generator=Generator(z=100)
     )
     trainer = Trainer(
-        accelerator="auto",
+        accelerator="gpu",
         devices=1 if torch.cuda.is_available() else None,
-        max_epochs=10,
+        max_epochs=100,
     )
 
     trainer.fit(gan, train_loader)
