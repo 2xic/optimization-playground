@@ -1,0 +1,1 @@
+Partially inspised by [Generalization beyond overfiting on samll algorithmic datasets](https://mathai-iclr.github.io/papers/papers/MATHAI_29_paper.pdf) which shows that long after overfitting the validation accuracy will sometimes go toward perfect generelization.

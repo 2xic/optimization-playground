@@ -10,12 +10,17 @@ from torchvision import transforms
 
 # just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
 class BasicConvModel(nn.Module):
-    def __init__(self):
+    def __init__(self, n_channels=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 12, 5)
+        self.conv1 = nn.Conv2d(n_channels, 12, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(12, 16, 5)
-        self.fc1 = nn.Linear(16 * 4 * 4, 256)
+        if n_channels == 1:
+            self.fc1 = nn.Linear(16 * 4 * 4, 256)
+        elif n_channels == 3:
+            self.fc1 = nn.Linear(16 * 5 * 5, 256)
+        else:
+            raise Exception(f"Unknown output for n_channels={n_channels}")
         self.fc2 = nn.Linear(256, 128)
         self.fc3 = nn.Linear(128, 63)
         self.fc4 = nn.Linear(63, 10)

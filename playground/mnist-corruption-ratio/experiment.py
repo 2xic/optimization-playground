@@ -28,7 +28,7 @@ for max_train_size in [1_000, 10_000]:
 
     plt.clf()
     plt.plot(x_corruption, y_accuracy)
-    plt.xlabel(f'Corruption % with {max_train_size} MNIST dataset')
-    plt.ylabel('Accuracy %')
+    plt.xlabel(f'Corruption % with {max_train_size} MNIST dataset while traning')
+    plt.ylabel('Accuracy on test dataset %')
     plt.savefig(f'corruption_{max_train_size}.png')
     plt.clf()

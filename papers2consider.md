@@ -25,9 +25,11 @@
 ## NLP 
 [Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
+[Theory of Mind May Have Spontaneously Emerged in Large Language Models](https://arxiv.org/pdf/2302.02083.pdf)
 
 ## GAN
-:)
+[Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
+[Adversarial Examples Are Not Bugs, They Are Features](https://arxiv.org/pdf/1905.02175.pdf)
 
 ## NN architecture
 [https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)
