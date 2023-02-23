@@ -25,3 +25,4 @@ __pycache__
 .vscode/settings.json
 upload_lambda.py
 .lambda_cli_ip
+.env
