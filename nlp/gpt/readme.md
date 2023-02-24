@@ -28,11 +28,20 @@
 
 
 ## GPT-v2 (todo)
+TODO: Look at this blogpost
 [Language Models are Unsupervised Multitask Learners](https://cdn.openai.com/better-language-models/language_models_are_unsupervised_multitask_learners.pdf)
 [Blog](https://openai.com/blog/better-language-models/
 
+TODO: Look at this blogpost
 [https://jalammar.github.io/illustrated-gpt2/](https://jalammar.github.io/illustrated-gpt2/)
 
-TODO: Look at this blogpost
 [https://jaykmody.com/blog/gpt-from-scratch/](https://jaykmody.com/blog/gpt-from-scratch/)
+- Builds up the concept of the GPT architecture from a simple input and output model, from vocab encoding, and various activations.
+- Includes the positional embedding logic, but not the same attention layer as in the actual gpt model, but the classical attention is all you need method
+- Still pretty nice blogpost and nice code [https://github.com/jaymody/picoGPT/blob/main/gpt2.py](https://github.com/jaymody/picoGPT/blob/main/gpt2.py)
+
+[https://writings.stephenwolfram.com/2023/02/what-is-chatgpt-doing-and-why-does-it-work/](https://writings.stephenwolfram.com/2023/02/what-is-chatgpt-doing-and-why-does-it-work/)
+- Builds up an intuition about how the chatgpt model works from a n-char probability model to a n-word probability model.
+- In addition he has some nice visualizations for the attention layers
+- 
 

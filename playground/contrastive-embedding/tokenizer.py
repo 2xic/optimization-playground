@@ -17,14 +17,15 @@ class Tokenizer:
         output = []
         for i in sentence.lower().split(" "):
             output.append(self._encode_token(i))
+        length = len(output)
         output += [self.fill_token_idx, ] * (self.size - len(output))
-        return output
+        return output, length
 
     def encode_fuzz(self, sentence):
-        standard = self.encode(sentence)
+        (standard, length) = self.encode(sentence)
         for i in range(len(standard)):
-            if random.randint(0, 4) == 2:
-                standard[i] = self.unknown_token_idx   
+            if random.randint(0, 5) == 2:
+                standard[i] = self.unknown_token_idx
         return standard
 
     def _encode_token(self, token):

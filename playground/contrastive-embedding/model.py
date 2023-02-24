@@ -10,9 +10,17 @@ class EmbeddingLstm(nn.Module):
         self.embedding = nn.Embedding(vocab, 7, padding_idx=0)
         self.lstm = nn.LSTM(input_size=7, hidden_size=self.hidden_size, num_layers=1, batch_first=True)
 
-        self.linear_out = nn.Linear(
+        self.linear_lstm = nn.Linear(
             self.input_size * self.hidden_size, 
-            self.input_size
+            256
+        )
+        self.linear_middle = nn.Linear(
+            256, 
+            512
+        )
+        self.linear_out = nn.Linear(
+            512, 
+            32
         )
 
     def forward(self, x):
@@ -21,6 +29,7 @@ class EmbeddingLstm(nn.Module):
         x = self.embedding(x)
         x, (hidden, output) = self.lstm(x)
         x = x.reshape((x.shape[0], input_shape * self.hidden_size))
-        x = self.linear_out(x)
-        x = F.sigmoid(x)
+        x = F.relu(self.linear_lstm(x))
+        x = F.relu(self.linear_middle(x))
+        x = F.relu(self.linear_out(x))
         return x
