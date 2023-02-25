@@ -18,3 +18,20 @@ The automatic prompt engineer is trained by given an demostration (for instance 
 - It's also interesting that even larger llms have problems with things like math (I guess it's not that weird given the loss function they are optimizing for, but still the fact that models with fewer parameters can win over one with more parameters in categories like math is a bit strange).
 - The article also talks about the infrastructure/setup needed to train so large language models. Mainly/Namely distributed compute and many gpus. Many of the papers also experiences some of the effects noticed for scaling transformer models (i.e that data + models have to be scaled for best results). 
 
+### Offensive and Defensive Uses of Code LLMs (talk by Xander Dunn)
+[video](https://drive.google.com/file/d/1KpBjboIDy-pFbzj3s1UpnZKJCVyfz0x7/view)
+[slides](https://docs.google.com/presentation/d/1XSxPfZpo_9h2G6ICYYf6BuMhBjQbAAtuAw_hRz94huY/edit)
+Interesting talk, especially since the models are not trained (specifically) for this task, but still does it quite well.
+
+There are two papers he also brought up that i found interesting
+[Pop Quiz! Can a Large Language Model Help With Reverse Engineering?](https://arxiv.org/pdf/2202.01142.pdf)
+- Gives the OpenAi codex model various code questions for various C code
+- For instance one of the code samples have a "evil" program, and the authors quiz Codex about it (pop-quiz). It does quite good, but the authors have to play a bit with the temperature parameter.
+- While the model does not do so well on the quiz when the output is decompiled and stripped of symbols it still is able to reason some about the code. 
+- It's also able to reason about software like PID controllers, cool.
+
+[Examining Zero-Shot Vulnerability Repair with Large Language Models](https://arxiv.org/pdf/2112.02125.pdf)
+- Tries to answer the question: can LLMs be used to fix up security problems ? 
+- Surprisingly (?) LLms are also capable of doing this quite well.
+
+
