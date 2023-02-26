@@ -34,4 +34,27 @@ There are two papers he also brought up that i found interesting
 - Tries to answer the question: can LLMs be used to fix up security problems ? 
 - Surprisingly (?) LLms are also capable of doing this quite well.
 
+### [LLaMA](https://research.facebook.com/publications/llama-open-and-efficient-foundation-language-models/)
+
+[@guillaumelample thread](https://twitter.com/guillaumelample/status/1629151231800115202)
+- Beats models like GPT-3 on most benchmarks
+- Trained on public data, and can therefore be open source and reproducible (hopefully). 
+- Trained on 1T tokens, and even with that the 7B parameters model was still improving
+
+Looks like the claim of open source is lie [https://twitter.com/balajis/status/1629449439726415872?cxt=HHwWgMDRpbvo-5wtAAAA](https://twitter.com/balajis/status/1629449439726415872?cxt=HHwWgMDRpbvo-5wtAAAA)
+
+Code is open [https://github.com/facebookresearch/llama](https://github.com/facebookresearch/llama)
+
+[kaushikpatnaik thread](https://twitter.com/kaushikpatnaik/status/1629194428312330240)
+- Conclusion is that LLMs are still undertrained.
+- References [chinchilla's wild implications](https://www.lesswrong.com/posts/6Fpvch8RR29qLEWNH/chinchilla-s-wild-implications) which was an interesting post on how data is the bottleneck and not the size of the model.
+
+### [Theory of Mind May Have Spontaneously Emerged in Large Language Models](https://arxiv.org/pdf/2302.02083.pdf)
+- This one is interesting, humans have the ability to somewhat understand other people mental state, or at least understand that people view the world differently. 
+- Previous models (before 2022) have not have this ability, and done poorly on evaluation tasks for it. However after 2022 models released by OpenAI have started to do well on this kind of tasks.
+
+### [Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
+- Shows that LLMs can improve with unlabeled data (by using self supervised methods).
+- Uses techniques like majority voting to learn
+
 

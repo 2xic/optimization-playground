@@ -40,12 +40,17 @@ class Cifar10Dataloader(Dataset):
         X, y = self.dataset[idx]
         return torchvision.transforms.ToTensor()(X), y
 
-def get_dataloader(batch_size=64):
+def _call_if_func(func, dataset):
+    if func is not None:
+        return func(dataset)
+    return func
+
+def get_dataloader(batch_size=64, shuffle=False, sampler=None):
     train_ds = Cifar10Dataloader(test=False)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
 
     test_ds = Cifar10Dataloader(test=True)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, test_ds))
 
     return (
         train_loader,

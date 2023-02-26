@@ -23,10 +23,7 @@
 [Solving rubicks cube with robotic hand](https://arxiv.org/pdf/1910.07113.pdf)
 
 ## NLP 
-[Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
-[Theory of Mind May Have Spontaneously Emerged in Large Language Models](https://arxiv.org/pdf/2302.02083.pdf)
-[Scaling Language Models: Methods, Analysis & Insights from Training Gopher](https://arxiv.org/pdf/2112.11446.pdf)
 [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](https://arxiv.org/pdf/2201.11990.pdf)
 
 ## GAN
@@ -39,3 +36,4 @@
 
 ## Recommendations
 :)
+

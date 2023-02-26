@@ -1,8 +1,10 @@
+"""
+Training on one GPU takes a long time
+"""
 from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
 from optimization_playground_shared.models.TraningLoop import TraningLoop
 import torch.optim as optim
-import matplotlib.pyplot as plt
 import json
 
 y_train_accuracy, y_test_accuracy = [], []
@@ -15,13 +17,13 @@ iterator = TraningLoop(model, optimizer)
 
 for epoch in range(10_000):
     (loss, acc) = iterator.train(train)
-    y_train_accuracy.append(acc.item())
-    
-    accuracy = iterator.eval(test)
-    y_test_accuracy.append(accuracy.item())
 
     if epoch % 10 == 0:
         print(epoch)
+        
+        y_train_accuracy.append(acc.item())
+        accuracy = iterator.eval(test)
+        y_test_accuracy.append(accuracy.item())
         
         with open("results.json", "w") as file:
             file.write(json.dumps({

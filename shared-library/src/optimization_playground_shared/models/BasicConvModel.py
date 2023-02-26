@@ -1,14 +1,11 @@
-from torch import optim, nn
+from torch import nn
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from torchvision.datasets import MNIST
-from torchvision import transforms
 
-# just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
 class BasicConvModel(nn.Module):
     def __init__(self, n_channels=1):
         super().__init__()
@@ -22,19 +19,21 @@ class BasicConvModel(nn.Module):
         else:
             raise Exception(f"Unknown output for n_channels={n_channels}")
         self.out = nn.Sequential(
-          nn.Linear(256, 128),
-          nn.ReLU(),
-          nn.Linear(128, 63),
-          nn.ReLU(),
-          nn.Dropout(p=0.01),
-          nn.Linear(63, 10),
-          nn.LogSoftmax(dim=1),
+            self.fc1,
+            nn.ReLU(),
+            nn.Linear(256, 128),
+            nn.ReLU(),
+            nn.Linear(128, 63),
+            nn.ReLU(),
+            nn.Dropout(p=0.01),
+            nn.Linear(63, 10),
+            nn.LogSoftmax(dim=1),
         )
 
     def forward(self, x):
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
-        x = torch.flatten(x, 1) 
+        x = torch.flatten(x, 1)
         x = F.dropout(x, p=0.1)
         x = self.out(x)
         return x
