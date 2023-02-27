@@ -5,8 +5,8 @@ import torch.nn.functional as F
 from .SimpleGenerator import SimpleGenerator
 
 class SimpleLabelGenerator(SimpleGenerator):
-    def __init__(self, z):
-        super().__init__(z)
+    def __init__(self, z, input_shape=(1, 28, 28)):
+        super().__init__(z, input_shape)
         self.labels = nn.Sequential(
             nn.Linear(1, z),
             nn.LeakyReLU()

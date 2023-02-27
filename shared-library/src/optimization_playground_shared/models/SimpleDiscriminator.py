@@ -2,8 +2,8 @@ import torch.nn as nn
 from .BasicConvModel import BasicConvModel
 
 class SimpleDiscriminator(BasicConvModel):
-    def __init__(self, n_channels=1):
-        super().__init__(n_channels)
+    def __init__(self, image_shape=(1, 28, 28)):
+        super().__init__(image_shape)
         self.out = nn.Sequential(
           nn.Linear(256, 128),
           nn.LeakyReLU(),

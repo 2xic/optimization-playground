@@ -2,9 +2,10 @@ import torch.nn as nn
 from .BasicConvModel import BasicConvModel
 
 class SimpleLabelDiscriminator(BasicConvModel):
-    def __init__(self, n_channels=1):
-        super().__init__(n_channels)
+    def __init__(self, input_shape=(1, 28, 28)):
+        super().__init__(input_shape)
         self.out = nn.Sequential(
+          self.fc1,
           nn.Linear(256, 128),
           nn.LeakyReLU(),
           nn.Linear(128, 64),

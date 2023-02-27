@@ -22,6 +22,7 @@ discriminator_real = []
 discriminator_fake = []
 
 def forward(gan: GanModel, train_loader):
+    index_batches = 0
     batches = 0
     sum_g_loss = 0
     sum_d_loss = 0
@@ -35,6 +36,7 @@ def forward(gan: GanModel, train_loader):
     for index, (X, y) in enumerate(train_loader):
         batch_size = X.shape[0]
         X = X.to('cuda')
+        X = torchvision.transforms.Resize(size=((parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y)))(X)
         y = y.to('cuda').float()
         if parameters.APPLY_AUGMENTATIONS:
             transforms = torch.nn.Sequential(
@@ -72,6 +74,7 @@ def forward(gan: GanModel, train_loader):
             with torch.no_grad():
                 avg_discriminator_fake += gan.discriminator(gan.generator(noise, y).detach())[0].mean().item()
                 avg_discriminator_real += gan.discriminator(X)[0].mean().item()
+                batches += 1
 #                avg_discriminator_fake += gan.discriminator(gan.generator(noise).detach()).mean().item()
 #                avg_discriminator_real += gan.discriminator(X).mean().item()
 
@@ -111,11 +114,11 @@ def forward(gan: GanModel, train_loader):
             print("")
             sum_g_loss += g_loss.item()
             sum_d_loss += batch_sum_d_loss
-            batches += 1
+            index_batches += 1
     discriminator_real.append(avg_discriminator_real / batches)
     discriminator_fake.append(avg_discriminator_fake / batches)
-    generator_loss.append(sum_g_loss / batches)
-    discriminator_loss.append(sum_d_loss / batches)
+    generator_loss.append(sum_g_loss / index_batches)
+    discriminator_loss.append(sum_d_loss / index_batches)
 
 if __name__ == '__main__':
     (train_loader, _) = get_dataloader(
@@ -123,8 +126,8 @@ if __name__ == '__main__':
         overfit=False
     )
     gan = GanModel(
-        discriminator=SimpleLabelDiscriminator(),
-        generator=SimpleLabelGenerator(z=parameters.Z_SHAPE)
+        discriminator=SimpleLabelDiscriminator(input_shape=((1, parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y))),
+        generator=SimpleLabelGenerator(z=parameters.Z_SHAPE, input_shape=((1, parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y)))
     )
     for epoch in range(1_00):
         gan.current_epoch = epoch

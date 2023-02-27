@@ -3,6 +3,9 @@ import torch
 LEARNING_RATE = 0.0002
 BATCH_SIZE = 32
 Z_SHAPE = 100
+# Trying to scale up MNIST data, and see what happens
+SCALE = 2
+IMG_SHAPE_X, IMG_SHAPE_Y = 28 * SCALE, 28 * SCALE
 
 NORMALIZE_INPUTS_WITH_TANH = True
 APPLY_AUGMENTATIONS = False
