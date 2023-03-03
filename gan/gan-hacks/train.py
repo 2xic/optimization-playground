@@ -1,7 +1,6 @@
 import torch
 import torch.nn.functional as F
 import torchvision
-from optimization_playground_shared.dataloaders.Mnist import get_dataloader
 #from optimization_playground_shared.models.SimpleGenerator import SimpleGenerator
 #from optimization_playground_shared.models.SimpleDiscriminator import SimpleDiscriminator
 #from optimization_playground_shared.models.SimpleDeeperGenerator import SimpleDeeperGenerator
@@ -120,23 +119,12 @@ def forward(gan: GanModel, train_loader):
     generator_loss.append(sum_g_loss / index_batches)
     discriminator_loss.append(sum_d_loss / index_batches)
 
-if __name__ == '__main__':
-    (train_loader, _) = get_dataloader(
-        batch_size=parameters.BATCH_SIZE,
-        overfit=False
-    )
-    gan = GanModel(
-        discriminator=SimpleLabelDiscriminator(input_shape=((1, parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y))),
-        generator=SimpleLabelGenerator(z=parameters.Z_SHAPE, input_shape=((1, parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y)))
-    )
-    for epoch in range(1_00):
-        gan.current_epoch = epoch
-        forward(gan, train_loader)
-        print(f"Epoch done {epoch}")
-
-        if epoch % 10 == 0:
-            gan.plot()
-
+def plot_loss_discriminator(
+    generator_loss,
+    discriminator_loss,
+    discriminator_fake,
+    discriminator_real
+):
     plt.title('Generator loss')
     plt.plot(generator_loss, label="Generator")
     plt.savefig('generator_loss.png')
@@ -151,3 +139,27 @@ if __name__ == '__main__':
     plt.legend(loc="upper left")
     plt.savefig('discriminator_predictions.png')
     plt.clf()
+
+
+if __name__ == '__main__':
+    (train_loader, _) = parameters.DATALOADER()
+    gan = GanModel(
+        discriminator=SimpleLabelDiscriminator(input_shape=((1, parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y))),
+        generator=SimpleLabelGenerator(z=parameters.Z_SHAPE, input_shape=((1, parameters.IMG_SHAPE_X, parameters.IMG_SHAPE_Y)))
+    )
+    for epoch in range(parameters.EPOCHS):
+        gan.current_epoch = epoch
+        forward(gan, train_loader)
+        print(f"Epoch done {epoch}")
+
+        if epoch % 10 == 0:
+            gan.plot()
+    gan.plot_final()
+
+    if parameters.PLOT_LOSS_AND_DISCRIMNATOR:
+        plot_loss_discriminator(
+             generator_loss,
+            discriminator_loss,
+            discriminator_fake,
+            discriminator_real   
+        )

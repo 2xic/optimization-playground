@@ -1,5 +1,8 @@
 import torch
+#from optimization_playground_shared.dataloaders.Mnist import get_dataloader
+from optimization_playground_shared.dataloaders.CelebA import get_dataloader
 
+EPOCHS = 1_00
 LEARNING_RATE = 0.0002
 BATCH_SIZE = 32
 Z_SHAPE = 100
@@ -11,8 +14,20 @@ NORMALIZE_INPUTS_WITH_TANH = True
 APPLY_AUGMENTATIONS = False
 USE_MAX_LOSS = False
 
+"""
+Visualzize
+"""
+PLOT_LOSS_AND_DISCRIMNATOR = False
+PLOT_EVERY_EPOCH = False
+PLOT_FINAL_OUTPUT_NAME = f"{IMG_SHAPE_X}x{IMG_SHAPE_Y}_{Z_SHAPE}.png"
+
 ITERATIONS_OF_DISCRIMINATOR_BATCH = 1
 ITERATIONS_OF_GENERATOR_BATCH = 1
+
+DATALOADER = lambda: get_dataloader(
+    batch_size=BATCH_SIZE,
+    #overfit=False
+) 
 
 DEBUG = False
 

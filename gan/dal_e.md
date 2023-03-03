@@ -1,4 +1,3 @@
-
 # [OpenAi Blog on DAL-E v1](https://openai.com/blog/dall-e/)
 DAL-E is a transformer language model. The model receives both the image and the text prompt, and is therefore able to recreate the image.
 
@@ -25,4 +24,15 @@ unClip is described a bit more here, so the idea is the following (based on figu
 The method involves having a dataset (`X`, `y`) of `X` images with `y` captions. 
 - The prior is `P(Z_i | y)` where `Z_i` is the CLIP image embedding
 - The decoder `P(X | Z_i, y)`, here the `y` caption is optional.
+
+----
+# [Beating OpenAI CLIP with 100x less data and compute](https://www.unum.cloud/blog/2023-02-20-efficient-multimodality)
+Model is also open source [https://github.com/FreddeFrallan/Multilingual-CLIP](https://github.com/FreddeFrallan/Multilingual-CLIP)
+
+Implements two public papers to make pretraining more efficent
+[Efficient Vision-Language Pretraining with Visual Concepts and Hierarchical Alignment](https://arxiv.org/abs/2208.13628)
+[Align before Fuse: Vision and Language Representation Learning with Momentum Distillation](https://arxiv.org/abs/2107.07651)
+
+
+
 

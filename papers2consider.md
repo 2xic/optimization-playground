@@ -21,18 +21,32 @@
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
 [Flow Network based Generative Models for Non-Iterative Diverse Candidate Generation](https://arxiv.org/pdf/2106.04399.pdf)
 [Solving rubicks cube with robotic hand](https://arxiv.org/pdf/1910.07113.pdf)
+[Go-Explore: a New Approach for Hard-Exploration Problems](https://arxiv.org/pdf/1901.10995.pdf)
+[EQUIVARIANT MUZERO](https://arxiv.org/pdf/2302.04798.pdf)
 
 ## NLP 
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
 [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](https://arxiv.org/pdf/2201.11990.pdf)
+[https://openai.com/research/webgpt](https://openai.com/research/webgpt)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
 [Adversarial Examples Are Not Bugs, They Are Features](https://arxiv.org/pdf/1905.02175.pdf)
 
 ## NN architecture
-[https://arxiv.org/pdf/2012.14905.pdf](Meta Learning Backpropagation And Improving It)
-[https://arxiv.org/pdf/2212.05153.pdf](Algorithmic progress in computer vision)
+[Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)
+[Algorithmic progress in computer vision](https://arxiv.org/pdf/2212.05153.pdf)
+[Iriguing properties of neural networks](https://arxiv.org/pdf/1312.6199.pdf)
+[http://proceedings.mlr.press/v37/ioffe15.pdf](http://proceedings.mlr.press/v37/ioffe15.pdf)
+[Going Deeper with Convolutions](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Szegedy_Going_Deeper_With_2015_CVPR_paper.pdf)
+[Language Is Not All You Need: Aligning Perception with Language Models](https://arxiv.org/pdf/2302.14045.pdf)
+[Efficient Vision-Language Pretraining with Visual Concepts and Hierarchical Alignment](https://arxiv.org/abs/2208.13628)
+[Align before Fuse: Vision and Language Representation Learning with Momentum Distillation](https://arxiv.org/abs/2107.07651)
+
+
+## Infrastructure
+[Velox: Meta’s Unified Execution Engine](https://scontent.fosl3-2.fna.fbcdn.net/v/t39.8562-6/302757195_3033291893628871_4556621853780203235_n.pdf?_nc_cat=109&ccb=1-7&_nc_sid=ad8a9d&_nc_ohc=83s6lshWWAEAX8A3wdW&_nc_ht=scontent.fosl3-2.fna&oh=00_AfAq1jZlnHlM139fSBQvQ1mQmgT-cyGDgwMlP-GixFdobw&oe=64080F67)
+[velox introduction](https://engineering.fb.com/2022/08/31/open-source/velox/?utm_source=pocket_reader)
 
 ## Recommendations
 :)

@@ -57,4 +57,19 @@ Code is open [https://github.com/facebookresearch/llama](https://github.com/face
 - Shows that LLMs can improve with unlabeled data (by using self supervised methods).
 - Uses techniques like majority voting to learn
 
+### [LLMs: The Important Ingredients](https://xander.ai/llms-the-important-ingredients)
+What do you need to "bake" a LLM ? 
+- Scale, but not just stacking GPUs, you need to have a efficient and optimized interference and training loop.
+- Human preference alignment (like OpenAi did with RL)
+- You need to have a large context window
+- Flywheel -> deploy and improve based on feedback (including jailbreaks).
+- 
+
+He also references many papers that is worth looking more deeply into.
+
+[Improving language models by retrieving from trillions of tokens](https://arxiv.org/pdf/2112.04426.pdf)
+[Chain of Hindsight Aligns Language Models with Feedback](https://arxiv.org/pdf/2302.02676.pdf)
+[Universal Transformers](https://arxiv.org/abs/1807.03819)
+
+
 
