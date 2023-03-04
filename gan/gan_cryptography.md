@@ -5,7 +5,5 @@ Quite an interesting idea, no predefined algorithm is set, but two parties wish 
 Both communicator have a shared key, and are easily able to decrypt the message, and wish to make the output of the "man in the middle" as noisy as possible.
 
 
-References this paper [Learning to Protect Communications with Adversarial Neural Cryptography](https://arxiv.org/abs/1610.06918)
-
-**This paper looks awesome! I will implement it this weekend!**
+References this paper [Learning to Protect Communications with Adversarial Neural Cryptography](./learning_to_protect_communications_with_adversarial_neural_cryptography.md)
 
