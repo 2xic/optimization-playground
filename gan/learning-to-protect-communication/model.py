@@ -7,9 +7,6 @@ class BaseCommunicatorModel(nn.Module):
         self.plaintext = plaintext
         self.sharedkey = sharedkey
         self.input_shape = (plaintext + sharedkey) if input_shape is None else input_shape
-       # print((
-       #     self.input_shape
-       # ))
         self.conv1_layout = [
             (4, 1, 2, 1, 0),
             (2, 2, 4, 2, 0),
@@ -18,15 +15,18 @@ class BaseCommunicatorModel(nn.Module):
         ]
         self.out = nn.Sequential(
             nn.Linear(self.input_shape, 2 * self.plaintext),
+            # should this sigmoid be here ? 
+            # The paper says "We use a sigmoid nonlinear unit after each layer except the final one"
+          #  nn.Tanh(),
             *[
                 self.create_conv_layer(*i)
                 for i in self.conv1_layout
-            ],
-            nn.Tanh()
+            ]
         )
 
     def create_conv_layer(self, kernel_size, input_depth,  output_depth, stride, padding=0):
         return nn.Sequential(
+            nn.Sigmoid(),
             nn.Conv1d(
                 input_depth,
                 output_depth,
@@ -34,7 +34,7 @@ class BaseCommunicatorModel(nn.Module):
                 stride=stride,
                 padding=padding,
             ),
-            nn.Sigmoid()
+          #  nn.Tanh()
         )
 
     def forward(self, x, shared_key):
@@ -49,8 +49,7 @@ class BaseCommunicatorModel(nn.Module):
         #print(x.shape)
         x = self.out(x)
         #print(x.shape)
-        return x.reshape((x.shape[0], -1))
-
+        return nn.Tanh()(x.reshape((x.shape[0], -1)))
 
 class Alice(BaseCommunicatorModel):
     def __init__(self, plaintext, sharedkey):
