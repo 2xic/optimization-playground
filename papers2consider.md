@@ -27,7 +27,6 @@
 ## NLP 
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
 [Using DeepSpeed and Megatron to Train Megatron-Turing NLG 530B, A Large-Scale Generative Language Model](https://arxiv.org/pdf/2201.11990.pdf)
-[https://openai.com/research/webgpt](https://openai.com/research/webgpt)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
@@ -41,12 +40,11 @@
 [Going Deeper with Convolutions](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Szegedy_Going_Deeper_With_2015_CVPR_paper.pdf)
 [Language Is Not All You Need: Aligning Perception with Language Models](https://arxiv.org/pdf/2302.14045.pdf)
 [Efficient Vision-Language Pretraining with Visual Concepts and Hierarchical Alignment](https://arxiv.org/abs/2208.13628)
-[Align before Fuse: Vision and Language Representation Learning with Momentum Distillation](https://arxiv.org/abs/2107.07651)
 
 
 ## Infrastructure
 [Velox: Meta’s Unified Execution Engine](https://scontent.fosl3-2.fna.fbcdn.net/v/t39.8562-6/302757195_3033291893628871_4556621853780203235_n.pdf?_nc_cat=109&ccb=1-7&_nc_sid=ad8a9d&_nc_ohc=83s6lshWWAEAX8A3wdW&_nc_ht=scontent.fosl3-2.fna&oh=00_AfAq1jZlnHlM139fSBQvQ1mQmgT-cyGDgwMlP-GixFdobw&oe=64080F67)
-[velox introduction](https://engineering.fb.com/2022/08/31/open-source/velox/?utm_source=pocket_reader)
+[Velox introduction](https://engineering.fb.com/2022/08/31/open-source/velox/?utm_source=pocket_reader)
 
 ## Recommendations
 :)

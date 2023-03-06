@@ -55,7 +55,7 @@ Code is open [https://github.com/facebookresearch/llama](https://github.com/face
 
 ### [Large Language Models Can Self-Improve](https://arxiv.org/pdf/2210.11610.pdf)
 - Shows that LLMs can improve with unlabeled data (by using self supervised methods).
-- Uses techniques like majority voting to learn
+- Uses techniques like majority voting to learn (self consistency)
 
 ### [LLMs: The Important Ingredients](https://xander.ai/llms-the-important-ingredients)
 What do you need to "bake" a LLM ? 
@@ -63,13 +63,40 @@ What do you need to "bake" a LLM ?
 - Human preference alignment (like OpenAi did with RL)
 - You need to have a large context window
 - Flywheel -> deploy and improve based on feedback (including jailbreaks).
-- 
 
-He also references many papers that is worth looking more deeply into.
+They also references many papers that is worth looking more deeply into.
 
-[Improving language models by retrieving from trillions of tokens](https://arxiv.org/pdf/2112.04426.pdf)
-[Chain of Hindsight Aligns Language Models with Feedback](https://arxiv.org/pdf/2302.02676.pdf)
-[Universal Transformers](https://arxiv.org/abs/1807.03819)
+-  [Improving language models by retrieving from trillions of tokens](https://arxiv.org/pdf/2112.04426.pdf) (notes below)
+- [Chain of Hindsight Aligns Language Models with Feedback](https://arxiv.org/pdf/2302.02676.pdf) (notes below)
+- [Universal Transformers](https://arxiv.org/abs/1807.03819) (todo)
 
+
+### [Improving language models by retrieving from trillions of tokens](https://arxiv.org/pdf/2112.04426.pdf)
+- Uses 25x less parameters than models like GPT-3, but is still able to do results like GPT-3.
+- Sounds like the technique they use is loading tokens based on local similarly to preceding documents. 
+    - My automatic reaction to this is that the model would be more likely to overfit in the domain, but maybe that is not the case.
+- The architecture seems a bit complicated thought
+    - They use a frozen bert model to create embeddings
+    - Text tokens are fed into this model and the document embeddings database to find similar text. 
+    - This is then again fed into a transformer encoder, and part of the text chunks will then be replaced with the new embeddings with short distance (if I understand correctly)
+- Hm, I take back what I said above, it's an interesting idea.
+
+
+### [Chain of Hindsight Aligns Language Models with Feedback](https://arxiv.org/pdf/2302.02676.pdf)
+- Models like ChatGPT uses variants of supervised learning to learn from annotated feedback (I know it's RL, but it's needs direct annotated feedback )
+- The core idea of the paper is to just say "this is good/better" and "this is bad/worse" depending on the model output.
+    - The idea is basically that the model based on all of this feedback should be able to learn what is considered good / bad
+- Hm, I mean they still use labels, but the labels seems like they might be more relative than absolute. 
+
+### [Program-aided Language Models](https://arxiv.org/pdf/2211.10435.pdf)
+Makes the LLM use a tool to offload computation as the models are usually better at reasoning than they are at doing things like math.
+
+Basic idea is just to tell the model to use python variables, and run the result in python (for instance).
+
+### [WebGPT: Browser-assisted question-answering with human feedback](https://arxiv.org/pdf/2112.09332.pdf)
+- Give GPT-3 access to a web browser to answer long formed questions
+    - Basically create a simple syntax for different commands the model can "execute" and watch for them in the model output
+- Then evaluate the answers based on human feedback, makes sense.
+- Does not do well on out of distribution questions, but does well on ELi5 dataset.
 
 

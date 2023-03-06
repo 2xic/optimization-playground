@@ -1,0 +1,22 @@
+### [Align before Fuse: Vision and Language Representation Learning with Momentum Distillation](https://arxiv.org/abs/2107.07651)
+- From the abstract they make some cool claims, the model does not require bounding box or high resolution images
+- Most models at the time would use pre-trained object detectors that extracts regions of the image which is then fed into a mutlimodel encoder to go from image features into word embeddings.
+    - Some limitations to this are the following
+        - Image and Word are separate context and the multimodel might not pick this up
+        - Object detection models are expensive, and requirers images with higher quality 
+        - Real data from the web is noisy so pretrained models might not be prepared for this
+- The proposed solution here is
+    - Encode image and text separately
+    - Then use a separate model to fuse the encodings
+    - They also use a technique "MoD" (Momentum distillation)
+        - Create a model based on the average of the model parameters
+        - Use this model to generate psuedo labels
+        - This technique improves the model training and downstream tasks
+- Some other techniques they use 
+    - Image-Text contrastive learning
+        - Learns a similarly function for similar text and images
+    - Masked language model
+        - Randomly replace tokens with [MASK] (special token)
+        - Then get the model probability for the masked token
+    - Image-Text matching
+        - Does the image match the text ? 
