@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-class TraningLoop:
+class TrainingLoop:
     def __init__(self, model, optimizer):
         self.model = model
         self.optimizer = optimizer

@@ -3,7 +3,7 @@ Training on one GPU takes a long time
 """
 from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
-from optimization_playground_shared.models.TraningLoop import TraningLoop
+from optimization_playground_shared.models.TrainingLoop import TrainingLoop
 import torch.optim as optim
 import json
 
@@ -13,7 +13,7 @@ train, test = get_dataloader()
 
 model = BasicConvModel(n_channels=3)
 optimizer = optim.Adam(model.parameters())
-iterator = TraningLoop(model, optimizer)
+iterator = TrainingLoop(model, optimizer)
 
 for epoch in range(10_000):
     (loss, acc) = iterator.train(train)

@@ -1,6 +1,6 @@
 from optimization_playground_shared.dataloaders.RestrictedMnist import get_dataloader
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
-from optimization_playground_shared.models.TraningLoop import TraningLoop
+from optimization_playground_shared.models.TrainingLoop import TrainingLoop
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
@@ -12,7 +12,7 @@ for entries_per_class in [1, 10, 50, 100, 250, 500]:
 
     model = BasicConvModel()
     optimizer = optim.Adam(model.parameters())
-    iterator = TraningLoop(model, optimizer)
+    iterator = TrainingLoop(model, optimizer)
 
     for _ in range(10):
         (loss, acc) = iterator.train(train)

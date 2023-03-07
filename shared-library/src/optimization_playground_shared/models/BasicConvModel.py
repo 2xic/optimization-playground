@@ -38,7 +38,7 @@ def conv_output_shape(shape_in, conv: nn.Conv2d):
 def get_output_shape(shape_in, layers):
     shape = shape_in
     for i in layers:
-        print(shape)
+      #  print(shape)
         if isinstance(i, nn.Conv2d):
             shape = conv_output_shape(shape, i)
         elif isinstance(i, nn.MaxPool2d):
