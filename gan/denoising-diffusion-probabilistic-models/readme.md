@@ -11,7 +11,7 @@ The training algorithm is described as
 ---
 
 ### Results of code
-
+(it's a bit unclear, but you see the numbers if you zoom)
 ![Normalized](./exampels/unet/example_generated_normalized_epoch_19.png)
 
 ![Raw](./exampels/unet/example_generated_raw_epoch_19.png)

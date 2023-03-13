@@ -156,7 +156,7 @@ if __name__ == '__main__':
             gan.plot()
     gan.plot_final()
 
-    if parameters.PLOT_LOSS_AND_DISCRIMNATOR:
+    if parameters.PLOT_LOSS_AND_DISCRIMINATOR:
         plot_loss_discriminator(
              generator_loss,
             discriminator_loss,

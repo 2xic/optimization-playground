@@ -1,7 +1,6 @@
-
-
 # algorithm 1 from https://arxiv.org/pdf/1412.6980.pdf
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Adam:
     def __init__(self, theta_0) -> None:
@@ -34,22 +33,40 @@ class Adam:
 
 class ProbabilisticLinearRegression:
     def __init__(self) -> None:
-        self.x = list(range(1, 5))
-        self.y = list(map(lambda x: x * 2, self.x))
+        pass
+
+    def fit(self, X, y):
+        self.x = X
+        self.y = y
+
+        # Mean square rror
         self.cost = lambda a: (1/2 * sum([(self.y[i] - a * self.x[i]) ** 2 for i in range(len(self.y))]))
         self.cost_deriv = lambda a:  (-2 * sum([(self.y[i] - a * self.x[i]) for i in range(len(self.y))]))
+
         self.optim = Adam(0)
-        for i in range(100000):
+        for _ in range(100000):
             self.optim.step(self.cost, self.cost_deriv)
         self.a = self.optim.theta
+
     """
     y = ax + b
     """
-    def plot(self):
-        pass
-
+    def plot(self, x, output):
+        assert type(x) == list
+        plt.plot(self.x, self.y, label="Measured", color="blue")
+        plt.plot(x, list(map(lambda x: self.a * x, x)), label="Predicted", linestyle="dotted", color="blue")
+        plt.legend(loc="upper left")
+        plt.savefig(output)
+        plt.clf()
 
 if __name__ == "__main__":
-    x = ProbabilisticLinearRegression()
-    assert (x.a) == 2
+    x = list(range(1, 5))
+    y = list(map(lambda x: (x * 2), x))
 
+    X_prediction = list((range(1, 10)))
+
+    model = ProbabilisticLinearRegression()
+    model.fit(x, y)
+    assert (model.a) == 2
+
+    model.plot(X_prediction, "simple_linear.png")
