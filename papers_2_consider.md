@@ -16,6 +16,7 @@
 
 ### Computer vision
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
+[https://nerf-w.github.io/](https://nerf-w.github.io/)
 
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
@@ -26,6 +27,7 @@
 
 ## NLP 
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
+[Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)

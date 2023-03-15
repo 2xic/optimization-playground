@@ -43,5 +43,19 @@ TODO: Look at this blogpost
 [https://writings.stephenwolfram.com/2023/02/what-is-chatgpt-doing-and-why-does-it-work/](https://writings.stephenwolfram.com/2023/02/what-is-chatgpt-doing-and-why-does-it-work/)
 - Builds up an intuition about how the chatgpt model works from a n-char probability model to a n-word probability model.
 - In addition he has some nice visualizations for the attention layers
-- 
+
+### GPT-v4 
+GPT-4 is out [paper](https://cdn.openai.com/papers/gpt-4.pdf) has to be read.
+So the first thing is that the new model is now a MLLM model, so it's able to take both images and text as input, and gives text as output (following the trend set by other models).
+Core part of the project was the infrastructure and optimization methods to give predictability, and they were able to infer (in some aspects) how the model would behave on as little as 1 / 1000th of the compute of the final model.
+[Benchmarks](https://twitter.com/SilasAlberti/status/1635693275230380032) show that it outperforms existing LLMs, and it also does well on exams (top 10% vs bottom 10% on GPT 3.5).
+GPT-4 still suffer from hallucinations, has a limited (but increased [4096 to 32k](https://twitter.com/nbashaw/status/1635689092515233792)) context window and still does not learn from experience.
+The training steps seems similar to that of ChatGPT by having Reinforcement Learning from Human Feedback. They share no other details on the model because of "safety and competition"
+Predictable scaling by using scaling laws to predict how the model would act.
+**They also tested GPT-4 on [Inverse scaling prize (tasks that should be harder for LLMs, but easy for small models)](https://github.com/inverse-scaling/prize), and it odes amazingly well (looks like 100% accuracy)**
+
+
+
+- [Seems overfited on Codeforces](https://twitter.com/cHHillee/status/1635790330854526981) quote from the thread `So... the fact that it solves 10/10 problems from pre-2021 and 0/10 of the most recent problems (which it has never seen before) is very suspicious.`
+
 

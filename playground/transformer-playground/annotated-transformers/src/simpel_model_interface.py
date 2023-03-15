@@ -21,10 +21,19 @@ class SimpleModelInterface:
         self._freeze()
 
         self.model = make_model(
-            len(self.word_idx) + 1,
-            len(self.word_idx) + 1,
+            len(self.word_idx),
+            len(self.word_idx),
             self.layers
         )
+    
+    def get_training(self, documents):
+        for document in documents:
+            doc = document.split(" ")
+            src = torch.LongTensor([[
+                self.word_idx.get(i, self.UNKNOWN_IDX) for i in doc
+            ]])
+            for i in range(0, len(doc) - 2):
+                yield src[:, i:i+2], src[:, i+2:i+4]
 
     def forward(self, document, steps=30):
         src = torch.LongTensor([[
@@ -38,6 +47,7 @@ class SimpleModelInterface:
             out = self.model.decode(
                 memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
             )
+
             prob = self.model.generator(out[:, -1])
             _, next_word = torch.max(prob, dim=1)
             next_word = next_word.data[0]
