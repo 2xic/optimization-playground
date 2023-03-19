@@ -30,6 +30,7 @@ Then there is a final feed forward layer which in the same style as the encoder 
 [https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html](Tutorial 6: Transformers and Multi-Head Attention)
 [Transformers know if it's training with dropout](https://colab.research.google.com/drive/1286r553N8drh6-VeZjZA1vbUBY9Z1fps?usp=sharing)
 
+[Transformer’s Encoder-Decoder: Let’s Understand The Model Architecture](https://kikaben.com/transformers-encoder-decoder/)
 [The Annotated Transformer](http://nlp.seas.harvard.edu/annotated-transformer/)
 [https://github.com/gmontamat/poor-mans-transformers](https://github.com/gmontamat/poor-mans-transformers)
 [https://github.com/karpathy/minGPT](https://github.com/karpathy/minGPT)

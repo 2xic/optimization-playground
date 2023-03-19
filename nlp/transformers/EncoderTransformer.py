@@ -1,11 +1,9 @@
 import torch.nn as nn
 from EncoderBlock import EncoderBlock
-from DecoderBlock import DecoderBlock
-import torch
 from PositionalEncoding import PositionalEncoding
 from train_transformer import train_transformer
 
-class Transformer(nn.Module):
+class EncoderTransformer(nn.Module):
     def __init__(self, tokens, num_layers=4) -> None:
         super().__init__()
 
@@ -16,17 +14,12 @@ class Transformer(nn.Module):
             tokens,
             self.embedding_dims
         )
-        self.encoder_blocks = nn.ModuleList([
+        self.encoding_blocks = nn.ModuleList([
             EncoderBlock(
                 self.embedding_dims
             ) for _ in range(num_layers)
         ])
 
-        self.decoder_blocks = nn.ModuleList([
-            DecoderBlock(
-                self.embedding_dims
-            ) for _ in range(num_layers)
-        ])
         self.output = nn.Sequential(*[
             nn.Linear(
                 self.embedding_dims, tokens,
@@ -38,30 +31,19 @@ class Transformer(nn.Module):
             nn.Sigmoid()
         ])
 
-    def generate_square_subsequent_mask(self, sz):
-        mask = (torch.triu(torch.ones(sz, sz)) == 1). \
-            transpose(0, 1)
-        mask = mask.float(). \
-            masked_fill(mask == 0, float('-inf')). \
-            masked_fill(mask == 1, float(0.0))
-        return mask
-
     def forward(self, x):
         x = self.embeddings(x)
         y = PositionalEncoding().encode_tensor(x.size(0), d_model=(self.d_model * x.size(0))).reshape((
             x.shape
         ))
         x += y
-        encodings = []
-        for encoder_block in self.encoder_blocks:
+#        print(y.shape)
+#        print(x.shape)
+        for encoder_block in self.encoding_blocks:
             x = encoder_block(x)
-            encodings.append(x)
-        # we are allowed to peak
-        attn_mask = None # (self.generate_square_subsequent_mask(4))
-        
-        for index, decoder_block in enumerate(self.decoder_blocks):
-            x = decoder_block(x, encodings[index], attn_mask=attn_mask)
-        return self.output(x)
+        x = self.output(x)        
+        return x
 
 if __name__ == "__main__":
-    train_transformer(Transformer)
+    train_transformer(EncoderTransformer)
+    

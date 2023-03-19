@@ -54,8 +54,7 @@ The training steps seems similar to that of ChatGPT by having Reinforcement Lear
 Predictable scaling by using scaling laws to predict how the model would act.
 **They also tested GPT-4 on [Inverse scaling prize (tasks that should be harder for LLMs, but easy for small models)](https://github.com/inverse-scaling/prize), and it odes amazingly well (looks like 100% accuracy)**
 
-
-
 - [Seems overfited on Codeforces](https://twitter.com/cHHillee/status/1635790330854526981) quote from the thread `So... the fact that it solves 10/10 problems from pre-2021 and 0/10 of the most recent problems (which it has never seen before) is very suspicious.`
+- [Can GPT-4 *Actually* Write Code?](https://tylerglaiel.substack.com/p/can-gpt-4-actually-write-code) concludes that GPT-4 cannot "solve" problems outside the training dataset. 
 
 

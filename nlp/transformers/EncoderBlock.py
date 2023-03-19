@@ -1,5 +1,4 @@
 import torch.nn as nn
-from MultiHeadAttention import MultiHeadAttention
 
 class EncoderBlock(nn.Module):
     def __init__(self, input) -> None:
