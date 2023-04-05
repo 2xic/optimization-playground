@@ -101,3 +101,10 @@ Basic idea is just to tell the model to use python variables, and run the result
 - Then evaluate the answers based on human feedback, makes sense.
 - Does not do well on out of distribution questions, but does well on ELi5 dataset.
 
+
+### [github.com/transmissions11/flux](https://github.com/transmissions11/flux)
+Quite cool tool that allows you to explore multiple output path for a LLM.
+
+Basic a powertool to make it easier to interact with LLMs.
+
+[Tweet thread from transmissions11](https://twitter.com/transmissions11/status/1640775967856803840)
