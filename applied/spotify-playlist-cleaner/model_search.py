@@ -4,6 +4,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn import svm
 
 def find_model(X, y, x_test, y_test):
+    best_model = None
+    best_accuracy = 0
     for clf in [
         RandomForestClassifier(max_depth=22),
         RandomForestClassifier(max_depth=14),
@@ -23,3 +25,7 @@ def find_model(X, y, x_test, y_test):
         clf.fit(X, y)
         accuracy = accuracy_score(clf.predict(x_test), y_test)
         print(f"Accuracy {accuracy}")
+        if best_accuracy < accuracy:
+            best_accuracy = accuracy
+            best_model = clf
+    return best_model

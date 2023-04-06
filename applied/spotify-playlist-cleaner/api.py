@@ -19,6 +19,13 @@ def get_cache(url):
     )
     return path
 
+
+def play_song(song_id):
+    data = requests.post(f"https://localhost:8089/play/{song_id}", verify=False, headers={
+        "Cookie": "auth_token=" + os.getenv("cookie")
+    })
+    print(data)
+
 def get_requests_cache(url):
     path = get_cache(url)
     if os.path.isfile(path):
@@ -35,7 +42,7 @@ def get_requests_cache(url):
     return data
 
 playlist = namedtuple('playlist', ['id', 'name'])
-song = namedtuple('song', ['id', 'name'])
+song = namedtuple('song', ['id', 'name', 'image'])
 feature = namedtuple('features', [
     'danceability', 
     'energy', 
@@ -59,7 +66,8 @@ def get_playlists():
 def get_playlist_songs(id, offset=0):
     print(f"https://localhost:8089/playlist/{id}?offset={offset}")
     for i in get_requests_cache(f"https://localhost:8089/playlist/{id}?offset={offset}")["items"]:
-        yield song(id=i["track"]["id"], name=i["track"]["name"])
+        url = (i["track"]["album"]["images"][-1]["url"])
+        yield song(id=i["track"]["id"], name=i["track"]["name"], image=url)
 
 def get_song_feature(id):
     for i in get_requests_cache(f"https://localhost:8089/song/{id}/feature")["audio_features"]:

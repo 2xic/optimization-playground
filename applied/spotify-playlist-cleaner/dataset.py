@@ -81,14 +81,14 @@ class Dataset:
     
     def get_song_prediction(self, playlist_id, features):
         x = []
-        song_name = []
+        songs = []
         for song, audio_features in zip(self.ids_songs[playlist_id], self.ids_features[playlist_id]):
-            song_name.append(song.name)
+            songs.append(song)
             x.append([
                 getattr(audio_features, feature)
                 for feature in features
             ])
-        return x, song_name
+        return x, songs
 
     def _get_songs(self, playlist_id):
         offset = 0
@@ -102,8 +102,7 @@ class Dataset:
                 features.append(i)
                 all_songs.append(song)
                 delta += 1
-                offset += 1
-            offset += len(songs)
+            offset += 10
             if delta == 0:
                 break
         return all_songs, features

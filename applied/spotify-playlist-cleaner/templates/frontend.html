@@ -1,0 +1,31 @@
+
+<center>
+  <div style="width: fit-content;">
+    {% for suggestion in suggestions %}
+    <div style="border-style: solid; margin: 5px;">
+      <p>
+        {{suggestion['song'].name}}
+      </p>
+      <img src="{{suggestion['song'].image}}"></img>
+      <button onclick="move('{{suggestion['song'].id}}', '{{suggestion['prediction'].playlist_id}}')">Move song to {{suggestion['prediction'].playlist_name}}</button>
+      <button onclick="play('{{suggestion['song'].id}}')">Play song</button>
+    </div>
+    {% endfor %}
+  </div>
+</center>
+<script>
+  async function  play(songId) {
+    console.log(songId);
+   
+    const url = window.location.href + "play?song_id=" + songId;
+    const response = await fetch(url, {
+      method: "POST",
+    });
+    console.log(response)
+  }
+
+  function move(songId, playlistId) {
+    console.log(songId);
+    console.log(playlistId);
+  }
+</script>
