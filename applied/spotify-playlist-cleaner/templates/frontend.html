@@ -2,18 +2,40 @@
 <center>
   <div style="width: fit-content;">
     {% for suggestion in suggestions %}
-    <div style="border-style: solid; margin: 5px;">
+    <div style="border-style: solid; margin: 5px;" id="{{suggestion['song'].id}}">
       <p>
         {{suggestion['song'].name}}
       </p>
       <img src="{{suggestion['song'].image}}"></img>
-      <button onclick="move('{{suggestion['song'].id}}', '{{suggestion['prediction'].playlist_id}}')">Move song to {{suggestion['prediction'].playlist_name}}</button>
+      <select id="select_{{suggestion['song'].id}}">
+        {% for select_option in suggestion['prediction'] %}
+          {{select_option.predicted}}
+          {% if select_option.predicted == True %}
+            <option selected id="{{select_option.playlist_id}}" value="{{select_option.playlist_id}}" >{{select_option.playlist_name}}</option>
+          {% else %}
+            <option id="{{select_option.playlist_id}}" value="{{select_option.playlist_id}}" >{{select_option.playlist_name}}</option>
+          {% endif %}
+        {% endfor %}
+      </select>     
+      <button onclick="move('{{suggestion['song'].id}}')">Move song</button>
       <button onclick="play('{{suggestion['song'].id}}')">Play song</button>
     </div>
     {% endfor %}
   </div>
 </center>
 <script>
+
+  window.onload = function() {
+    [...document.getElementsByTagName("select")].forEach((item) => {
+      let children = [...item.children];
+      for (const child of children){
+        if(child.hasAttribute("selected")){
+          child.selected = true
+        }
+      }
+    })
+  }
+
   async function  play(songId) {
     console.log(songId);
    
@@ -24,8 +46,19 @@
     console.log(response)
   }
 
-  function move(songId, playlistId) {
+  async function move(songId) {
+    const playlistId = document.getElementById("select_" + songId).selectedOptions[0].value;
     console.log(songId);
     console.log(playlistId);
+
+    const url = window.location.href + "move_song?song_id=" + songId + "&playlist_id=" + playlistId;
+    const response = await fetch(url, {
+      method: "POST",
+    });
+    console.log(response);
+    const reference = document.getElementById(songId).children;
+    const arrayRef = [...reference];
+    arrayRef.map((item) => item.disabled = true);
+    document.getElementById(songId).style = "background-color: gray;"
   }
 </script>

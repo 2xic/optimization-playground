@@ -71,7 +71,7 @@ def get_distribution_playlist_predictions(model, dataset):
     return distribution
 
 def build_suggestion(model, dataset: Dataset):
-    prediction = namedtuple('prediction', ['playlist_id', 'playlist_name'])
+    predictions = namedtuple('prediction', ['playlist_id', 'playlist_name', 'predicted'])
     reorganize_playlist = get_reorganize_playlist()
     x_pred, songs = Dataset().load_playlist(reorganize_playlist).get_song_prediction(
         reorganize_playlist,
@@ -80,11 +80,17 @@ def build_suggestion(model, dataset: Dataset):
     combined = [
 
     ]
+    print(dataset.ids_to_name)
     for x, song in zip(x_pred, songs):
         playlist_id = dataset.class_id[model.predict([x])[0]]
-        playlist_name = dataset.ids_to_name[playlist_id]
+       # playlist_name = dataset.ids_to_name[playlist_id]
         combined.append({
             "song": song,
-            "prediction": prediction(playlist_id=playlist_id, playlist_name=playlist_name), 
+            "prediction": [
+                predictions(playlist_id=key, playlist_name=value, predicted=(
+                    key == playlist_id
+                ))
+                for key, value in dataset.ids_to_name.items()
+            ], 
         })
-    return combined[:100]
+    return combined, reorganize_playlist

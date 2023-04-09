@@ -2,8 +2,9 @@ from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn import svm
+from .cosine_sim import CosineSim
 
-def find_model(X, y, x_test, y_test):
+def find_model(X, y, x_test, y_test, log=True):
     best_model = None
     best_accuracy = 0
     for clf in [
@@ -20,12 +21,14 @@ def find_model(X, y, x_test, y_test):
             learning_rate=1.0,
             max_depth=1, 
             random_state=0
-        )
+        ),
+        CosineSim()
     ]:
         clf.fit(X, y)
         accuracy = accuracy_score(clf.predict(x_test), y_test)
-        print(f"Accuracy {accuracy}")
+        if log:
+            print(f"Accuracy {accuracy}")
         if best_accuracy < accuracy:
             best_accuracy = accuracy
             best_model = clf
-    return best_model
+    return best_model, best_accuracy

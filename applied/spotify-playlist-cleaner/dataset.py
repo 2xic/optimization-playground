@@ -8,7 +8,7 @@ class Dataset:
         self.id_class = {}
         self.class_id = {}
 
-    def load(self, exclude=[], include=None, minimum=5):
+    def load(self, exclude=[], include=None, minimum=10):
         count = 0
         for playlist in api.get_playlists():
             if include is not None and playlist.id not in include:
@@ -61,7 +61,7 @@ class Dataset:
             
             train = min(delta_songs_split_train, int(n_sample_size * split)) if adjust_n_samples else delta_songs_split_train
             testing = min(delta_songs_split_testing, int(n_sample_size * (1 - split))) if adjust_n_samples else delta_songs_split_testing
-            print(train, testing, len(songs))
+            #print(train, testing, len(songs))
             for index, i in enumerate(songs):
                 if index < train:
                     x.append([

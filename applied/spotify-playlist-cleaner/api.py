@@ -8,13 +8,20 @@ import hashlib
 import os
 from dotenv import load_dotenv
 import time
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 load_dotenv()
 
 def get_cache(url):
     hash = hashlib.sha256(url.encode()).hexdigest()[:8]
-    path = os.path.join(
+    dir_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
         ".cache",
+    )
+    os.makedirs(dir_path, exist_ok=True)
+    path = os.path.join(
+        dir_path,
         hash
     )
     return path
@@ -26,10 +33,16 @@ def play_song(song_id):
     })
     print(data)
 
+def move_song(song_id, from_playlist, to_playlist):
+    data = requests.post(f"https://localhost:8089/playlist/move/{from_playlist}/{to_playlist}/{song_id}", verify=False, headers={
+        "Cookie": "auth_token=" + os.getenv("cookie")
+    })
+    print(data)
+
 def get_requests_cache(url):
     path = get_cache(url)
     if os.path.isfile(path):
-        print(path)
+        #print(path)
         with open(path, "r") as file:
             return json.loads(file.read())
     print(os.getenv("cookie"))
@@ -64,7 +77,7 @@ def get_playlists():
         yield playlist(id=i["id"], name=i["name"])
 
 def get_playlist_songs(id, offset=0):
-    print(f"https://localhost:8089/playlist/{id}?offset={offset}")
+  #  print(f"https://localhost:8089/playlist/{id}?offset={offset}")
     for i in get_requests_cache(f"https://localhost:8089/playlist/{id}?offset={offset}")["items"]:
         url = (i["track"]["album"]["images"][-1]["url"])
         yield song(id=i["track"]["id"], name=i["track"]["name"], image=url)
