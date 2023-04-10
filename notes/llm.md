@@ -51,6 +51,9 @@ Code is open [https://github.com/facebookresearch/llama](https://github.com/face
 
 [Large language models are having their Stable Diffusion moment](https://simonwillison.net/2023/Mar/11/llama/) thanks to [https://github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) allowing llama to run on a cpu. It's a plain C++ implementation, and uses 4-bit quantization to reduce the memory load and allows it to run on less powerful hardware.
 
+[Vicuna: An Open-Source Chatbot Impressing GPT-4 with 90%* ChatGPT Quality](https://vicuna.lmsys.org/) fine tuned version of LLAMA based on [ShareGPT](https://sharegpt.com/). [Code](https://github.com/lm-sys/FastChat)
+
+
 ### [Theory of Mind May Have Spontaneously Emerged in Large Language Models](https://arxiv.org/pdf/2302.02083.pdf)
 - This one is interesting, humans have the ability to somewhat understand other people mental state, or at least understand that people view the world differently. 
 - Previous models (before 2022) have not have this ability, and done poorly on evaluation tasks for it. However after 2022 models released by OpenAI have started to do well on this kind of tasks.
@@ -108,3 +111,22 @@ Quite cool tool that allows you to explore multiple output path for a LLM.
 Basic a powertool to make it easier to interact with LLMs.
 
 [Tweet thread from transmissions11](https://twitter.com/transmissions11/status/1640775967856803840)
+
+### [Supercharger: Offline Automatic Codegen](https://catid.io/posts/auto_codegen/)
+With a few hacks you are able to use the LLm to help you write and clean up code. 
+- They used the `AST` module to fix syntax errors
+- They run the code in docker to prevent accidental LLMS "attacks" (rm -rf has no effect on host)
+- Use the LLM to score the code.
+
+[Code](https://github.com/catid/supercharger)
+
+### [Eight Things to Know about Large Language Models](https://cims.nyu.edu/~sbowman/eightthings.pdf)
+My takeaway from what the authors 
+- Most of the techniques to train new LLms are mostly the same (as can be seen by for instance LLAMA), but the amount compute applied has changed for some models.
+- There is evidence that LLMs build some kind of internal representation of the world (they can follow object locations etc).
+- Nobody knows what's going on inside a LLM (like most other NN)
+
+### [Schrodinger's Riddle](https://twitter.com/dylanhendricks/status/1642939372306669568)
+- GPT-4 playing 20 questions
+- The comment section is interesting
+- 

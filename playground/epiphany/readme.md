@@ -8,3 +8,6 @@ Should rerun the experiment, but this time allow it to train for double so long,
 ![./training.png](./training.png)
 ![./testing.png](./testing.png)
 
+This is what the authors experienced (figure 1 from the [paper](https://mathai-iclr.github.io/papers/papers/MATHAI_29_paper.pdf) )
+
+![figure 1 from paper](./grooking_figure_1.png)

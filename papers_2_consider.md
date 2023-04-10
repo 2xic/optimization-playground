@@ -18,6 +18,7 @@
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
 [https://nerf-w.github.io/](https://nerf-w.github.io/)
 [Learning to Zoom and Unzoom](https://arxiv.org/pdf/2303.15390.pdf)
+[Vision Transformers with Mixed-Resolution Tokenization ](https://arxiv.org/abs/2304.00287)
 
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
@@ -25,12 +26,15 @@
 [Solving rubicks cube with robotic hand](https://arxiv.org/pdf/1910.07113.pdf)
 [Go-Explore: a New Approach for Hard-Exploration Problems](https://arxiv.org/pdf/1901.10995.pdf)
 [EQUIVARIANT MUZERO](https://arxiv.org/pdf/2302.04798.pdf)
+[Scaling Goal-based Exploration via Pruning Proto-goals](https://arxiv.org/pdf/2302.04693.pdf)
 
 ## NLP 
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
 [Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
 [BloombergGPT: A Large Language Model for Finance](https://arxiv.org/pdf/2303.17564.pdf)
-
+[Universal Language Model Fine-tuning for Text Classification](https://arxiv.org/pdf/1801.06146.pdf)
+[Cerebras-GPT: Open Compute-Optimal Language Models Trained on the Cerebras Wafer-Scale Cluster](https://arxiv.org/pdf/2304.03208.pdf)
+[SGPT: GPT Sentence Embeddings for Semantic Search](https://arxiv.org/pdf/2202.08904.pdf)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)

@@ -5,4 +5,16 @@
     -> Maybe take a look at this dataset
 -> https://github.com/shramos/Awesome-Cybersecurity-Datasets
 
+-> https://data.mendeley.com/datasets/c2gw7fy2j4/3
+
+[PhishZoo: Detecting Phishing Websites By Looking at Them](https://www1.icsi.berkeley.edu/~sadia/papers/phishzoo-icsc_final.pdf)
+- Creates a profile of the website
+    - URL
+    - SSL
+    - Images
+    - HTML content
+    - Script
+- Uses TF-IDF to extract a text profile to match against (cool!)
+- SIFT-features is used for images
+- 
 

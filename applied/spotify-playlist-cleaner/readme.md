@@ -7,7 +7,8 @@ When I find a song I put it in `songs that has to be relocated`, and then later 
 
 ## Results
 ![example](./images/frontend.png)
-Super simple frontend, but it helped me organize the playlist :) Tested with some basic models and got around 60% accuracy on the test dataset, enough to speed up the organization.
+Super simple frontend, but it helped me organize the playlist :) The select option will be automatically set to the model prediction of the target playlist, but user can also override this. Move song naturally moves the song, but the user can also listen to the song if they have to recall it.
+Tested with some basic models and got around 60% accuracy on the test dataset, enough to speed up the organization.
 
 -----
 
