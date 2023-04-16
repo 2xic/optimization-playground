@@ -17,6 +17,3 @@ Theorem 1 shows something intreating, not much error is needed error needed to a
 - TODO -> Replicate the plot ?
 
 ---
-
-
-
