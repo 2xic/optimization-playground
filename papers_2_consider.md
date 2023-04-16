@@ -36,11 +36,15 @@
 [Cerebras-GPT: Open Compute-Optimal Language Models Trained on the Cerebras Wafer-Scale Cluster](https://arxiv.org/pdf/2304.03208.pdf)
 [SGPT: GPT Sentence Embeddings for Semantic Search](https://arxiv.org/pdf/2202.08904.pdf)
 
+
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
 
 [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543)
 [Adding Conditional Control to Text-to-Image Diffusion Models(code)](https://github.com/lllyasviel/ControlNet)
+[Consistency Models](https://arxiv.org/pdf/2303.01469.pdf)
+[Consistency Models(code)](https://github.com/openai/consistency_models)
+
 
 ## NN architecture
 [Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)

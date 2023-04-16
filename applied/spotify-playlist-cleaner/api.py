@@ -9,6 +9,7 @@ import os
 from dotenv import load_dotenv
 import time
 import urllib3
+import time, os, stat
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
@@ -39,13 +40,15 @@ def move_song(song_id, from_playlist, to_playlist):
     })
     print(data)
 
-def get_requests_cache(url):
+def file_age_in_seconds(pathname):
+    return time.time() - os.stat(pathname)[stat.ST_MTIME]
+
+def get_requests_cache(url, max_age=float('inf')):
     path = get_cache(url)
     if os.path.isfile(path):
-        #print(path)
-        with open(path, "r") as file:
-            return json.loads(file.read())
-    print(os.getenv("cookie"))
+        if file_age_in_seconds(path) < max_age:
+            with open(path, "r") as file:
+                return json.loads(file.read())
     data = requests.get(url, verify=False, headers={
         "Cookie": "auth_token=" + os.getenv("cookie")
     }).json()
@@ -54,6 +57,8 @@ def get_requests_cache(url):
         file.write(json.dumps(data))
     return data
 
+one_hour = 60 * 60
+playlist_max_age = 12 * one_hour
 playlist = namedtuple('playlist', ['id', 'name'])
 song = namedtuple('song', ['id', 'name', 'image'])
 feature = namedtuple('features', [
@@ -78,7 +83,7 @@ def get_playlists():
 
 def get_playlist_songs(id, offset=0):
   #  print(f"https://localhost:8089/playlist/{id}?offset={offset}")
-    for i in get_requests_cache(f"https://localhost:8089/playlist/{id}?offset={offset}")["items"]:
+    for i in get_requests_cache(f"https://localhost:8089/playlist/{id}?offset={offset}", max_age=playlist_max_age)["items"]:
         url = (i["track"]["album"]["images"][-1]["url"])
         yield song(id=i["track"]["id"], name=i["track"]["name"], image=url)
 
