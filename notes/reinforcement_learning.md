@@ -1,4 +1,4 @@
-## RL
+## Reinforcement learning
 For the paper notes that are so short that they don't need their own file.
 
 ### [Equivariant MuZero](https://arxiv.org/pdf/2302.04798.pdf)

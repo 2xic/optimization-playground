@@ -1,4 +1,5 @@
 # 2 consider
+Papers that I have saved, and should look at.
 
 ## Source for papers 2 consider
 - [https://paperswithcode.com/](https://paperswithcode.com/)
@@ -11,11 +12,18 @@
 
 # Some I'm considering
 
-###  PHDs
-[Ilya Sutskever](http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf)
+###  PHDs / Masters
+Reading research done by (famous) students can be nice, it's one way to read the ideas of these students. 
+[Ilya Sutskever (PHD)](http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf)
+[Ilya Sutskever (Master)](http://www.cs.utoronto.ca/~ilya/MS_thesis/ms_body.pdf)
 
-## Self supervised 
-:)
+[Karpathy (PHD)](https://cs.stanford.edu/people/karpathy/main.pdf)
+
+[Wojciech Zaremba (PHD) - Learning Algorithms from Data](https://cs.nyu.edu/media/publications/zaremba_wojciech.pdf)
+
+### LLMs
+[Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/pdf/2304.03442.pdf)
+[A Generalist Agent](https://arxiv.org/pdf/2205.06175.pdf)
 
 ### Computer vision
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
@@ -82,6 +90,6 @@
 [Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware](https://tonyzhaozh.github.io/aloha/aloha.pdf)
 https://tonyzhaozh.github.io/aloha/
 
-## Recommendations
-:)
+## Others
+[SPREADING VECTORS FOR SIMILARITY SEARCH](https://arxiv.org/pdf/1806.03198.pdf)
 

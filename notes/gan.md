@@ -1,3 +1,6 @@
+## GAN 
+For the paper notes that are so short that they don't need their own file.
+
 # [Scaling up GANs for Text-to-Image Synthesis](https://arxiv.org/pdf/2303.05511.pdf)
 GigaGan is an attempt to level up GANs so they can "combat" against the new hot diffusion models, they tried scaling up StyleGan, but that did not work, so they ended up creating a new architecture. 
 *The results looks quite nice.*
@@ -19,3 +22,11 @@ Paper is interesting, maybe try to reimplement part of it.
 MAVEN attempts to be a more robust GAN architecture. They use 3 networks, encoder, generator and a discriminator.
 The job of the encoder is to compress the input to a lower dimension, the job of the generator is to generate inputs to trick the discriminator, and the discriminators job is to learn what is real and fake.
 The main difference between this architecture from a traditional GAN / VAE-GAN like architecture seems to be that they have an ensemble of discriminators, and make them into a (n + 1) classifier to support n-class classifier (instead of binary as a the original gan paper).
+
+# [ Erasing Concepts from Diffusion Models ](https://arxiv.org/pdf/2303.07345.pdf)
+[Website](https://erasing.baulab.info/)
+
+- Using the models own understanding of the concept it can be used to erase the concept. This is done by giving the model the text description of the concept.
+- This can be done by querying a frozen model to generate noise for a given concept, and then train our model to go to the opposite direction of the concept.
+- 
+
