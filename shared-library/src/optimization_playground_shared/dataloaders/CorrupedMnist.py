@@ -17,12 +17,8 @@ class CorruptedMnistDataloader(Dataset):
 
     def __getitem__(self, idx):
         X, y = self.train_ds[idx]
-   #     print((idx, self.len, self.corruption_rate * self.len))
-#        batch_corrup = int(y.shape[0]*self.corruption_rate)
         if idx < self.corruption_rate * self.len:
-            old_y = y
-            y =  torch.randint(0, 9, (1,)).item()#[0]
-         #   print((y, old_y))
+            y =  torch.randint(0, 9, (1,)).item()
         return (X, y)
 
 def get_dataloader(corruption_rate, max_train_size=1_000, batch_size=64):

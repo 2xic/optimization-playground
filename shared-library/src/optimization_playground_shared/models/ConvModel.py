@@ -20,6 +20,7 @@ class ConvModel(nn.Module):
         self.fc1 = nn.Linear(16 * self.output_shape[0] * self.output_shape[1], 256)
         self.out = nn.Sequential(
             self.fc1,
+            nn.ReLU(),
             *layers
         )
 
