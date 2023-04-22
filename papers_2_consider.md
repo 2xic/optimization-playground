@@ -48,12 +48,9 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
 
-[BloombergGPT: A Large Language Model for Finance](https://arxiv.org/pdf/2303.17564.pdf)
 [Universal Language Model Fine-tuning for Text Classification](https://arxiv.org/pdf/1801.06146.pdf)
 
 [Cerebras-GPT: Open Compute-Optimal Language Models Trained on the Cerebras Wafer-Scale Cluster](https://arxiv.org/pdf/2304.03208.pdf)
-
-[SGPT: GPT Sentence Embeddings for Semantic Search](https://arxiv.org/pdf/2202.08904.pdf)
 
 
 ## GAN

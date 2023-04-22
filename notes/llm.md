@@ -102,6 +102,7 @@ Basic idea is just to tell the model to use python variables, and run the result
 ### [WebGPT: Browser-assisted question-answering with human feedback](https://arxiv.org/pdf/2112.09332.pdf)
 - Give GPT-3 access to a web browser to answer long formed questions
     - Basically create a simple syntax for different commands the model can "execute" and watch for them in the model output
+    - The model is "full control" over the navigation and processing of the site by using these commands
 - Then evaluate the answers based on human feedback, makes sense.
 - Does not do well on out of distribution questions, but does well on ELi5 dataset.
 
@@ -218,3 +219,24 @@ Summary
 - It is also a security problem that is hard to create a [soloution](https://simonwillison.net/2022/Sep/16/prompt-injection-solutions/) for, since the ML models are black boxes. 
   - Probably with enough fine-tuning you could abolish a large part of the problems
 
+### [Is ChatGPT a Good Recommender? A Preliminary Study](https://arxiv.org/pdf/2304.10149.pdf)
+Quickly glanced over the paper
+
+Input is usually a context list of what the user previously have interacted with and liked as context. Then ChatGPT is told what are candidates for recommendations
+
+-> ChatGPT has a problem ranking recommendations from a list (i.e sorting them based on score)
+-> ChatGPT can give a direct recommendation from a list (give output recommendation, but not sort it)
+
+### [BloombergGPT: A Large Language Model for Finance](https://arxiv.org/pdf/2303.17564.pdf)
+Quickly glanced over the paper
+
+NLP has many applications in Finance (sentiment, Q & A, summary, etc). How does a GPT like model act trained on a 363 billion token finance dataset ? 
+The model is trained by Bloomberg which is cool. 
+
+The results are that the model does very well on NLP in finance.
+- Does well on news sentiment datasests (best model), but it has not been compared to GPT-3 
+- 
+- It knows the ceo of companies better than models like GPT-NeoX and FLAN-T5-XXL
+- Does well on header creation from a summary of text
+- Generates valid Bloomberg query lanague code
+- Some task it does not do as well as GPT-3 for instance the Reading Comprehension (non finance test). It still does quite well.
