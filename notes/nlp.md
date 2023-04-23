@@ -16,3 +16,15 @@ All methods gives out different embeddings vectors, but there is some properties
 
 They mention and show the method `3CosMul` for finding analogies, I have not heard about this before. Maybe worth looking into.
 
+### [Universal Language Model Fine-tuning for Text Classification](https://arxiv.org/pdf/1801.06146.pdf)
+The technique is as follows
+1. Pretrain the model on a general dataset (Wikitext for instance)
+2. Target task fine tuning by using two methods
+  - Discriminative fine-tuning which uses a different learning rate for all layers.
+  - Slanted triangular learning rates which first increases the learning rate a lot (linearly), and then have a linear decay
+3. Target task classifier tine-tuning
+   - Adds two new linear layers 
+   - Gradual unfreezing which means that we don't finetune all layers as one, but instead gradually unfreze each layer
+
+The analysis shows that the methods work well in practice.
+

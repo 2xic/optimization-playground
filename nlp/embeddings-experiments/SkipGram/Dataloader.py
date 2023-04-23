@@ -14,12 +14,9 @@ class SkipGramDataset(Dataset):
     def __getitem__(self, idx):
         x = torch.zeros((1))
         x[0] = self.X[idx]
-      #  x[0] = self.X[idx]
 
         y = self.y[idx]
         y_tensor = torch.zeros(( self.vocab.size))
- #       y_tensor[0] = y
-        for index, i in enumerate(y):
+        for _, i in enumerate(y):
             y_tensor[i] = 1
-#        y_tensor = torch.exp(y_tensor) / y_tensor.exp().sum()
         return x.long(), y_tensor.float()

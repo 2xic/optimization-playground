@@ -15,6 +15,7 @@ Papers that I have saved, and should look at.
 ###  PHDs / Masters
 Reading research done by (famous) students can be nice, it's one way to read the ideas of these students. 
 [Ilya Sutskever (PHD)](http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf)
+
 [Ilya Sutskever (Master)](http://www.cs.utoronto.ca/~ilya/MS_thesis/ms_body.pdf)
 
 [Karpathy (PHD)](https://cs.stanford.edu/people/karpathy/main.pdf)
@@ -39,8 +40,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Flow Network based Generative Models for Non-Iterative Diverse Candidate Generation](https://arxiv.org/pdf/2106.04399.pdf)
 
-[Solving rubicks cube with robotic hand](https://arxiv.org/pdf/1910.07113.pdf)
-
 [Scaling Goal-based Exploration via Pruning Proto-goals](https://arxiv.org/pdf/2302.04693.pdf)
 
 ## NLP 
@@ -48,20 +47,12 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
 
-[Universal Language Model Fine-tuning for Text Classification](https://arxiv.org/pdf/1801.06146.pdf)
-
-[Cerebras-GPT: Open Compute-Optimal Language Models Trained on the Cerebras Wafer-Scale Cluster](https://arxiv.org/pdf/2304.03208.pdf)
-
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
 
 [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543)
 [Adding Conditional Control to Text-to-Image Diffusion Models(code)](https://github.com/lllyasviel/ControlNet)
-
-[Consistency Models](https://arxiv.org/pdf/2303.01469.pdf)
-
-[Consistency Models(code)](https://github.com/openai/consistency_models)
 
 
 ## NN architecture
@@ -74,8 +65,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [http://proceedings.mlr.press/v37/ioffe15.pdf](http://proceedings.mlr.press/v37/ioffe15.pdf)
 
 [Going Deeper with Convolutions](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Szegedy_Going_Deeper_With_2015_CVPR_paper.pdf)
-
-[Neural Optimizer Search with Reinforcement Learning](https://arxiv.org/pdf/1709.07417.pdf)
 
 ## Infrastructure
 [Velox: Meta’s Unified Execution Engine](https://scontent.fosl3-2.fna.fbcdn.net/v/t39.8562-6/302757195_3033291893628871_4556621853780203235_n.pdf?_nc_cat=109&ccb=1-7&_nc_sid=ad8a9d&_nc_ohc=83s6lshWWAEAX8A3wdW&_nc_ht=scontent.fosl3-2.fna&oh=00_AfAq1jZlnHlM139fSBQvQ1mQmgT-cyGDgwMlP-GixFdobw&oe=64080F67)

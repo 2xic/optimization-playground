@@ -28,5 +28,18 @@ The main difference between this architecture from a traditional GAN / VAE-GAN l
 
 - Using the models own understanding of the concept it can be used to erase the concept. This is done by giving the model the text description of the concept.
 - This can be done by querying a frozen model to generate noise for a given concept, and then train our model to go to the opposite direction of the concept.
-- 
 
+### [Consistency Models](https://arxiv.org/pdf/2303.01469.pdf)
+
+Consistency models are a single step generation which is cool.
+
+Tries to be an alternative to Diffusion models by being fast. Part of the math used goes above my head on this first read, but sounds like the general idea is to learn an universal mapping from any point to the origin. The the algorithm they have makes sense, but that seems to be multistep though.
+
+Algorithm 2 and algorithm 3 need to be reviewed a bit more. They use a ODE solver though while training.
+
+The model output is also very nice.
+
+TODO, look at the code they released [Consistency Models(code)](https://github.com/openai/consistency_models)
+
+Implementation by [others](https://twitter.com/RiversHaveWings/status/1634038603247661062) also shows that it seems promising. 
+This is an alternative [open source](https://github.com/cloneofsimo/consistency_models) version.

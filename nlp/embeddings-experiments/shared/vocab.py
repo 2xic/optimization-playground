@@ -6,6 +6,7 @@ class Vocab:
         self.word_2_idx = {}
         self.word_usage = {}
         self.UNKNOWN_IDX = self._add("<UNKNOWN>")
+        self.PADDING_IDX = self._add("<PADDING>")
         self.MINIMUM_WORD_USAGE = -1
         self.SPECIAL_TOKENS = len(self.idx_2_word)
 

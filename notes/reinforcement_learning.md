@@ -67,11 +67,9 @@ Reasons supervised learning is hard
 - RL allows the model to not only learn from representations, but also thinks more "deeply".
 - There is also the problem that supervised learning does not necessary know about the models internal state. Some dataset might contain information not in the training of the model so the model will learn a mapping that might make the model more confused.
 - Hard to tell the model to say "I don't know" when doing it with supervised learning
-- 
 
+### [Neural Optimizer Search with Reinforcement Learning](https://arxiv.org/pdf/1709.07417.pdf)
+Use a RNN to control the handling of the gradient (average it for instance). The operations follows a simple pattern described in section 3.1. The idea is to have it simple, but make it able to express the same functions as common optimizer.
+Goal for the model is to maximize the models performance. 
 
-
-
-
-
-
+The paper is cool, might be worth implementing.

@@ -1,13 +1,8 @@
-from .Parameters import OUTPUT_SIZE
-import random
+OUTPUT_SIZE = 4
 
 class CreateDataset:
     def __init__(self, vocab) -> None:
         self.vocab = vocab
-        """
-        SkipGram -> 
-            Context word should get higher score
-        """
 
     def process(self, documents):
         X = []
@@ -27,8 +22,10 @@ class CreateDataset:
                     valid_context.append(
                         doc[forward_context_idx]
                     )
+
                 filtered = list(filter(lambda x: x > self.vocab.SPECIAL_TOKENS, valid_context))
                 if len(filtered):
-                    X.append(token)
-                    y.append(filtered)
+                    X.append(filtered)
+                    y.append(token)
+
         return X, y
