@@ -1,4 +1,4 @@
-[The Forward-Forward Algorithm: Some Preliminary Investigations](https://www.cs.toronto.edu/~hinton/FFA13.pdf)
+### [The Forward-Forward Algorithm: Some Preliminary Investigations](https://www.cs.toronto.edu/~hinton/FFA13.pdf)
 
 - Replaces forward and backward passes with two forward passes
   - One with real data
@@ -18,3 +18,5 @@
         - i.e sigmoid
   -  " FF normalizes the length of the hidden vector before using it as input to the next layer"
   -  
+
+**Update from 2023** There is also [this](https://medium.com/@Mosbeh_Barhoumi/forward-forward-algorithm-ac24d0d9ffd) medium post which is quite nice. 

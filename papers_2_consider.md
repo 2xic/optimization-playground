@@ -14,6 +14,7 @@ Papers that I have saved, and should look at.
 
 ###  PHDs / Masters
 Reading research done by (famous) students can be nice, it's one way to read the ideas of these students. 
+
 [Ilya Sutskever (PHD)](http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf)
 
 [Ilya Sutskever (Master)](http://www.cs.utoronto.ca/~ilya/MS_thesis/ms_body.pdf)
@@ -57,8 +58,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 ## NN architecture
 [Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)
-
-[Algorithmic progress in computer vision](https://arxiv.org/pdf/2212.05153.pdf)
 
 [Iriguing properties of neural networks](https://arxiv.org/pdf/1312.6199.pdf)
 

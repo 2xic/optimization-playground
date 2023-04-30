@@ -16,7 +16,7 @@ They also show it's possible to combine multiple concepts into a single image, a
 They discuss how the model is able to learn robust, and on robust features and that non robust features are the reason for why adversarial examples are so effective. Then they go into how one is able to detect robust and non robust features, and how to deal with them.
 Usually the features are highly predictive for the models, but not us humans, models usually don't look at ears like humans do, but instead something else and more abstract.
 They also do some interesting relabeling that seems wrong to humans, but actually improves the model accuracy (figure 1 b)
-Paper is interesting, maybe try to reimplement part of it.
+
 
 # [Multi-Adversarial Variational Autoencoder Networks](https://arxiv.org/pdf/1906.06430.pdf)
 MAVEN attempts to be a more robust GAN architecture. They use 3 networks, encoder, generator and a discriminator.
