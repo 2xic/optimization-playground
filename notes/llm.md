@@ -240,3 +240,15 @@ The results are that the model does very well on NLP in finance.
 - Does well on header creation from a summary of text
 - Generates valid Bloomberg query lanague code
 - Some task it does not do as well as GPT-3 for instance the Reading Comprehension (non finance test). It still does quite well.
+
+### [Are Emergent Abilities of Large Language Models Mirage?](https://arxiv.org/pdf/2304.15004.pdf)
+My timeline is full of claims that big models have "emergent abilities", but theses authors claim that it might not be the case, and that the claims are the results of benchmarks/metrics not being measured good enough.
+"Emergent abilities" is defined as capabilities that big models have that smaller models don't have.
+Linear plots seems to work well and gives a more predictable view, but most authors seems to use nonlinear.
+Section five is funny, they drive the point home by adding "emergent abilities" to a mnist LeNet vision model.
+
+[twitter thread](https://twitter.com/andrewlampinen/status/1652962934107127808?s=12&utm_source=pocket_saves) -> 
+
+### Various ChatGpt notes
+- [it can play tic tac toe](https://twitter.com/michael_nielsen/status/1649848364232773633?utm_source=pocket_saves)
+

@@ -3,9 +3,7 @@ Sometimes I forget the projects had planned, better to write it down here.
 ## Ideas
 - (WIP) Implement, and evaluate some embeddings `nlp/embeddings-experiments`
 
-- Implement the [forward-forward algorithm](https://arxiv.org/abs/2212.13345) 
-
-- Based on reading [Why do tree-based models still outperform deep learning on tabular data?](https://arxiv.org/pdf/2207.08815.pdf) they mentioned NNs are more affected by unimportant features. Create a small project to see if this is true. For instance by just padding some noise to an image vector maybe
+- (WIP) Implement the [forward-forward algorithm](https://arxiv.org/abs/2212.13345) 
 
 - Try to see if you can replicate something like [Deep double descent](https://openai.com/research/deep-double-descent). This is not 2 far away from something like `playground/epiphany`
 

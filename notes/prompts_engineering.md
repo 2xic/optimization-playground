@@ -24,4 +24,6 @@ References [Calibrate Before Use: Improving Few-Shot Performance of Language Mod
 That paper is interesting, what they do is calibrate the model by feeding the model "dummy text" and seeing how the model responds. 
 
 
+## MyAi prompt leak
+[Leak of MyAi prompt](https://old.reddit.com/r/OpenAI/comments/130tn2t/snapchats_my_ais_entire_setup_prompt_example/).
 

@@ -4,6 +4,8 @@
 [https://github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)
 
 ## Tools / Libraries
+[langchain](https://github.com/hwchase17/langchain)
+
 [Jax](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html)
 
 [tinygrad](https://github.com/geohot/tinygrad)

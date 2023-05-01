@@ -3,6 +3,7 @@ Testing various embeddings for documents.
 
 -> Here are some models and methods listed https://lilianweng.github.io/posts/2017-10-15-word-embedding/
 -> Docs embedding https://radix.ai/blog/2021/3/a-guide-to-building-document-embeddings-part-1/
+-> Did you know that Tinder actually uses the same idea, but just for images instead of text ? [TinVec](https://www.slideshare.net/SessionsEvents/dr-steve-liu-chief-scientist-tinder-at-mlconf-sf-2017)
 
 ### SkipGram
 You predict context words based on a input word.
@@ -21,3 +22,4 @@ You use the sum of the contexts that are then fed into an embedding layer which 
 ```
 python3 train_cbow.py
 ```
+

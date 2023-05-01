@@ -44,10 +44,17 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Scaling Goal-based Exploration via Pruning Proto-goals](https://arxiv.org/pdf/2302.04693.pdf)
 
 ## NLP 
+[MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
+
 [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
 
 [Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
 
+[Reflexion: an autonomous agent with dynamic memory and self-reflection](https://arxiv.org/pdf/2303.11366.pdf)
+[Reflecting on Reflexion](https://nanothoughts.substack.com/p/reflecting-on-reflexion?utm_source=pocket_saves)
+
+[The Curious Case of Absolute Position Embeddings](https://arxiv.org/pdf/2210.12574.pdf)
+[The Use Case for Relative Position Embeddings](https://ofir.io/The-Use-Case-for-Relative-Position-Embeddings/?utm_source=pocket_saves)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
@@ -55,6 +62,9 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543)
 [Adding Conditional Control to Text-to-Image Diffusion Models(code)](https://github.com/lllyasviel/ControlNet)
 
+[Fast Text-Conditional Discrete Denoising on Vector-Quantized Latent Spaces](https://arxiv.org/abs/2211.07292)
+
+[DiffusionRig: Learning Personalized Priors for Facial Appearance Editing ](https://diffusionrig.github.io/?utm_source=pocket_saves)
 
 ## NN architecture
 [Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)

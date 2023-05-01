@@ -2,8 +2,6 @@ from torchvision.datasets import MNIST
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from torch.utils.data import Dataset
-import torch
-import random
 from collections import defaultdict
 
 class RestrictedMnist(Dataset):
