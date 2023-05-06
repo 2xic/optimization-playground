@@ -49,6 +49,7 @@ class Cifar10Dataloader(Dataset):
             X = torchvision.transforms.ToTensor()(X)
         else:
             X = self.transforms(X)
+
         generated = False
         if self.generated_labels and y is None:
             y = self.generated_labels(X)[0]
@@ -57,7 +58,6 @@ class Cifar10Dataloader(Dataset):
             y_hot = torch.zeros(10)
             y_hot[y] = 1
             y = y_hot
-        #print(y.shape)
 
         if self.generated_labels:
             return X, y, generated

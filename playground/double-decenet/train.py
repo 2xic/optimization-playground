@@ -3,15 +3,20 @@ import torch
 from resnet_adjusted import get_renset_18
 import time
 from optimization_playground_shared.process_pools.MultipleGpus import run_on_multiple_gpus, ddp_setup
-from optimization_playground_shared.distributed.TrainingLoopDistributed import TrainingLoopDistributed
+#from optimization_playground_shared.distributed.TrainingLoopDistributed import TrainingLoopDistributed
+from optimization_playground_shared.distributed.TrainingLoopDistributedAccumulate import TrainingLoopDistributedAccumulate
 import time
 from torch.distributed import destroy_process_group
 import torch
 from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
-from torchvision.transforms import Compose, ToTensor, Normalize, Resize
+from optimization_playground_shared.utils.Timer import Timer
+from torchvision.transforms import Compose, ToTensor, Resize
 from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 import json
+
+torch.backends.cudnn.benchmark = True
+#torch.set_default_device("cuda")
 
 def main(gpu_id, world_size, size):
     ddp_setup(gpu_id, world_size)
@@ -27,10 +32,11 @@ def main(gpu_id, world_size, size):
         batch_size=64,
         num_workers=6,
     )
+    torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters())
     training = []
     testing = []
-    trainer = TrainingLoopDistributed(
+    trainer = TrainingLoopDistributedAccumulate(
         model,
         optimizer,
         gpu_id=gpu_id
@@ -43,8 +49,12 @@ def main(gpu_id, world_size, size):
     test_x = []
     
     while trainer.epoch < 4_000:
-        loss, acc = trainer.train(train)
-        testing_acc = trainer.eval(test)
+        acc = None
+        with Timer("train"):
+            _, acc = trainer.train(train)
+        testing_acc = None
+        with Timer("testing"):
+            testing_acc = trainer.eval(test)
         if gpu_id == 0:
             print(f"{acc}")
             print(f"{testing_acc}")
@@ -54,6 +64,7 @@ def main(gpu_id, world_size, size):
             test_x.append(trainer.epoch)
             break
         else:
+            print(f"Epoch {trainer.epoch}")
             break
     destroy_process_group()
 
@@ -64,7 +75,8 @@ def main(gpu_id, world_size, size):
             "size":size,
             "time":(end - start),
             "train_acc": train_acc,
-            "test_acc": test_acc
+            "test_acc": test_acc,
+            "params": pytorch_total_params
         }
         with open(f"{size}.json", "w") as file:
             json.dump(results, file)
@@ -81,3 +93,4 @@ if __name__ == "__main__":
         print(f"{i}")
         out = run_on_multiple_gpus(main, i)
         print(out)
+        break
