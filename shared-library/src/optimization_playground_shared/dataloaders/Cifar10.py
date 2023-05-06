@@ -7,11 +7,12 @@ import random
 import torch
 
 class Cifar10Dataloader(Dataset):
-    def __init__(self, test=False, generated_labels=None):
+    def __init__(self, test=False, generated_labels=None, transforms=None):
+        self.transforms = transforms
         self.dataset = torchvision.datasets.CIFAR10(root='./data',
                                                     train=(not test),
                                                     download=True)
-        # Cifar 10 has 6000 images per class, so we train on 1/6
+        # Cifar 10 has 6000 images per class, so we train on 1/6 of the dataset
         self.labels_per_class = 1_000
         self.generated_labels = generated_labels
         if not test:
@@ -44,7 +45,10 @@ class Cifar10Dataloader(Dataset):
 
     def __getitem__(self, idx):
         X, y = self.dataset[idx]
-        X = torchvision.transforms.ToTensor()(X)
+        if self.transforms is None:    
+            X = torchvision.transforms.ToTensor()(X)
+        else:
+            X = self.transforms(X)
         generated = False
         if self.generated_labels and y is None:
             y = self.generated_labels(X)[0]
@@ -64,12 +68,12 @@ def _call_if_func(func, dataset):
         return func(dataset)
     return func
 
-def get_dataloader(batch_size=64, shuffle=False, sampler=None, generated_labels=None):
-    train_ds = Cifar10Dataloader(test=False, generated_labels=generated_labels)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
+def get_dataloader(batch_size=64, shuffle=False, num_workers=0, sampler=None, generated_labels=None, transforms=None):
+    train_ds = Cifar10Dataloader(test=False, transforms=transforms, generated_labels=generated_labels)
+    train_loader = DataLoader(train_ds, pin_memory=True, num_workers=num_workers, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
 
-    test_ds = Cifar10Dataloader(test=True)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, test_ds))
+    test_ds = Cifar10Dataloader(test=True, transforms=transforms,)
+    test_loader = DataLoader(test_ds, pin_memory=True, num_workers=num_workers, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, test_ds))
 
     return (
         train_loader,

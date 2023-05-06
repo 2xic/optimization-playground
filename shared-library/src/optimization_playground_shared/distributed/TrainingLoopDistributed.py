@@ -28,7 +28,7 @@ class TrainingLoopDistributed:
         length = 0
         dataloader.sampler.set_epoch(self.epoch)
 
-        for (X, y) in dataloader:
+        for batch, (X, y) in enumerate(dataloader):
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)
@@ -40,7 +40,10 @@ class TrainingLoopDistributed:
                 loss.backward()
                 self.optimizer.step()      
 
-                total_loss += loss  
+                total_loss += loss
+            
+           # if batch % 32 == 0 and device == 0:
+           #     print(batch, device)
 
             accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += X.shape[0]

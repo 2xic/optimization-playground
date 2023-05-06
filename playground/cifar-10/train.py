@@ -10,13 +10,10 @@ from models.PlainModelBatchNormDynamicLr import PlainModelBatchNormDynamicLr
 from eval import eval_model
 from optimization_utils.plotters.SimplePlot import SimplePlot
 from optimization_utils.plotters.LinePlot import LinePlot
-from ProcessPool import ProcessPool
+from optimization_playground_shared.process_pools.ProcessPool import ProcessPool
 
 EPOCHS = 100
 BATCH_SIZE = 256
-
-from torch.multiprocessing import Process, Lock, Queue
-import torch.multiprocessing as mp
 
 """
 Training logic
@@ -102,4 +99,3 @@ if __name__ == "__main__":
     plot = SimplePlot()
     plot.plot(test_plots)
     plot.save("test_accuracy.png")
-    
