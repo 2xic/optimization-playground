@@ -3,44 +3,67 @@ import torch
 from resnet_adjusted import get_renset_18
 import time
 from optimization_playground_shared.process_pools.MultipleGpus import run_on_multiple_gpus, ddp_setup
-#from optimization_playground_shared.distributed.TrainingLoopDistributed import TrainingLoopDistributed
+#from optimization_playground_shared.training_loops.TrainingLoopProfile import TrainingLoopProfile
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.distributed.TrainingLoopDistributedAccumulate import TrainingLoopDistributedAccumulate
+from optimization_playground_shared.utils.GlobalTimeSpentInFunction import GlobalTimeSpentInFunction
 import time
 from torch.distributed import destroy_process_group
 import torch
-from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
+from optimization_playground_shared.dataloaders.ResnetCifar10 import get_dataloader
 from optimization_playground_shared.utils.Timer import Timer
-from torchvision.transforms import Compose, ToTensor, Resize
-from torch.utils.data import DataLoader
 from torch.utils.data.distributed import DistributedSampler
 import json
+from torch.utils.data.dataloader import default_collate
+import sys
 
 torch.backends.cudnn.benchmark = True
 #torch.set_default_device("cuda")
+#torch.multiprocessing.set_start_method('spawn')
+
+
+RUN_ON_MULTIPLE_GPUS = False
+SIZE = int(sys.argv[1])
 
 def main(gpu_id, world_size, size):
     ddp_setup(gpu_id, world_size)
+    core(
+        gpu_id, size=size
+    )
+    destroy_process_group()
+
+def core(gpu_id, size):
     model = get_renset_18(
         width=size
     )
-    data_transform = Compose([Resize((224, 224)), ToTensor()])
+    data_transform = None
     pytorch_total_params = sum(p.numel() for p in model.parameters())
-    train, test = get_dataloader(
+    train, test, _, _ = get_dataloader(
         shuffle=False,
-        sampler=lambda dataset: DistributedSampler(dataset),
+        sampler=(lambda dataset: DistributedSampler(dataset)) if RUN_ON_MULTIPLE_GPUS else None,
         transforms=data_transform,
-        batch_size=64,
-        num_workers=6,
+        batch_size=512,
+        num_workers=8,
     )
-    torch.compile(model)
+    if torch.__version__.startswith("2."):
+        torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters())
+    global_timer = GlobalTimeSpentInFunction()
+
     training = []
     testing = []
-    trainer = TrainingLoopDistributedAccumulate(
-        model,
-        optimizer,
-        gpu_id=gpu_id
-    )
+    trainer = None
+    if RUN_ON_MULTIPLE_GPUS:
+        trainer = TrainingLoopDistributedAccumulate(
+            model,
+            optimizer,
+            gpu_id=gpu_id
+        )
+    else:
+        trainer = TrainingLoop(
+            model,
+            optimizer,
+        )
     start = time.time()
 
     train_acc = []
@@ -48,27 +71,20 @@ def main(gpu_id, world_size, size):
     train_x = []
     test_x = []
     
-    while trainer.epoch < 4_000:
+    #while trainer.epoch < 4_000:
+    for _ in range(4_000):
         acc = None
         with Timer("train"):
             _, acc = trainer.train(train)
         testing_acc = None
         with Timer("testing"):
             testing_acc = trainer.eval(test)
-        if gpu_id == 0:
-            print(f"{acc}")
-            print(f"{testing_acc}")
-            print(trainer.epoch)
-            train_acc.append(acc.item())
-            test_acc.append(testing_acc.item())
-            test_x.append(trainer.epoch)
-            break
-        else:
-            print(f"Epoch {trainer.epoch}")
-            break
-    destroy_process_group()
-
+        train_acc.append(acc.item())
+        test_acc.append(testing_acc.item())
+        test_x.append(trainer.epoch)
     end = time.time()
+
+    print(global_timer.timers)
 
     if gpu_id == 0:
         results = {
@@ -81,7 +97,11 @@ def main(gpu_id, world_size, size):
         with open(f"{size}.json", "w") as file:
             json.dump(results, file)
 
+
 if __name__ == "__main__":
+    print(f"Training with width={SIZE}")
+    out = core(None, SIZE)
+    """
     for i in [
             8,
             16,
@@ -91,6 +111,10 @@ if __name__ == "__main__":
             64,
         ]:
         print(f"{i}")
-        out = run_on_multiple_gpus(main, i)
+        if RUN_ON_MULTIPLE_GPUS:
+            out = run_on_multiple_gpus(main, i)
+        else:
+            out = core(None, i)
         print(out)
         break
+    """

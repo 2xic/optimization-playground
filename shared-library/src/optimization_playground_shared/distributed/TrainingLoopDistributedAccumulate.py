@@ -38,7 +38,7 @@ class TrainingLoopDistributedAccumulate:
                 loss = self.loss(y_pred, y)
                 loss.backward()
                 
-                if 0 < batch and batch % 8 == 0:
+                if 0 < batch and batch % 16 == 0:
                     self._step()
                     
                 total_loss += loss

@@ -6,6 +6,7 @@ class TrainingLoop:
         self.model = model
         self.optimizer = optimizer
         self.loss = nn.NLLLoss()
+        self.epoch = 1
     
     def eval(self, dataloader):
         with torch.no_grad():
@@ -41,6 +42,7 @@ class TrainingLoop:
             accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += X.shape[0]
         accuracy = (accuracy / length) * 100 
+        self.epoch += 1
         return (
             total_loss,
             accuracy

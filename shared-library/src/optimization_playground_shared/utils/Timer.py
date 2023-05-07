@@ -1,4 +1,5 @@
 import time
+from .GlobalTimeSpentInFunction import GlobalTimeSpentInFunction
 
 class Timer(object):
     def __init__(self, name) -> None:
@@ -9,8 +10,14 @@ class Timer(object):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
+        store = GlobalTimeSpentInFunction()
+
         delta = time.time() - self.time
-        print(f"{self.name} : {delta}")
+        store.save(
+            self.name,
+            delta
+        )
+     #   print(f"{self.name} : {delta}")
         self.time = None
 
 if __name__ == "__main__":

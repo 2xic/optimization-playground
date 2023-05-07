@@ -26,3 +26,4 @@ __pycache__
 upload_lambda.py
 .lambda_cli_ip
 .env
+get_lambda_instances.py
