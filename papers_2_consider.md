@@ -43,6 +43,8 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Scaling Goal-based Exploration via Pruning Proto-goals](https://arxiv.org/pdf/2302.04693.pdf)
 
+[Mastering Diverse Domains through World Models](https://arxiv.org/pdf/2301.04104.pdf)
+
 ## NLP 
 [MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
 

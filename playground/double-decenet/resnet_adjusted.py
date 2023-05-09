@@ -106,7 +106,7 @@ class ResNet(nn.Module):
                     norm_layer=norm_layer,
                 )
             )
-
+        self.softmax = nn.LogSoftmax(dim=1)
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
@@ -124,6 +124,7 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
+        x = self.softmax(x)
 
         return x
 
