@@ -21,6 +21,9 @@ for output_name, field, title in [
         name = int(
             os.path.basename(i).replace(".json", "")
         )
+        # did only train up to 90 in width sequence
+        if name in [128]:
+            continue
         with open(i, "r") as file:
             content = json.loads(file.read())
             size[name] = content[field]
@@ -45,12 +48,12 @@ for output_name, field, title in [
     plt.clf()
 
     fig, ax = plt.subplots()
-    for key, value in sorted(line_plot.items(), key=lambda x: int(x[0])):
+    for key, value in sorted(line_plot.items(), key=lambda x: (x[1][-1]), reverse=True)[:10]:
         plt.plot(value, label=key)
     ax.set_xlabel("Epochs")
     ax.set_ylabel("Accuracy")
     plt.legend(loc="upper left")
-    plt.title(title)
+    plt.title(f"{title} (top 10)")
     plt.savefig("./plots/line_" + output_name)
     plt.clf()
 
