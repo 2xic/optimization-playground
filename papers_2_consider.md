@@ -2,6 +2,7 @@
 Papers that I have saved, and should look at.
 
 ## Source for papers 2 consider
+- [https://huggingface.co/papers](https://huggingface.co/papers)
 - [https://paperswithcode.com/](https://paperswithcode.com/)
 - [https://spinningup.openai.com/en/latest/spinningup/keypapers.html](https://spinningup.openai.com/en/latest/spinningup/keypapers.html)
 - [https://lilianweng.github.io/](https://lilianweng.github.io/)
@@ -25,7 +26,12 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 ### LLMs
 [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/pdf/2304.03442.pdf)
+
 [A Generalist Agent](https://arxiv.org/pdf/2205.06175.pdf)
+
+[PaLM 2 Technical Report](https://ai.google/static/documents/palm2techreport.pdf)
+
+[AI Agent Basics: Let’s Think Step By Step](https://www.jonstokes.com/p/ai-agent-basics-lets-think-step-by)
 
 ### Computer vision
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
@@ -36,6 +42,12 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Vision Transformers with Mixed-Resolution Tokenization ](https://arxiv.org/abs/2304.00287)
 
+[ImageBind: Holistic AI learning across six modalities](https://ai.facebook.com/blog/imagebind-six-modalities-binding-ai/)
+
+[What does CLIP know about a red circle?](https://arxiv.org/pdf/2304.06712.pdf)
+
+[An Inverse Scaling Law for CLIP Training](https://arxiv.org/abs/2305.07017)
+
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
 
@@ -44,6 +56,10 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Scaling Goal-based Exploration via Pruning Proto-goals](https://arxiv.org/pdf/2302.04693.pdf)
 
 [Mastering Diverse Domains through World Models](https://arxiv.org/pdf/2301.04104.pdf)
+
+[Deep RL at Scale: Sorting Waste in Office Buildings with a Fleet of Mobile Manipulators](https://arxiv.org/pdf/2305.03270.pdf)
+
+[RLHF: Reinforcement Learning from Human Feedback](https://huyenchip.com/2023/05/02/rlhf.html)
 
 ## NLP 
 [MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
@@ -57,6 +73,13 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [The Curious Case of Absolute Position Embeddings](https://arxiv.org/pdf/2210.12574.pdf)
 [The Use Case for Relative Position Embeddings](https://ofir.io/The-Use-Case-for-Relative-Position-Embeddings/?utm_source=pocket_saves)
+
+[AttentionViz: A Global View of Transformer Attention](https://arxiv.org/pdf/2305.03210.pdf)
+
+[Language models can explain neurons in language models](https://openai.com/research/language-models-can-explain-neurons-in-language-models)
+
+
+[The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
