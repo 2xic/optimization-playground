@@ -2,7 +2,6 @@ Sometimes I forget the projects had planned, better to write it down here.
 
 ## Ideas
 - Puzzles
-  - [Tensor Puzzles](https://github.com/srush/Tensor-Puzzles)
   - [GPU Puzzles](https://github.com/srush/GPU-Puzzles)
 
 - (WIP) Implement, and evaluate some embeddings `nlp/embeddings-experiments`
