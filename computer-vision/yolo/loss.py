@@ -208,7 +208,7 @@ def yolo_loss(predicted: List[GridEntry], truth: List[GridEntryTruth], constants
     return loss
 
 
-def simple_yolo_loss(predicted, truth, constants):
+def simple_yolo_loss(predicted, truth, constants, name=None):
     """
     Okay, I think I misunderstood something regarding the grid.
 
@@ -217,10 +217,10 @@ def simple_yolo_loss(predicted, truth, constants):
     """
     predicted_grid = predicted.reshape((constants.GRID_SIZE, constants.GRID_SIZE,
                                         (5 * constants.BOUNDING_BOX_COUNT + constants.CLASSES)))
-
+  #  print(name)
     truth = prediction_2_grid(truth, constants, class_id=[1, ] * 20)
 
-    loss = torch.zeros(1)
+    loss = torch.zeros(1).to(predicted.device)
     lambda_cord = 15
     lambda_no_obj = 0.5
 
@@ -230,9 +230,9 @@ def simple_yolo_loss(predicted, truth, constants):
                 x, y, w, h, confidence = predicted_grid[i][j][:5]
                 label = truth[i][j][0]
 
-                print((x.item(), y.item(), w.item(), h.item()))
-                print((label.x, label.y, label.w, label.h))
-                print("")
+                # print((x.item(), y.item(), w.item(), h.item()))
+                # print((label.x, label.y, label.w, label.h))
+                # print("")
 
                 normalize_size = lambda x: x # math.sqrt(x)
                  
@@ -262,6 +262,6 @@ def simple_yolo_loss(predicted, truth, constants):
                     predicted_grid[i][j][5]
                 ) ** 2
 
-    print(loss)
+    #print(loss)
 
     return loss

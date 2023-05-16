@@ -1,9 +1,6 @@
-from typing import Container
-from torch import optim, nn
-import pytorch_lightning as pl
+from torch import nn
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from constants import Constants
 
 

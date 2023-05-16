@@ -6,15 +6,17 @@ from typing import List
 from constants import Constants
 import torch
 
+
 class GridBox:
     def __init__(self, bounding_boxes, p) -> None:
         self.bounding_boxes = bounding_boxes
         self.p = p
 
     def raw(self):
-        #print(torch.cat((self.bounding_boxes[-1], self.p), 0))
+        # print(torch.cat((self.bounding_boxes[-1], self.p), 0))
         # TODO: Fix this bounding box last item problem
         return torch.cat((self.bounding_boxes[-1], self.p), 0)
+
 
 def get_coordinates_of_tensor(tensor, constants: Constants, confidence_threshold=0) -> List[GridBox]:
     """
@@ -41,6 +43,11 @@ def get_coordinates_of_tensor(tensor, constants: Constants, confidence_threshold
             class_score = first_grid_cell[5 * constants.BOUNDING_BOX_COUNT:]
 
             assert class_score.shape[-1] == constants.CLASSES
+
+            print(list([
+                i[-1]
+                for i in bounding_boxes
+            ]))
 
             bounding_boxes = [
                 i for i in bounding_boxes if i[-1] > confidence_threshold

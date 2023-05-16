@@ -252,3 +252,22 @@ Section five is funny, they drive the point home by adding "emergent abilities" 
 ### Various ChatGpt notes
 - [it can play tic tac toe](https://twitter.com/michael_nielsen/status/1649848364232773633?utm_source=pocket_saves)
 
+### [Blockchain Large Language Models](https://arxiv.org/pdf/2304.12749.pdf)
+Given the amounts of attacks on DeFi applications, getting a real-time detection system (IDS) can be very useful. State of the art application for these kind of tasks usually use reward based methods, or custom heuristics methods.
+
+Key insight from the authors "Attacking transaction usually have a execution path is very different from other execution paths" based on this it should be possible for a model to learn the representation needed to detect abnormal transactions.
+
+The system seems to consider both the public mempool, but also the txs that are sent to a private mempool and later finalized (where BlockGPT only can see the finalization). 
+
+The system works by having a transaction tracer that is able to see the function calls, input / output data, and see the execution path. The model is trained on a historical dataset of transactions. An detection model is used to score/ rank the trace of any new transactions.
+
+"Intermediate Trace Representation" -> an tree structured trace is used as input into the model (see listing 1 for example, and page 4 for additional details)
+Each node in the tree is one hot encoded into a vector based on the grammar. Positional encoding + transformer encoder allows the trace to be parsed in sequences.
+The loss seems to be as simple as predict the next token (or to be more precise the probability distribution). 
+
+
+-> Dataset is from a previous study. Which one ? 
+  -> Sounds like it's from https://arxiv.org/pdf/2208.13035.pdf but haven't found a source there$$
+
+$$
+

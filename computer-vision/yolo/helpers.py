@@ -9,6 +9,12 @@ def get_local_dir(path):
         path
     )
 
+def get_original_image_size(image_name):
+    image = Image.open(
+        get_local_dir("train2017/" + image_name)
+    )
+    return image.size
+
 def convert_image(image_name, constants: Constant):
     image = Image.open(
         get_local_dir("train2017/" + image_name)
