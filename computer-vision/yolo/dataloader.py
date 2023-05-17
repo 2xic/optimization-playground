@@ -15,11 +15,15 @@ class YoloDataset(Dataset):
         self.constants = constants
         self.dataset = dataset
         self.image_keys = dataset.get_list()
+        print(f"Size {len(self.image_keys)}")
+   #    exit(0)
 
     def __len__(self):
         return len(self.image_keys)
     
     def get_raw_index(self, idx):
+        if idx >= len(self.image_keys):
+            return None
         name = self.image_keys[idx]
         results = self.dataset.load(
             name
@@ -32,8 +36,7 @@ class YoloDataset(Dataset):
         labels += [
             [0, 0, 0, 0]
         ] * (self.constants.BOUNDING_BOX_COUNT - len(labels))
-     #   print(labels)
-#        exit(0)
+
         return (
             results["image"],
             torch.tensor(labels),

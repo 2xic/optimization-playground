@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from constants import Constants
-from helpers import convert_image
+from helpers import convert_image, get_original_image
 
 
 class ImageBoundingBox:
@@ -11,6 +11,33 @@ class ImageBoundingBox:
 
     def load_image(self, image_path, constants: Constants):
         self.image = convert_image(image_path, constants)
+        return self
+    
+    def load_original_image(self, image_path):
+        self.image = get_original_image(image_path)
+        return self
+    
+    def save_with_raw_coco(self, all_bbox, name):
+        _, ax = plt.subplots()
+
+        ax.imshow(self.image)
+        for bbox in all_bbox:
+            width, height = bbox[2], bbox[3]
+            bottom_x, bottom_y = bbox[0], bbox[1]
+
+            rect = patches.Rectangle(
+                (bottom_x, bottom_y),
+                width=width,
+                height=height,
+                linewidth=1,
+                edgecolor=('g'),
+                facecolor='none',
+            )
+            ax.add_patch(rect)
+        plt.legend(loc='upper right')
+        plt.savefig(name)
+        plt.clf()
+
         return self
 
     def open(self, image_path, label_path):
@@ -29,21 +56,21 @@ class ImageBoundingBox:
         for (x_b, y_b, x_t, y_t), confidence in zip(self.bounding_box, self.confidence):
             # print((x_b, y_b, x_t, y_t))
             rect = patches.Rectangle(
-                (x_b, y_b), x_t - x_b, y_t - y_b, 
-                linewidth=1, 
+                (x_b, y_b), x_t - x_b, y_t - y_b,
+                linewidth=1,
                 edgecolor=('r' if confidence < 0.8 else 'g'),
                 facecolor='none',
-                label=f"Conf. {confidence}"
+            #    label=f"Conf. {confidence}"
             )
             ax.add_patch(rect)
-        plt.legend(loc='upper right')
+     #   plt.legend(loc='upper right')
         plt.show()
         plt.clf()
 
     def save(self, name):
         _, ax = plt.subplots()
         ax.imshow(self.image)
-        print(self.confidence)
+        # print(self.confidence)
         for (x_b, y_b, x_t, y_t), confidence in zip(self.bounding_box, self.confidence):
             # print((x_b, y_b, x_t, y_t))
             rect = patches.Rectangle(
@@ -51,10 +78,10 @@ class ImageBoundingBox:
                 linewidth=1,
                 edgecolor=('r' if confidence < 0.8 else 'g'),
                 facecolor='none',
-                label=f"Conf. {confidence}"
+           #     label=f"Conf. {confidence}"
             )
             ax.add_patch(rect)
-        plt.legend(loc='upper right')
+        #plt.legend(loc='upper right')
         plt.savefig(name)
         plt.clf()
 
@@ -73,6 +100,29 @@ class ImageBoundingBox:
         return self
 
     def convert_yolo_2_coco(self, image_x, image_y, x_center, width, y_center, height, confidence=None):
+        cords = self._convert_yolo_coco(
+            image_x, image_y, x_center, width, y_center, height)
+        if cords is not None:
+            self.bounding_box.append(cords)
+            self.confidence.append(confidence)
+        else:
+            pass
+        return self
+
+    def convert_yolo_2_box(self, image_x, image_y, x_center, width, y_center, height):
+        cords = self._convert_yolo_coco(
+            image_x, image_y, x_center, width, y_center, height)
+        if cords is None:
+            return None
+        x, y, w, h = cords
+        return [
+            x,# - w,
+            y,# - w,
+            x + w,
+            y + h
+        ]
+
+    def _convert_yolo_coco(self, image_x, image_y, x_center, width, y_center, height):
         image_x_bottom, image_x_top = self._get_coordinate(
             image_x,
             x_center,
@@ -86,13 +136,11 @@ class ImageBoundingBox:
         cords = (
             image_x_bottom, image_y_bottom, image_x_top, image_y_top
         )
-
-        if False not in [self.is_valid_size(x) for x in cords]:
-            self.bounding_box.append(cords)
-            self.confidence.append(confidence)
-        else:
-            pass
-        return self
+        if False not in [
+            self.is_valid_size(x) for x in cords
+        ]:
+            return list(cords)
+        return None
 
     def is_valid_size(self, x):
         return 0 <= x
@@ -100,11 +148,12 @@ class ImageBoundingBox:
     def _get_coordinate(self, axis_size, center, box_size):
         center = float(center)
         box_size = float(box_size)
-        #print((box_size))
+        # print((box_size))
         return (
             axis_size * center - axis_size * box_size,
             axis_size * center + axis_size * box_size,
         )
+
 
 if __name__ == "__main__":
     """

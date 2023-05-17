@@ -9,20 +9,27 @@ import torch
 import pickle
 from dataloader import YoloDataset
 from torch.utils.data import DataLoader
-
+from non_maxiumu_supression import soft_nms, nms
+import matplotlib.pyplot as plt
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
 print(device)
 
 
 if __name__ == "__main__":
-    categories = [50]
+    # hot dog
+    categories = [58]
     constants = Constants(
         # Currently class loss is not implemented
         CLASSES=len(categories),
         BOUNDING_BOX_COUNT=1
     )
-    dataset = Coco2Yolo(constants, categories=categories).load_annotations()
+    dataset = Coco2Yolo(
+        constants,
+        categories=categories
+    ).load_annotations(
+        samples=10
+    )
     model = Yolo(constants).to(device)
 
     lr = 1e-4
@@ -33,11 +40,12 @@ if __name__ == "__main__":
     )
     dataloader = DataLoader(
         yolo_dataset,
-        batch_size=8,
+        batch_size=16,
         shuffle=True,
     )
-
-    for epoch in range(20):
+    EPOCHS = 1_000
+    loss_over_time = []
+    for epoch in range(EPOCHS):
         total_loss = 0
         batches = 0
         for (X, y) in dataloader:
@@ -52,67 +60,78 @@ if __name__ == "__main__":
                         output[i],
                         y[i],
                         constants,
-                        #name=results["name"][i]
                     )
                     for i in range(y.shape[0])
                 ]
-            ).sum() / X.shape[0]
+            )
+            # print(loss)
+            # print(y.shape, X.shape)
+            loss = loss.mean()
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
             batches += 1
         print(epoch, total_loss / batches)
-        """
-        for images in dataset.iter(samples=30):
-            name = images["name"]
-            tensor_image = images["image"].to(device)
-            output = model(tensor_image.reshape(
-                (1, ) + tensor_image.shape)
-            )
-            loss = simple_yolo_loss(
-                output[0],
-                torch.tensor(images["yolo_bounding_boxes"], device=device),
-                constants,
-            )
+        loss_over_time.append((total_loss / batches))
 
-            loss.backward()
-            total_loss += loss.item()
-        print(f"Loss : {total_loss}")
-        optimizer.step()
-        optimizer.zero_grad()
-        """
+        if epoch % 100 == 0 or (EPOCHS - 1) == epoch:
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'constants': pickle.dumps(constants),
+                'loss': loss,
+            }, "model_state")
 
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'constants': pickle.dumps(constants),
-        'loss': loss,
-    }, "model_state")
+            print("lets try out the model output then!")
 
-    print("lets try out the model output then!")
+            for example_idx, file_idx in enumerate([0, 2, 3]):
+                results = yolo_dataset.get_raw_index(file_idx)
+                if results is None:
+                    continue
+                name = results["name"]
+                tensor_image = results["image"].to(device)
+                tensor_image = tensor_image.reshape((1, ) + tensor_image.shape)
+                output = None
 
-    for example_idx, file_idx in enumerate([0, 1, 3]):
-        results = yolo_dataset.get_raw_index(file_idx)
-        name = results["name"]
-        tensor_image = results["image"].to(device)
-        output = model(tensor_image.reshape((1, ) + tensor_image.shape))
-        output = get_coordinates_of_tensor(
-            output,
-            constants,
-            confidence_threshold=0.7
-        )
+                with torch.no_grad():
+                    output = model(tensor_image)
+                    output = get_coordinates_of_tensor(
+                        output,
+                        constants,
+                        confidence_threshold=0.65
+                    )
 
-        image = ImageBoundingBox()
-        image.load_image(name, constants)
-        for i in output:
-            for j in i.bounding_boxes:
-                print(j)
-                image.load_bbox(j[:4], round(j[-1].item(), 2))
-        image.save(f'predicted_{example_idx}.png')
+                image = ImageBoundingBox()
+                image.load_image(name, constants)
 
-        ImageBoundingBox().load_image(
-            name,
-            constants
-        ).load_bbox(
-            results["yolo_bounding_boxes"][0], 1
-        ).save(f'example_{example_idx}.png')
+                boxes = []
+                scores = []
+                for i in output:
+                    for j in i.bounding_boxes:
+                        cords = ImageBoundingBox().convert_yolo_2_box(
+                            constants.image_width, constants.image_height,
+                            *j[:4]
+                        )
+                        if cords is not None:
+                            boxes.append(
+                                cords
+                            )
+                            scores.append(round(j[-1].item(), 2))
+
+                for (i, score) in nms(*soft_nms(boxes, scores)):
+                    print(i)
+                    image.bounding_box.append(i)
+                    image.confidence.append(score)
+        #            image.load_bbox(i, 1)
+
+                image.save(f'predicted_{example_idx}.png')
+
+                ImageBoundingBox().load_original_image(name).save_with_raw_coco(
+                    results["raw_bounding_boxes"],
+                    name=f'example_{example_idx}.png'
+                )
+            plt.plot(loss_over_time)
+            plt.xlabel('epochs')
+            plt.ylabel('loss')
+            plt.savefig('loss.png')
+            plt.clf()

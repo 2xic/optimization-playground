@@ -1,10 +1,8 @@
-from lib2to3.pytree import convert
 import unittest
 from coco2yolo import Coco2Yolo
 from bounding_box import ImageBoundingBox
 from constants import Constants
 import numpy as np
-
 
 class Coco2YoloTest(unittest.TestCase):
     def test_should_execute(self):

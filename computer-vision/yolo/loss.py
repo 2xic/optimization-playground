@@ -1,10 +1,6 @@
-from cmath import pi
-from inspect import classify_class_attrs
-from os import GRND_RANDOM
 from typing import List
 import torch
 from constants import Constants
-from coco2yolo import Coco2Yolo
 import math
 
 
@@ -221,21 +217,27 @@ def simple_yolo_loss(predicted, truth, constants, name=None):
     truth = prediction_2_grid(truth, constants, class_id=[1, ] * 20)
 
     loss = torch.zeros(1).to(predicted.device)
-    lambda_cord = 15
+
+    # same constants as in the paper.
+    lambda_cord = 5
     lambda_no_obj = 0.5
 
     for i in range(constants.GRID_SIZE):
         for j in range(constants.GRID_SIZE):
+            x, y, w, h, confidence = predicted_grid[i][j][:5]
+            classes = predicted_grid[i][j][5:]
+
+            # The size is normalized with sqrt
+            normalize_size = lambda x: torch.sqrt(x)
+            #normalize_size = lambda x: (x)
+
             if 0 < len(truth[i][j]):
-                x, y, w, h, confidence = predicted_grid[i][j][:5]
                 label = truth[i][j][0]
 
-                # print((x.item(), y.item(), w.item(), h.item()))
-                # print((label.x, label.y, label.w, label.h))
-                # print("")
+                print(list(map(lambda x: round(x, 2), [x.item(), y.item(), w.item(), h.item()])))
+                print(list(map(lambda x: round(x, 2), [label.x.item(), label.y.item(), label.w.item(), label.h.item()])))
+                print("")
 
-                normalize_size = lambda x: x # math.sqrt(x)
-                 
                 loss += lambda_cord * (
                     (
                         x -
@@ -253,15 +255,9 @@ def simple_yolo_loss(predicted, truth, constants, name=None):
                         normalize_size(h) -
                         normalize_size(label.h)
                     ) ** 2
-                ) 
-                loss += (
-                    1 - predicted_grid[i][j][5]
-                ) ** 2
+                )
+                loss += (1 - confidence) ** 2
             else:
-                loss += lambda_no_obj * (
-                    predicted_grid[i][j][5]
-                ) ** 2
-
-    #print(loss)
-
+                loss += lambda_no_obj * (confidence ** 2)
+            #    loss += classes.sum()
     return loss
