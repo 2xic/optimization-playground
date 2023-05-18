@@ -25,12 +25,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Wojciech Zaremba (PHD) - Learning Algorithms from Data](https://cs.nyu.edu/media/publications/zaremba_wojciech.pdf)
 
 ### LLMs
-[Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/pdf/2304.03442.pdf)
-
-[A Generalist Agent](https://arxiv.org/pdf/2205.06175.pdf)
-
-[PaLM 2 Technical Report](https://ai.google/static/documents/palm2techreport.pdf)
-
 [AI Agent Basics: Let’s Think Step By Step](https://www.jonstokes.com/p/ai-agent-basics-lets-think-step-by)
 
 ### Computer vision
@@ -41,12 +35,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Learning to Zoom and Unzoom](https://arxiv.org/pdf/2303.15390.pdf)
 
 [Vision Transformers with Mixed-Resolution Tokenization ](https://arxiv.org/abs/2304.00287)
-
-[ImageBind: Holistic AI learning across six modalities](https://ai.facebook.com/blog/imagebind-six-modalities-binding-ai/)
-
-[What does CLIP know about a red circle?](https://arxiv.org/pdf/2304.06712.pdf)
-
-[An Inverse Scaling Law for CLIP Training](https://arxiv.org/abs/2305.07017)
 
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)

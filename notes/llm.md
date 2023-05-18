@@ -267,7 +267,31 @@ The loss seems to be as simple as predict the next token (or to be more precise 
 
 
 -> Dataset is from a previous study. Which one ? 
-  -> Sounds like it's from https://arxiv.org/pdf/2208.13035.pdf but haven't found a source there$$
+  -> Sounds like it's from https://arxiv.org/pdf/2208.13035.pdf but haven't found a source there
 
-$$
+### [PaLM 2 Technical Report](https://arxiv.org/pdf/2305.10403.pdf)
+-> Transformer architecture
+-> Upgraded (and improved) version of [PaLM](https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html) (released last year)
+-> Side note: I have seen discussions on [Reddit](https://www.reddit.com/r/OpenAI/comments/13gx1g1/palm_2_vs_gpt4_why_google_is_having_a_hard_time/) and Twitter that both indicate that PaLM is not as good as GPT4.
+  - In the paper they have some evaluations where GPT4 also is tested, and PaLM does beat GPT4 at some benchmarks
+
+What they did to improve the model
+-> Used scaling laws, and used compute optimal scaling of dataset + compute
+-> Multilingual dataset
+-> Switched to a transformer architecture (interesting at previous model this not use this)
+
+Very little details about the model is shared, and most of the paper is about benchmarking and evaluating the capabilities of the models.
+
+### [Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/pdf/2304.03442.pdf)
+This is interesting, they have a town of LLMs Agents, and seed one of the agent with the task of hosting a Valentine Day party. The result is the agents starts to work together and get to know each other to be able to fullfil the plan.
+
+The components used
+-> Memory stream = for long term memory
+-> Reflection = allows the model to draw conclusion about itself and the other agents
+-> Planning = creating actionable items from the reflection
+
+Quite interesting!
+
+
+
 

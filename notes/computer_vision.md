@@ -27,3 +27,18 @@ Glanced of the paper and it seems interesting
 - They use model distillation to 
 
 [Blogpost by meta](https://ai.facebook.com/blog/dino-v2-computer-vision-self-supervised-learning/?utm_source=twitter&utm_medium=organic_social&utm_campaign=dinov2&utm_content=video)
+
+## [What does CLIP know about a red circle?](https://arxiv.org/pdf/2304.06712.pdf)
+**By drawing red circles, CLIP will put more focus on that and it works as a visual way of doing prompt engineering**
+
+By drawing red circles, and prompting the model with "this is *animal*" the model should give the highest accuracy on the correct model. This seems to work well in practice (see figure 2).
+
+### [ImageBind: Holistic AI learning across six modalities](https://ai.facebook.com/blog/imagebind-six-modalities-binding-ai/)
+They train one model to lean the image mapping, and one model to convert from another domain into a representation within that domain. Two networks that are jointly trained similar to CLIP.
+
+### [An Inverse Scaling Law for CLIP Training](https://arxiv.org/abs/2305.07017)
+CLIP is cool, but it required a lot of recourses for training. The authors of this paper have however figured out a way to make this barrier to entry a lot smaller.
+
+What they figured out was that by using a larger text / image encoder, the sequence length can be smaller when training (allowing faster training). In other words, less text tokens, and smaller image.
+
+Thereby the name "inverse scaling law". By using a larger model, you can decrease the input size, and still get the same or close to the same results.

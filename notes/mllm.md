@@ -18,4 +18,11 @@ Model architecture is a encoder-decoder transformer, output of a vision encoder 
 Image -> Experts -> Compressed features
 Text -> decoder -> P(text | Compressed image features) -> Output
 
+### [A Generalist Agent (GATO)](https://arxiv.org/pdf/2205.06175.pdf)
+Model that is capable of playing Atari, captioning images, chatting, and more! This all comes from a single model GATO. The model is trained supervised, but the authors belive it should be possible to train it with RL.
+Everything is converted into tokens, and by doing this GATO can be trained like a LLM. 
+
+They mostly show results from the RL, and it has a good success rate in that environment. The paper also have some examples from the other tasks GATO can do, but not that many benchmark results in those domains.
+
+
 
