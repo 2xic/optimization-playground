@@ -64,8 +64,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [AttentionViz: A Global View of Transformer Attention](https://arxiv.org/pdf/2305.03210.pdf)
 
-[Language models can explain neurons in language models](https://openai.com/research/language-models-can-explain-neurons-in-language-models)
-
 
 [The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)
 
@@ -87,6 +85,8 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [http://proceedings.mlr.press/v37/ioffe15.pdf](http://proceedings.mlr.press/v37/ioffe15.pdf)
 
 [Going Deeper with Convolutions](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Szegedy_Going_Deeper_With_2015_CVPR_paper.pdf)
+
+[Seeing is Believing: Brain-Inspired Modular Training for Mechanistic Interpretability](https://arxiv.org/abs/2305.08746)
 
 ## Infrastructure
 [Velox: Meta’s Unified Execution Engine](https://scontent.fosl3-2.fna.fbcdn.net/v/t39.8562-6/302757195_3033291893628871_4556621853780203235_n.pdf?_nc_cat=109&ccb=1-7&_nc_sid=ad8a9d&_nc_ohc=83s6lshWWAEAX8A3wdW&_nc_ht=scontent.fosl3-2.fna&oh=00_AfAq1jZlnHlM139fSBQvQ1mQmgT-cyGDgwMlP-GixFdobw&oe=64080F67)

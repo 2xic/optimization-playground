@@ -43,3 +43,10 @@ TODO, look at the code they released [Consistency Models(code)](https://github.c
 
 Implementation by [others](https://twitter.com/RiversHaveWings/status/1634038603247661062) also shows that it seems promising. 
 This is an alternative [open source](https://github.com/cloneofsimo/consistency_models) version.
+
+
+### [Drag Your GAN: Interactive Point-based Manipulation on the Generative Image Manifold](https://vcai.mpi-inf.mpg.de/projects/DragGAN/data/paper.pdf)
+It's based on the StyleGAN2 architecture. This paper was a bit harder to digest(maybe I need more coffee), but as I understand it is the "Motion supervision" that is the core part of the loss. The idea seem to be that you just move the point a bit, and make sure the model generates something similar. The other key part seems to be the way this point tracking of the loss is done.
+-> Fig. 4 the car is switched out, but the person and the sunset seems to be mostly the same. Interesting.
+-> 
+[code (will be released in june)](https://github.com/XingangPan/DragGAN)
