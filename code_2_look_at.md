@@ -1,7 +1,11 @@
 ## Code 2 look at 
 
 ## Implementations
+[https://github.com/JiauZhang/DragGAN](https://github.com/JiauZhang/DragGAN)
+
 [https://github.com/ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp)
+
+[https://github.com/facebookresearch/fairseq](https://github.com/facebookresearch/fairseq)
 
 ## Tools / Libraries
 [Jax](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html)
