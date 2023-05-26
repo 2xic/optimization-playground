@@ -50,3 +50,26 @@ It's based on the StyleGAN2 architecture. This paper was a bit harder to digest(
 -> Fig. 4 the car is switched out, but the person and the sunset seems to be mostly the same. Interesting.
 -> 
 [code (will be released in june)](https://github.com/XingangPan/DragGAN)
+
+[code (unofficial)](https://github.com/JiauZhang/DragGAN)
+
+[Good tweet on draggan](https://twitter.com/mayfer/status/1659940842965200901?s=12)
+
+### [Training Diffusion Models with Reinforcement Learning](https://arxiv.org/abs/2305.13301)
+Found by this [tweet](https://twitter.com/iscienceluvr/status/1661565298066198536?s=12).  
+
+By reading the paper it also sounds like a form of RLHF.
+
+Pipeline
+-> Prompt into diffusion model
+-> Output image to image 2 text model
+-> Bert similiarty score between prompt and image caption.
+
+### [CoDi: Any-to-Any Generation via Composable Diffusion](https://arxiv.org/pdf/2305.11846.pdf)
+Cool paper, allows you to get multiple modalities from other modalities.  
+-> Text, image, audio -> text, image, audio
+
+The name "Composable Diffusion". Sounds like how it is solved is by having all the modalities are into the same latent space. 
+
+
+Side note: I think' I read a paper similar to this, where they just use special tokens for other modalities and pushed it into a transformer.

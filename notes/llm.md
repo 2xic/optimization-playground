@@ -348,3 +348,60 @@ Problems with LLMs today
 The idea to solve these problems is with a tree search. The setup has a few components prompt agent, checker module, memory module and ToT controller. The idea is first to make the LLM generate first step of a solution, and have the checker module check if the step is reasonable before generating the next step. The ToT controller checks that the final step also makes sense, or if it should backtrack and explore other options. The memory module keeps track of the conversation, and other useful hints for the LLM.
 
 There is also attached psuedo code for the algorithms, and the benchmark results for psuedo gives it SOTA for LLMs.
+
+### [Voyager: An Open-Ended Embodied Agent with Large Language Models](https://arxiv.org/pdf/2305.16291.pdf)
+[tweet](https://twitter.com/DrJimFan/status/1662115266933972993)
+[karpathy tweet](https://twitter.com/karpathy/status/1662160997451431936?s=12)
+
+(Skimming through this paper)
+
+Using an LLM to explore Minecraft worlds, and beats SOTA for various exploration metrics.
+
+
+Building blocks
+- Automatic curriculum that maximizes exploration.
+  - Gives you idea for what to do next (given a wooden pixaxe, try to craft a stone pixaxe etc)
+- Skill library for storing and retrieving complex behaviors.
+- Iterative prompting mechanism that incorporates environment feedback for program improvement.
+
+
+Notes
+- I don't see it compared against [VPT](https://arxiv.org/pdf/2206.11795.pdf). 
+- Looks like the model actually writes code that is executed (I guess that makes sense, but it changes how the environment is viewed compared to other existing solutions)
+- **Self-verification** is the most important component which by having another GPT-4 act as a critic of the agent. 
+
+### [The False Promise of Imitating Proprietary LLMs](https://arxiv.org/pdf/2305.15717.pdf)
+TLDR; Imitation models make answer that seems very good, but in reality it will fail at factuality. Instead they will learn the style of ChatGPT like answers.
+
+Imitation model = Weaker model learns from stronger model.
+
+
+### [Goat: Fine-tuned LLaMA Outperforms GPT-4 on Arithmetic Tasks](https://arxiv.org/pdf/2305.14201.pdf)
+Found this by this [tweet](https://twitter.com/rasbt/status/1661754946625105920?s=12). They point out what I assume is the key here the fact that the tokenization is split by each digit. 
+
+Looking at the results, it still does not achieve 100% on all the benchmarks, but beats GPT-4 quite a bit (especially on multiplication).
+
+### [AlpacaFarm: A Simulation Framework for Methods that Learn from Human Feedback](https://crfm.stanford.edu/2023/05/22/alpaca-farm.html)
+TLDR; 
+-> Use LLMs to create a "simulation" of human feedback to bootstrap model
+-> Train on real human feedback after model is bootstrapped.
+
+### [OpenAI Watch](https://openaiwatch.com/)
+Interesting idea, track model capability by it's ability to draw unicorns.
+
+### [LIMA: Less Is More for Alignment](https://arxiv.org/pdf/2305.11206.pdf)
+- Trains a LLM without RLHF, and instead use supervised prompt -> response dataset
+- Does not do quite as well as GPT-4 in a human "preference" study, but does about 50% as good.
+  - That said the dataset is just 1 000 prompt -> response
+
+### [Scaling Data-Constrained Language Models](https://arxiv.org/pdf/2305.16264v1.pdf)
+- Unique data > Training on same data
+- More repetitions of the data -> The value of adding more compute becomes less
+  - That makes sense, doesn't it ?
+- 
+
+They are studying scaling behavior in data constrained environments. From the figures
+-> More epochs hurts the model on a fixed data budget 
+-> More data = bigger loss
+-> Multiple epochs with repeating data = good
+-> 

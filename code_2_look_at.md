@@ -15,3 +15,6 @@
 [https://github.com/openai](https://github.com/openai/triton)
 
 [Mojo analysis](https://twitter.com/shshnkp/status/1656008696483438592?s=12)
+
+[prompt-optimizer](https://github.com/vaibkumr/prompt-optimizer)
+
