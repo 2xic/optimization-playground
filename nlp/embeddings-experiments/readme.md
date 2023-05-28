@@ -23,3 +23,5 @@ You use the sum of the contexts that are then fed into an embedding layer which 
 python3 train_cbow.py
 ```
 
+### Transformer
+[Paper](https://cdn.openai.com/papers/Text_and_Code_Embeddings_by_Contrastive_Pre_Training.pdf) from OpenAi using transformer encoder to get embeddings. 

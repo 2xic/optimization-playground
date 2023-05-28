@@ -1,4 +1,4 @@
-from shared.dataset import create_dataset
+from shared.get_sentence_sim import get_sentence_sim
 from shared.process import Process
 from shared.vocab import Vocab
 from SkipGram.Dataloader import SkipGramDataset
@@ -7,11 +7,6 @@ from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
 
-def get_sentence_sim(a, b):
-    sentence_a = (model.predict(a))
-    sentence_b = (model.predict(b))
-    cos = nn.CosineSimilarity(dim=1, eps=1e-6)
-    print(f"{a} / {b} > sim: {cos(sentence_a, sentence_b).item()}")
 
 if __name__ == "__main__":
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -57,18 +52,21 @@ if __name__ == "__main__":
 
     print(
         get_sentence_sim(
+            model,
             "taco",
             "ethereum"
         )
     )
     print(
         get_sentence_sim(
+            model,
             "bitcoin",
             "ethereum"
         )
     )
     print(
         get_sentence_sim(
+            model,
             "bitcoin",
             "taco"
         )
