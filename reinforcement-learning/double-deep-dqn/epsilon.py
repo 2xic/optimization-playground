@@ -21,7 +21,6 @@ class Epsilon:
         if np.random.rand() < self.epsilon:
             action = actions[random.randint(0, len(actions) - 1)]
             return action
-
         return None
 
     def update(self):
