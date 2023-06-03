@@ -1,4 +1,4 @@
-### [The Forward-Forward Algorithm: Some Preliminary Investigations](https://www.cs.toronto.edu/~hinton/FFA13.pdf)
+# [The Forward-Forward Algorithm: Some Preliminary Investigations](https://www.cs.toronto.edu/~hinton/FFA13.pdf)
 
 - Replaces forward and backward passes with two forward passes
   - One with real data
@@ -16,7 +16,18 @@
       - y_j is activity of hidden unit
       - sigma = logistic function
         - i.e sigmoid
-  -  " FF normalizes the length of the hidden vector before using it as input to the next layer"
+  -  "FF normalizes the length of the hidden vector before using it as input to the next layer"
   -  
 
-**Update from 2023** There is also [this](https://medium.com/@Mosbeh_Barhoumi/forward-forward-algorithm-ac24d0d9ffd) medium post which is quite nice. 
+### Update from 2023
+There is also [this](https://medium.com/@Mosbeh_Barhoumiforward-forward-algorithm-ac24d0d9ffd) medium post which is quite nice. 
+
+[ The Forward-Forward Algorithm (video) ](https://www.youtube.com/watch?v=F7wd4wQyPd8)
+- Cost function is moved to the layers and not at the end of the network (also noted above)
+- **Use layer norm**
+
+[ Extending the Forward Forward Algorithm (video) ](https://www.youtube.com/watch?v=hl6uD0mXMAw)
+- They manipulate the threshold 
+- They also tested it on IMDb dataset (NLP task)
+
+
