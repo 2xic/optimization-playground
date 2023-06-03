@@ -4,26 +4,12 @@ import torch
 from optimization_utils.plotters.SimplePlot import SimplePlot
 from optimization_utils.plotters.LinePlot import LinePlot
 from rnd import Rnd
+from optimization_playground_shared.utils.SimpleAverage import SimpleAverage
 import numpy as np
 
-class QuickAvg:
-    def __init__(self):
-        self.arr = None
-        self.N = 0
-
-    def add(self, arr):
-        if self.arr is None:
-            self.arr = arr
-        else:
-            self.arr += arr
-        self.N += 1
-
-    def res(self):
-        return (self.arr / self.N).tolist()
-
 if __name__ == "__main__":
-    avg_rnd = QuickAvg()
-    avg_non_rnd = QuickAvg()
+    avg_rnd = SimpleAverage()
+    avg_non_rnd = SimpleAverage()
     for i in range(10):
         env = TicTacToe(n=5, is_auto_mode=True)
         model = DqnModel(env.action_space)
