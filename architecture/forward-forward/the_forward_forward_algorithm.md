@@ -1,5 +1,18 @@
 # [The Forward-Forward Algorithm: Some Preliminary Investigations](https://www.cs.toronto.edu/~hinton/FFA13.pdf)
 
+## Results
+Was able to get it to converge on a XOR like toy problem
+
+![toy-example](./toy_example.png)
+
+Have some more difficulties getting it to work reliable on MNIST. It seems to spike, and then never able to recover. Might just be that it need more time.
+- Tried to play around with the learning rate, and the model seems sensitive to this
+- Tried to add a dropout layer which also seemed to help with bootstrapping, but then again fail
+
+![mnist](./mnist.png)
+
+
+## Notes
 - Replaces forward and backward passes with two forward passes
   - One with real data
   - One with fake data
@@ -17,9 +30,11 @@
       - sigma = logistic function
         - i.e sigmoid
   -  "FF normalizes the length of the hidden vector before using it as input to the next layer"
+     -  layer normalization
   -  
 
-### Update from 2023
+**Update from 2023**
+
 There is also [this](https://medium.com/@Mosbeh_Barhoumiforward-forward-algorithm-ac24d0d9ffd) medium post which is quite nice. 
 
 [ The Forward-Forward Algorithm (video) ](https://www.youtube.com/watch?v=F7wd4wQyPd8)
@@ -29,5 +44,4 @@ There is also [this](https://medium.com/@Mosbeh_Barhoumiforward-forward-algorith
 [ Extending the Forward Forward Algorithm (video) ](https://www.youtube.com/watch?v=hl6uD0mXMAw)
 - They manipulate the threshold 
 - They also tested it on IMDb dataset (NLP task)
-
 

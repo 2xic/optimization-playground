@@ -1,30 +1,34 @@
 import torch.nn as nn
 import torch
 
+
 class FfLinear(nn.Linear):
-    def __init__(self, input, output) -> None:
+    def __init__(self, input, output, p=0,lr=0.03) -> None:
         super().__init__(input, output)
+        self.p = p
 
         self.opt = torch.optim.Adam(
             self.parameters(),
-            lr=0.003
+            lr=lr
         )
 #        self.threshold = 0.5
         self.threshold = 2
+        self.activation = torch.nn.Hardtanh(0, 5)
 
     def forward(self, x):
         x = torch.nn.functional.normalize(x)
-        return torch.relu(super().forward(x))
-    
+        output = self.activation(super().forward(x))
+        output = torch.nn.functional.dropout(output, p=self.p)
+        return output
+
     def forward_score(self, x):
-        return (self.forward(x) ** 2).mean(dim=1)
-    
+        raw = self.forward(x)
+        return (raw ** 2).mean(dim=1), raw
+
     def train(self, positive, negative):
-        p_forward = self.forward(positive)
-        n_forward = self.forward(negative)
-        positive_goodness = ((p_forward) ** 2).mean(dim=1)#.sum(dim=0)
-        negative_goodness = ((n_forward) ** 2).mean(dim=1)#.sum(dim=0)
-    
+        positive_goodness, p_forward = self.forward_score(positive)
+        negative_goodness, n_forward = self.forward_score(negative)
+
         """
         error = torch.mean(
             torch.cat([
@@ -34,8 +38,8 @@ class FfLinear(nn.Linear):
         ) 
         """
         error = torch.log(1 + torch.exp(torch.cat([
-                -positive_goodness + self.threshold,
-                negative_goodness - self.threshold]))
+            -positive_goodness + self.threshold,
+            negative_goodness - self.threshold]))
         ).mean()
 
         self.opt.zero_grad()
@@ -43,7 +47,8 @@ class FfLinear(nn.Linear):
         error.backward()
         self.opt.step()
 
-        return p_forward.detach(), n_forward.detach(), error   
+        return p_forward.detach(), n_forward.detach(), error
+
 
 class Model:
     def __init__(self, layers):
@@ -57,13 +62,15 @@ class Model:
 
     def forward(self, x):
         x = x.to(self.device)
-        score = torch.zeros((x.shape[0]), device=self.device, dtype=torch.float)
+        score = torch.zeros(
+            (x.shape[0]), 
+            device=self.device, 
+            dtype=torch.float
+        )
         for i in list(self.net.modules())[0]:
-            if isinstance(i, FfLinear):
-                score += i.forward_score(x)
-                x = i.forward(x)
-            else:
-                x = i(x)
+            i: FfLinear = i
+            goodness, x = i.forward_score(x)
+            score += goodness
         return score
 
     def train(self, positive, negative):
@@ -71,18 +78,5 @@ class Model:
         negative = negative.to(self.device)
         error = None
         for i in list(self.net.modules())[0]:
-            if isinstance(i, FfLinear):
-                positive, negative, error = i.train(positive, negative)
-            else:
-                positive, negative = i(positive), i(negative)
+            positive, negative, error = i.train(positive, negative)
         return error
-    
-    def p_positive(self, x):
-        predicted = ((x ** 2).sum(dim=1)) - self.threshold
-        print(predicted)
-        return nn.MSELoss()(torch.tensor([1]),  predicted)
-
-    def p_negative(self, x):
-        predicted = (((x ** 2).sum(dim=1)) + self.threshold)
-        print(predicted)
-        return nn.MSELoss()(torch.tensor([0]), predicted)
