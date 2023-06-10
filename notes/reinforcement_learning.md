@@ -68,3 +68,15 @@ Use a RNN to control the handling of the gradient (average it for instance). The
 Goal for the model is to maximize the models performance. 
 
 The paper is cool, might be worth implementing.
+
+
+### [Faster sorting algorithms discovered using deep reinforcement learning](https://www.nature.com/articles/s41586-023-06004-9)
+[blogpost](https://www.deepmind.com/blog/alphadev-discovers-faster-sorting-algorithms)
+[tweet summary][https://twitter.com/drjimfan/status/1666487234445586432?s=12]
+
+- Uses assembly to work on lower levels instead of high levels to find improved algorithms.
+- Uses same core as AlphaZero, and looks at the discovering of new algorithms as a game.
+  - Game = Adding assembly instructions
+  - Reward = correctness and latency in the sorting
+- Pipeline only works for sorting, and has to be retrained for other tasks.
+

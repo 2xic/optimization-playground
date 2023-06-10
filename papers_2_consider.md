@@ -52,8 +52,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 ## NLP 
 [MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
 
-[BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
-
 [Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
 
 [Reflexion: an autonomous agent with dynamic memory and self-reflection](https://arxiv.org/pdf/2303.11366.pdf)
@@ -64,14 +62,12 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [AttentionViz: A Global View of Transformer Attention](https://arxiv.org/pdf/2305.03210.pdf)
 
-
 [The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)
+
+[Direct Preference Optimization: Your Language Model is Secretly a Reward Model](https://arxiv.org/pdf/2305.18290.pdf)
 
 ## GAN
 [Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
-
-[Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543)
-[Adding Conditional Control to Text-to-Image Diffusion Models(code)](https://github.com/lllyasviel/ControlNet)
 
 [Fast Text-Conditional Discrete Denoising on Vector-Quantized Latent Spaces](https://arxiv.org/abs/2211.07292)
 
@@ -98,6 +94,4 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware](https://tonyzhaozh.github.io/aloha/aloha.pdf)
 https://tonyzhaozh.github.io/aloha/
 
-## Others
-[SPREADING VECTORS FOR SIMILARITY SEARCH](https://arxiv.org/pdf/1806.03198.pdf)
 

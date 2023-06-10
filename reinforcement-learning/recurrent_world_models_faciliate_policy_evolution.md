@@ -1,4 +1,4 @@
-[Recurrent World Models Facilitate Policy Evolution](https://arxiv.org/pdf/1809.01999.pdf)
+# [Recurrent World Models Facilitate Policy Evolution](https://arxiv.org/pdf/1809.01999.pdf)
 
 - RNN is trained in a unsupervised manner to model popular reinforcement learning environment through compressed spatiotemporal representation
   - Humans learn abstract representation of the world
@@ -6,8 +6,7 @@
       -  For many problems, an RL agent might also benefit from a predictive model 
 - The world models extracted features are fed into compact and simple policies trained by evolution
 
-
-- The world model will be a large RNN that learns to predict the future given the past in an unsupervised manenr
+- The world model will be a large RNN that learns to predict the future given the past in an unsupervised manner
     - Past observations and actions are perceived and exploited by another NN (controller) which learn through RL to preform some task without a teacher
       - 
 

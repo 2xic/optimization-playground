@@ -402,6 +402,22 @@ Interesting idea, track model capability by it's ability to draw unicorns.
 
 They are studying scaling behavior in data constrained environments. From the figures
 -> More epochs hurts the model on a fixed data budget 
--> More data = bigger loss
+-> More data = bigger loss, more data is good
 -> Multiple epochs with repeating data = good
--> 
+
+[tweet](https://twitter.com/blancheminerva/status/1664097432496488450?s=12)
+
+[tweet ](https://twitter.com/muennighoff/status/1661895337248686081?s=12)
+
+
+### [Let’s Verify Step by Step](https://arxiv.org/pdf/2305.20050.pdf)
+[tweet](https://twitter.com/8teapi/status/1664123104074022917?s=12)
+
+OpenAi created a large [dataset](https://github.com/openai/prm800k) of step-level labels, and trained a model on that.
+That model is then used to grade another models reasoning steps.
+
+This is much better than just an outcome based model.
+
+
+
+

@@ -68,7 +68,7 @@ def train_mnist():
 
     errors = []
     accuracy = []
-    for epoch in range(1_000):
+    for epoch in range(10_000):
         test_acc = eval_model(model, test_loader).item()
         print(f"({epoch}) acc == {test_acc}%")
 
