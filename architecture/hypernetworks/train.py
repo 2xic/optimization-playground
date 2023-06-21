@@ -27,7 +27,7 @@ training_loop = TrainingLoop(
 
 (train, test) = get_dataloader()
 # needs more time to wake up ?
-for _ in range(5):
+for _ in range(10):
     error = training_loop.train(
         train
     )

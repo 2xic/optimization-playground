@@ -43,6 +43,8 @@ def get_output_shape(shape_in, layers):
             shape = conv_output_shape(shape, i)
         elif isinstance(i, nn.MaxPool2d):
             shape = conv_output_shape(shape, i)
+        elif hasattr(i, 'conv_shape'):
+            shape = conv_output_shape(shape, i)
         else:
             raise Exception("Hm, unknown layer")
     return shape
