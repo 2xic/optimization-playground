@@ -4,6 +4,7 @@ import torch.nn as nn
 class EmbeddingsModel(torch.nn.Module):
     def __init__(self, vocab_size) -> None:
         super().__init__()
+        self.vocab_size = vocab_size
         self.embedding_layer = nn.Embedding(vocab_size, 32, padding_idx=-1)
         prev_layer =  32
         layers = [
@@ -12,6 +13,7 @@ class EmbeddingsModel(torch.nn.Module):
             vocab_size * 2,
             vocab_size,
         ]
+        self.output_size = layers[-1]
         torch_layers = []
         for i in layers:
             torch_layers.append(

@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 from .CreateDataset import CreateDataset
 import torch
 import torch.functional as F
+import random
 
 class CbowDataset(Dataset):
     def __init__(self, vocab, dataset):
@@ -17,6 +18,9 @@ class CbowDataset(Dataset):
         X_tensor[:] = self.vocab.PADDING_IDX
         for index, i in enumerate(X):
             X_tensor[0][index] = i
+        
+        if random.randint(0, len(X)) == 1:
+            X_tensor[0][random.randint(0, len(X) - 1)] = self.vocab.UNKNOWN_IDX
 
         y = torch.zeros((1))
         y[0] = self.y[idx]

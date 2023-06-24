@@ -12,10 +12,10 @@ class CbowModel:
         )
         self.loss = torch.nn.CrossEntropyLoss()
         self.device = device
+        self.output_size = self.model.output_size
 
     def fit(self, X, y):
         output = self.model(X)
-#        print(y)
         loss = self.loss(output, y.reshape((-1)).long())
         self.optimizer.zero_grad()
         loss.backward()

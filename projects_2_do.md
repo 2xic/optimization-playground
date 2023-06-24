@@ -5,11 +5,6 @@ Sometimes I forget the projects I had planned, better to write it down here.
   - [GPU Puzzles](https://github.com/srush/GPU-Puzzles)
   - [Transformer Puzzles](https://github.com/srush/Transformer-Puzzles)
 
-- (WIP) Implement, and evaluate some embeddings `nlp/embeddings-experiments`
-  - [Check out this](https://twitter.com/abacaj/status/1656323023937368065)
-
-- Implement [HyperNetworks](https://arxiv.org/pdf/1609.09106.pdf)
-
 - [Adversarial Examples Are Not Bugs, They Are Features](https://arxiv.org/pdf/1905.02175.pdf) has some cool plots, can you reproduce some of them ? 
 
 - Implement [Image generation with shortest path diffusion](https://arxiv.org/pdf/2306.00501.pdf)

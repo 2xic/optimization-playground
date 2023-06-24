@@ -25,3 +25,9 @@ python3 train_cbow.py
 
 ### Transformer
 [Paper](https://cdn.openai.com/papers/Text_and_Code_Embeddings_by_Contrastive_Pre_Training.pdf) from OpenAi using transformer encoder to get embeddings. 
+
+### cross encoder
+https://www.sbert.net/examples/applications/cross-encoder/README.html
+
+Cool idea, based on my simple tests examples it seemed a lot more stable and better than embedding + `cos` to get a similarly score.
+
