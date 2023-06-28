@@ -7,6 +7,7 @@ class Vocab:
         self.word_usage = {}
         self.UNKNOWN_IDX = self._add("<UNKNOWN>")
         self.PADDING_IDX = self._add("<PADDING>")
+        self.MASK_IDX = self._add("<MASK>")
         self.MINIMUM_WORD_USAGE = -1
         self.SPECIAL_TOKENS = len(self.idx_2_word)
 
@@ -45,5 +46,13 @@ class Vocab:
             raise Exception("Expected list")
         return [
             self.word_2_idx.get(i, self.UNKNOWN_IDX)
+            for i in list_of_idx
+        ]
+
+    def get_words(self, list_of_idx):
+        if type(list_of_idx) != list:
+            raise Exception("Expected list")
+        return [
+            self.idx_2_word.get(i, self.UNKNOWN_IDX)
             for i in list_of_idx
         ]

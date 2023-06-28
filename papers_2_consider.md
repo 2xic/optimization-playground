@@ -10,6 +10,7 @@ Papers that I have saved, and should look at.
 - [https://openai.com/publications/](https://openai.com/publications/)
 - [https://distill.pub/](https://distill.pub/)
 - [https://github.com/lucidrains](https://github.com/lucidrains)
+- [https://nn.labml.ai/index.html](https://nn.labml.ai/index.html)
 
 # Some I'm considering
 
