@@ -37,6 +37,10 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Vision Transformers with Mixed-Resolution Tokenization ](https://arxiv.org/abs/2304.00287)
 
+[Waldo](https://arxiv.org/pdf/2211.14308.pdf)
+
+[Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture](https://arxiv.org/pdf/2301.08243.pdf)
+
 ### RL 
 [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
 
@@ -49,6 +53,8 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Deep RL at Scale: Sorting Waste in Office Buildings with a Fleet of Mobile Manipulators](https://arxiv.org/pdf/2305.03270.pdf)
 
 [RLHF: Reinforcement Learning from Human Feedback](https://huyenchip.com/2023/05/02/rlhf.html)
+
+[MuZero with Self-competition for Rate Control in VP9 Video Compression](https://arxiv.org/pdf/2202.06626.pdf) - [blog](https://www.deepmind.com/blog/muzeros-first-step-from-research-into-the-real-world)
 
 ## NLP 
 [MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
@@ -84,6 +90,8 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [Going Deeper with Convolutions](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Szegedy_Going_Deeper_With_2015_CVPR_paper.pdf)
 
 [Seeing is Believing: Brain-Inspired Modular Training for Mechanistic Interpretability](https://arxiv.org/abs/2305.08746)
+
+[Rosetta Neurons](https://twitter.com/arankomatsuzaki/status/1669524634910466049?s=12)
 
 ## Infrastructure
 [Velox: Meta’s Unified Execution Engine](https://scontent.fosl3-2.fna.fbcdn.net/v/t39.8562-6/302757195_3033291893628871_4556621853780203235_n.pdf?_nc_cat=109&ccb=1-7&_nc_sid=ad8a9d&_nc_ohc=83s6lshWWAEAX8A3wdW&_nc_ht=scontent.fosl3-2.fna&oh=00_AfAq1jZlnHlM139fSBQvQ1mQmgT-cyGDgwMlP-GixFdobw&oe=64080F67)
