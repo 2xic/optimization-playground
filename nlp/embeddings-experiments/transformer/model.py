@@ -61,6 +61,7 @@ class TransformerModel(nn.Module):
         src = self.encoder(src) * math.sqrt(self.d_model)
         src = self.pos_encoder(src)
         output = self.transformer_encoder(src, src_mask)
+        output = torch.nn.Sigmoid(output)
         return output
 
     def fit(self, X):

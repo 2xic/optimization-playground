@@ -12,6 +12,6 @@ class CreateDataset:
                 if token < self.vocab.SPECIAL_TOKENS:
                     continue
                 tokens.append(token)
-            filtered = list(filter(lambda x: x > self.vocab.SPECIAL_TOKENS, tokens))
+            filtered = list(filter(lambda x: x >= self.vocab.SPECIAL_TOKENS, tokens))
             X.append(filtered)
         return X

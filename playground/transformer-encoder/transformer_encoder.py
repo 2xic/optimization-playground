@@ -33,16 +33,21 @@ class TestTransformerEncoder(nn.Module):
     def forward(self, src: Tensor, src_mask: Tensor) -> Tensor:
         src = self.embedding(src)
         output = self.transformer_encoder(src, src_mask)
-        output = nn.Softmax(dim=1)(self.output_vocab(output))
+        output = nn.Sigmoid()(self.output_vocab(output))
+        #output = nn.Softmax(dim=2)(output)
         return output
 
     def fit(self, X, y):
         sz = X.shape[0]
         mask = torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
-        output = self.forward(X.long(), mask)       
+        output = self.forward(X.long(), mask)
 
         predicted = output.view(X.shape[0] * self.SEQUENCE_SIZE, self.ntoken)
         target = y.view(-1)
+        print("Output / Expected")
+        print(predicted, predicted.shape)
+        print(target, target.shape)
+        print()
 
         loss = torch.nn.CrossEntropyLoss(ignore_index=-1)(predicted, target.long())
         return loss

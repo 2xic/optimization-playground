@@ -24,12 +24,8 @@ class TransformerDataset(Dataset):
                 masked.append(i)
             else:
                 x[index] = i
-       # print(document)
-      #  print(x)
         
         y = torch.zeros((self.SEQUENCE_SIZE)).fill_(self.vocab.PADDING_IDX)
-#        for index, i in enumerate(masked):
-#            y[index] = i
         for index, i in enumerate(document[:self.SEQUENCE_SIZE]):
             y[index] = i
         return x, y

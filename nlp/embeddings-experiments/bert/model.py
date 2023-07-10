@@ -61,7 +61,7 @@ class BertEmbedding(nn.Module):
         self.encoder.weight.data.uniform_(-initrange, initrange)
 
 class BertModel(nn.Module):
-    def __init__(self, vocab, device, d_model: int = 32, nhead: int = 1,
+    def __init__(self, vocab, device, nhead: int = 1,
                  nlayers: int = 6, dropout: float = 0.5):
         super().__init__()
         self.vocab = vocab
@@ -75,20 +75,24 @@ class BertModel(nn.Module):
         # (batch, target sequence, feature number)
         # https://datascience.stackexchange.com/questions/93768/dimensions-of-transformer-dmodel-and-depth
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
-      #  print(self.transformer_encoder)
-        self.output_vocab = nn.Linear(self.SEQUENCE_SIZE, self.vocab.size)
+        self.output_vocab = nn.Sequential(*[
+            nn.Linear(self.SEQUENCE_SIZE, self.vocab.size),
+#            nn.LogSoftmax()
+        #    nn.Sigmoid()
+        ])
 
     def forward(self, src: Tensor, src_mask: Tensor) -> Tensor:
         src = self.embedding(src)
         output = self.transformer_encoder(src, src_mask)
-        output = nn.Softmax(dim=2)(self.output_vocab(output))
-#        output = (self.output_vocab(output))
+#        output = nn.Softmax(dim=2)(self.output_vocab(output))
+        output = self.output_vocab(output)
         return output
 
-    def fit(self, X, y):
+    def fit(self, X, y, debug=False):
         sz = X.shape[0]# 9 if X.shape[0] >0 else X.shape[0]
         mask = torch.triu(torch.ones(sz, sz) * float('-inf'), diagonal=1)
         output = self.forward(X.long(), mask)       
+        
 
         predicted = output.view(X.shape[0] * self.SEQUENCE_SIZE, self.vocab.size)
         target = y.view(-1)
@@ -98,10 +102,24 @@ class BertModel(nn.Module):
             print("input ", self.vocab.get_words(X[0].tolist()))
             print("model out ", self.vocab.get_words(torch.argmax(predicted[:self.SEQUENCE_SIZE], dim=1).tolist()))
             print("expected x ", self.vocab.get_words(y[0].tolist()))
-            print("")
+            print(output[0])
+            print(y[0])
+            print(predicted[0])
+            print(target[0])
+        elif debug:
+            for i in range(X.shape[0]):
+                print("input ", self.vocab.get_words(X[i].tolist()))
+                print("model out ", self.vocab.get_words(torch.argmax(predicted[self.SEQUENCE_SIZE*i:self.SEQUENCE_SIZE*(i + 1)], dim=1).tolist()))
+                print("expected x ", self.vocab.get_words(y[i].tolist()))
+                print("")
 
-#        loss = torch.nn.CrossEntropyLoss(ignore_index=self.vocab.PADDING_IDX)(predicted, target.long())
         loss = torch.nn.CrossEntropyLoss(ignore_index=self.vocab.PADDING_IDX)(predicted, target.long())
+        """
+        loss = torch.nn.NLLLoss(
+            ignore_index=self.vocab.PADDING_IDX,
+#            reduction='sum'
+        )(predicted, target.long())
+        """
         return loss
 
     def predict(self, text):

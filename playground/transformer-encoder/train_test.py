@@ -8,8 +8,8 @@ a = torch.tensor([
     [0, 1, 2, 3][:seq_size]
 ])
 b = torch.tensor([
-    [0, 0, 1, 0][:seq_size],
-    [0, 0, 1, 0][:seq_size]
+    [2,2,2,2][:seq_size],
+    [2,2,2,2][:seq_size]
 ])
 
 model = TestTransformerEncoder(
@@ -18,7 +18,7 @@ model = TestTransformerEncoder(
 )
 optimizer = torch.optim.Adam(model.parameters())
 
-for i in range(100):
+for i in range(1_000):
     optimizer.zero_grad()
     loss = model.fit(a, b)
     loss.backward()
