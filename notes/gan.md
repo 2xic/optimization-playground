@@ -73,3 +73,8 @@ The name "Composable Diffusion". Sounds like how it is solved is by having all t
 
 
 Side note: I think' I read a paper similar to this, where they just use special tokens for other modalities and pushed it into a transformer.
+
+### [Self-Consuming Generative Models Go MAD](https://arxiv.org/pdf/2307.01850.pdf)
+
+They basically feed a GAN it's own output and see what happens. 
+The conclusion is that you need a certain amount of fresh/real data to not have the model degrade. You can't have model generation on only GAN output.

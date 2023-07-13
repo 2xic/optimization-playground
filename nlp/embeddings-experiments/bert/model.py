@@ -107,7 +107,7 @@ class BertModel(nn.Module):
             print(predicted[0])
             print(target[0])
         elif debug:
-            for i in range(X.shape[0]):
+            for i in range(sz):
                 print("input ", self.vocab.get_words(X[i].tolist()))
                 print("model out ", self.vocab.get_words(torch.argmax(predicted[self.SEQUENCE_SIZE*i:self.SEQUENCE_SIZE*(i + 1)], dim=1).tolist()))
                 print("expected x ", self.vocab.get_words(y[i].tolist()))

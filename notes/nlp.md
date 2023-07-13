@@ -28,3 +28,24 @@ The technique is as follows
 
 The analysis shows that the methods work well in practice.
 
+
+### [“Low-Resource” Text Classification: A Parameter-Free Classification Method with Compressors](https://aclanthology.org/2023.findings-acl.426.pdf)
+Deep learning is great, but it's computational expensive. The authors show that gzip + k-nearest neighbor gives good results fro text classifications.
+
+One way of doing this kind of compression is `Compressor-Based Text Classification` where one check the probability distribution between a class of documents and the given document
+
+The authors does the following
+1. Load `X, y` dataset and iterate over the entire dataset (do it in two loops)
+2. Compress input sentence `X_1`
+3. Compress input sentence `X_2`
+4. Compress combined sentence `X_1 + X_2`
+5. Then they compute the "Normalized Compression Distance"
+   - $$\frac{(C(X_1 + X_2) - min(C(X_1), C(X_2)))}{max(C(X_1), C(X_2))}$$
+6. Sort this score index with the associated label which 
+7. Load `n` of these and select the top score
+
+The model itself does quite okay and on par with several DL models, but most of those evaluated are relatively old.
+
+The code itself is just 14 lines which is the most inresting part of this. 
+
+

@@ -80,3 +80,4 @@ The paper is cool, might be worth implementing.
   - Reward = correctness and latency in the sorting
 - Pipeline only works for sorting, and has to be retrained for other tasks.
 
+[Understanding DeepMind's Sorting Algorithm](https://justine.lol/sorting/) is a way better blog post explaining the actual work.

@@ -24,5 +24,11 @@ Everything is converted into tokens, and by doing this GATO can be trained like 
 
 They mostly show results from the RL, and it has a good success rate in that environment. The paper also have some examples from the other tasks GATO can do, but not that many benchmark results in those domains.
 
+### [SPAE: Semantic Pyramid AutoEncoder for Multimodal Generation with Frozen LLMs](https://arxiv.org/pdf/2306.17842.pdf)
+This is an interesting paper
+- Image encoder creates a `LLM codebook`
+  - This is a "token pyramid"
+- This is then used to decode a new image
 
+The result is quite cool, look at figure 6 and you can see input context of a list of MNIST image and one query is "an image of 1+7" and the output is a mnist image of the number 8.
 

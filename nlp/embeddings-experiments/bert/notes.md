@@ -10,6 +10,8 @@ Bert uses encoder instead of decoder Which could results in token leakage [1], b
 
 
 ## masking
+The core idea of BERT is related to masking the words and have the model learn to understand what words are missing.
+
 [Masking](https://neptune.ai/blog/unmasking-bert-transformer-model-performance)
 - Using `K=15%` for masking words, more looses context and less to easy.
   - https://arxiv.org/pdf/2202.08005.pdf
@@ -18,5 +20,4 @@ Bert uses encoder instead of decoder Which could results in token leakage [1], b
   - 
 
 ### Implementations
-[1] https://github.com/codertimo/BERT-pytorch/tree/master/bert_pytorch/model
-[2]
+https://github.com/codertimo/BERT-pytorch/tree/master/bert_pytorch/model

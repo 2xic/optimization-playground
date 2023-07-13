@@ -13,3 +13,20 @@
 - Summary of the paper ideas 
 - RL models can learn to do reward hacking on human mistakes in feedback. Language models can show similar behavior when they hallucinate. This has been shown in [Building A Virtual Machine inside ChatGPT](https://www.engraved.blog/building-a-virtual-machine-inside/) and [ChatGPT pretends to not know the date](https://twitter.com/goodside/status/1598890043975774208)
 - 
+
+### [Introducing Superalignment](https://openai.com/blog/introducing-superalignment)
+They want to create a model that acts as an alignment researcher.
+
+
+[OpenAI Our approach to alignment research](https://openai.com/blog/our-approach-to-alignment-research)
+This is the OpenAI "master" plan 
+
+````
+1. Training AI systems using human feedback
+2. Training AI systems to assist human evaluation
+3. Training AI systems to do alignment research
+```
+^ quoted from the link.
+
+
+

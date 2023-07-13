@@ -16,15 +16,12 @@ if __name__ == "__main__":
         "This a long sentence about how I love taco",
         "people like having taco for dinner",
         "Taco is nice, but what about the evm ? ",
+        "The evm is a great machine, and I like it",
+        "symbolic execution on the evm is cool",
+        "the evm is build for ethereum , bitcoin does not use it",
+        "I dislike how people forget bitcoin have smart contracts",
+        "ethereum and bitcoin both have smart contracts",
     ]
-    if False:
-        raw_text_dataset += [
-            "The evm is a great machine, and I like it",
-            "symbolic execution on the evm is cool",
-            "the evm is build for ethereum , bitcoin does not use it",
-            "I dislike how people forget bitcoin have smart contracts",
-            "ethereum and bitcoin both have smart contracts",
-        ]
     text_dataset = list(map(lambda x: Process().process(x), raw_text_dataset))
 
     vocab = Vocab()
@@ -40,7 +37,7 @@ if __name__ == "__main__":
     dataset = TransformerDataset(
         vocab, dataset
     )
-    batch_size = 8
+    batch_size = 32
     dataloader = DataLoader(dataset,
                             batch_size=batch_size,
                             shuffle=True,
@@ -53,7 +50,7 @@ if __name__ == "__main__":
 
     print(f"dataset == {len(dataset)}")
 
-    for epoch in range(1_000):
+    for epoch in range(10_000):
         for index, (X, y) in enumerate(dataloader):
             optimizer.zero_grad()
             loss = model.fit(
@@ -64,4 +61,5 @@ if __name__ == "__main__":
             optimizer.step()
             if index % 1_00 == 0:
                 print(epoch, loss)
+#    print(X.shape)
     model.fit(X.to(device), y.to(device), debug=True)
