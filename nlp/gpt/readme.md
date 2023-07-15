@@ -58,3 +58,19 @@ Predictable scaling by using scaling laws to predict how the model would act.
 - [Can GPT-4 *Actually* Write Code?](https://tylerglaiel.substack.com/p/can-gpt-4-actually-write-code) concludes that GPT-4 cannot "solve" problems outside the training dataset. 
 
 
+------
+Update second half of 2023
+
+-[ George Hotz - GPT-4's real architecture is a 220B parameter mixture model with 8 sets of weights ](https://www.youtube.com/watch?v=WJWHIZoBOj8)
+- [GPT-4 details leaked? ](https://news.ycombinator.com/item?id=36675934)
+- [GPT-4 Architecture, Infrastructure, Training Dataset, Costs, Vision, MoE](https://www.semianalysis.com/p/gpt-4-architecture-infrastructure)
+
+**Architecture** 
+Mixture of expert's is more or less confirmed. They are assumed to be ~16. 
+
+The interference cluster is assumed to be 128 GPUs.
+
+**Cost of training**
+~63 mil USD
+
+

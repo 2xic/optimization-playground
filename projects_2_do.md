@@ -6,9 +6,8 @@ Sometimes I forget the projects I had planned, better to write it down here.
   - [Transformer Puzzles](https://github.com/srush/Transformer-Puzzles)
   - [LLM training puzzle](https://github.com/srush/LLM-Training-Puzzles)
 
-- [Adversarial Examples Are Not Bugs, They Are Features](https://arxiv.org/pdf/1905.02175.pdf) has some cool plots, can you reproduce some of them ? 
-
 - Implement [Image generation with shortest path diffusion](https://arxiv.org/pdf/2306.00501.pdf)
+
 
 - Implement [Recurrent World Models Facilitate Policy Evolution](./reinforcement-learning/recurrent_world_models_faciliate_policy_evolution.md)
 

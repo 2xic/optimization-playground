@@ -20,3 +20,18 @@ On the TPU (at least Google TPU v1) 16-bits is used to represent the number, usi
 Just looked at the [transcript](https://youtubetranscript.com/?v=9Mo80a4s0Bs), but should probably look at the video.
 
 It's a bit hard to see the whiteboard, might revisit.
+
+### [The Design Process for Google’s Training Chips: TPUv2 and TPUv3](https://gwern.net/doc/ai/scaling/hardware/2021-norrie.pdf)
+*TODO*
+
+### [TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings](https://arxiv.org/ftp/arxiv/papers/2304/2304.01433.pdf)
+*TODO*
+
+### XLA compiler
+From the official documentation [here](https://cloud.google.com/tpu/docs/intro-to-tpu#xla_compiler) they say the ML graph has to be compiled with XLA to be possible to run on the TPU.
+
+There is some docs on XLA [here](https://www.tensorflow.org/xla).
+
+[Geohot again did some (small) documentation on this](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/tpu)
+
+[OpenXLA](https://github.com/openxla/xla)
