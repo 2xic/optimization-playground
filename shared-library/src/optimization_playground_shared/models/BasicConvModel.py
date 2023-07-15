@@ -50,7 +50,7 @@ def get_output_shape(shape_in, layers):
     return shape
 
 class BasicConvModel(nn.Module):
-    def __init__(self, input_shape=(1, 28, 28)):
+    def __init__(self, input_shape=(1, 28, 28), num_classes=10):
         super().__init__()
         self.conv1 = nn.Conv2d(input_shape[0], 12, 5)
         self.pool = nn.MaxPool2d(2, 2)
@@ -68,7 +68,7 @@ class BasicConvModel(nn.Module):
             nn.Linear(128, 63),
             nn.ReLU(),
             nn.Dropout(p=0.01),
-            nn.Linear(63, 10),
+            nn.Linear(63, num_classes),
             nn.LogSoftmax(dim=1),
         )
 

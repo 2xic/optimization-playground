@@ -6,10 +6,6 @@ Sometimes I forget the projects I had planned, better to write it down here.
   - [Transformer Puzzles](https://github.com/srush/Transformer-Puzzles)
   - [LLM training puzzle](https://github.com/srush/LLM-Training-Puzzles)
 
-- Implement [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/pdf/1810.04805.pdf)
-
-- Google has this [unlearning challenge](https://nbviewer.org/github/unlearning-challenge/starting-kit/blob/main/unlearning-CIFAR10.ipynb). You don't need to [compete](https://neurips.cc/Conferences/2023/CompetitionTrack), but can you play around with some of these ideas ? 
-
 - [Adversarial Examples Are Not Bugs, They Are Features](https://arxiv.org/pdf/1905.02175.pdf) has some cool plots, can you reproduce some of them ? 
 
 - Implement [Image generation with shortest path diffusion](https://arxiv.org/pdf/2306.00501.pdf)

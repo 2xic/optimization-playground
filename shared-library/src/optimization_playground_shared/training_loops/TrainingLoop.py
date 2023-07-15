@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 class TrainingLoop:
     def __init__(self, model, optimizer):
@@ -23,7 +24,8 @@ class TrainingLoop:
         accuracy = torch.tensor(0.0, device=device)
         length = 0
 
-        for (X, y) in dataloader:
+        loop = tqdm(dataloader, desc="Training" if train else "Testing")
+        for _, (X, y) in enumerate(loop):
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)
