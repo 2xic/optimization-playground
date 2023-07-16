@@ -38,7 +38,7 @@ EPOCHS_FORGET = 5
 
 def plot_training(acc, classes_to_forget_later_acc, training_loss, training_classes_loss):
     plot = Plot()
-    plot.plot(
+    plot.plot_figures(
         figures=[
             Figure(
                 plots={
@@ -66,7 +66,7 @@ def plot_training(acc, classes_to_forget_later_acc, training_loss, training_clas
 
 def plot_forgetting(acc, forgetting_classes_acc, loss, forgetting_classes_loss):
     plot = Plot()
-    plot.plot(
+    plot.plot_figures(
         figures=[
             Figure(
                 plots={
