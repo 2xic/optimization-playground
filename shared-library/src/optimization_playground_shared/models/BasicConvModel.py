@@ -45,6 +45,8 @@ def get_output_shape(shape_in, layers):
             shape = conv_output_shape(shape, i)
         elif hasattr(i, 'conv_shape'):
             shape = conv_output_shape(shape, i)
+        elif isinstance(i, nn.Tanh):
+            continue
         else:
             raise Exception("Hm, unknown layer")
     return shape
