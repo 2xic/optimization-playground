@@ -12,9 +12,9 @@ class Reshape(nn.Module):
 
     def forward(self, x):
         out = x.view(self.shape)
-        print("===")
-        print(x.shape)
-        print(out.shape)
+     #   print("===")
+    #    print(x.shape)
+    #    print(out.shape)
         return out
 
 

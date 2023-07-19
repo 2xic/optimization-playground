@@ -4,7 +4,7 @@ import random
 class ReplayBuffer:
     def __init__(self, sequential=False) -> None:
         self.items = None
-        self.max_size = 3
+        self.max_size = 64
         self.index = 0
         self.sequential = sequential
 

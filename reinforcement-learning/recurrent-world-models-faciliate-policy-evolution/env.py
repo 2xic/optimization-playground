@@ -5,10 +5,28 @@ import torch
 class Env:
     def __init__(self):
         self.env = gym.make("ALE/Pong-v5")
+        self.action_size = self.env.action_space.n
 
     def reset(self) -> torch.Tensor:
         observation, _info = self.env.reset()
         return self._get_torch_tensor(observation)
+    
+    def agent_play(self, agent):
+        agent.reset()
+        observation, _ = self.env.reset()
+        while True:
+            old_observation = self._get_torch_tensor(observation)
+            action, info = agent.action(
+                old_observation
+            )
+            
+            observation, reward, terminated, _, _ = self.env.step(action)
+
+            yield (old_observation, action, reward, info)
+
+            if terminated:
+                break
+
 
     def random_play(self):
         observation, _ = self.env.reset()
