@@ -4,7 +4,7 @@ import torch
 
 class Env:
     def __init__(self):
-        self.env = gym.make("ALE/Pong-v5")
+        self.env = gym.make("ALE/Pong-v5", obs_type="grayscale")
         self.action_size = self.env.action_space.n
 
     def reset(self) -> torch.Tensor:
@@ -27,7 +27,6 @@ class Env:
             if terminated:
                 break
 
-
     def random_play(self):
         observation, _ = self.env.reset()
         action = None
@@ -46,7 +45,11 @@ class Env:
                 break
 
     def _get_torch_tensor(self, observation):
-        return torch.from_numpy(observation).float().permute(2, 0, 1) / 255
+#        tensor = torch.from_numpy(observation).float().permute(2, 0, 1) / 255
+        tensor = torch.from_numpy(observation).float() / 255 #.permute(2, 0, 1) / 255
+        
+#        return tensor[:, 34:-16]
+        return tensor[34:-16].unsqueeze(0)
 
     def save_observation(self, observation):
         data = Image.fromarray(observation)

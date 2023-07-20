@@ -8,10 +8,39 @@ import torch
 from replay_buffer import ReplayBuffer
 import torch.nn as nn
 from tqdm import tqdm
+from optimization_playground_shared.plot.Plot import Plot, Figure
 
 
-DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-TRAINING_STEPS = 100 # 10_000
+DEVICE = torch.device(
+    'cuda') if torch.cuda.is_available() else torch.device('cpu')
+VAE_TRAINING_STEPS = 1_000  # 10_000
+OTHER_TRAINING_STEPS = 1_000  # 10_000
+
+
+class LossTracker:
+    def __init__(self, name):
+        self.loss = []
+        self.name = name
+
+    def add_loss(self, item):
+        self.loss.append(item)
+
+    def save(self):
+        plot = Plot()
+        plot.plot_figures(
+            figures=[
+                Figure(
+                    plots={
+                        "Loss": self.loss,
+                    },
+                    title="Loss",
+                    x_axes_text="Epochs",
+                    y_axes_text="Loss",
+                    x_scale='symlog'
+                )
+            ],
+            name=self.name + '.png'
+        )
 
 
 class Rnn(nn.Module):
@@ -60,16 +89,21 @@ class Controller(nn.Module):
         x = self.model(x)
         return x
 
+
 class Vae:
     def __init__(self) -> None:
         self.vae = SimpleVaeModel(
-            input_shape=(3, 210, 160)
+            input_shape=(1, 160, 160)
         ).to(DEVICE)
         self.optimizer = optim.Adam(self.vae.parameters())
 
     def encode(self, observation):
         observation = observation.to(DEVICE)
-        return self.vae.encode(observation)
+        (mean, log_var) = self.vae.encode(observation)
+        var = torch.exp(0.5 * log_var)
+        epsilon = torch.randn_like(var).to(DEVICE)
+        z = mean + var*epsilon
+        return z
 
     def decode(self, observation):
         observation = observation.to(DEVICE)
@@ -91,9 +125,13 @@ class Vae:
 
         observation = observation.to(DEVICE)
         out = self.encode(observation)
-        out = self.decode(
-            out)[:, :3, :observation.shape[2], :observation.shape[3]]
-        loss = ((observation - out) ** 2).sum()
+        out = self.decode(out)
+   #     print((observation.shape, out.shape))
+#        print()
+#        out = out[:, :3, :observation.shape[2], :observation.shape[3]]
+        loss = torch.nn.MSELoss(reduction='sum')(out, observation)
+        
+        ##((observation - out) ** 2).mean()
         loss.backward()
 
         self.optimizer.step()
@@ -129,30 +167,21 @@ class Rollout:
         return cumulative_reward
 
 
-def train():
-    """
-    1. Rollout 10_000 iterations to train VAE 
-    11. Objective is learning to reconstruct the frame (we use the encoded output only later)
-    2. Train the MDN-RNN 
-    2.1 (predict next frame given previous + action + hidden state)
-    3. Train the controller
-    """
-    pass
-
-
 def train_predictor(encoder: Vae):
     env = Env()
     model = Rnn(
         ACTION_SIZE=env.action_size
     ).to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters())
-            
-    progress = tqdm(range(TRAINING_STEPS), desc='Training rnn')
+
+    loss_predictor = LossTracker("predictor")
+
+    progress = tqdm(range(OTHER_TRAINING_STEPS), desc='Training rnn')
     for _ in progress:
         previous_image_replay_buffer = ReplayBuffer(sequential=True)
         next_image_replay_buffer = ReplayBuffer(sequential=True)
         action_replay_buffer = ReplayBuffer(sequential=True)
-        
+
         for (observation, previous_observation, action) in env.random_play():
             observation = observation.unsqueeze(0)
             previous_observation = previous_observation.unsqueeze(0)
@@ -184,6 +213,8 @@ def train_predictor(encoder: Vae):
         loss.backward()
         optimizer.step()
         progress.set_description(f'RNN loss {loss.item()}')
+        loss_predictor.add_loss(loss.item())
+        loss_predictor.save()
     return model
 
 
@@ -191,8 +222,9 @@ def train_encoder():
     env = Env()
     encoder = Vae()
     replay_buffer = ReplayBuffer()
-    # observation = env.reset()
-    progress = tqdm(range(TRAINING_STEPS), desc='Training encoder')
+    loss_encoder = LossTracker("encoder")
+
+    progress = tqdm(range(VAE_TRAINING_STEPS), desc='Training encoder')
     for epoch in progress:
         for (observation, _, _) in env.random_play():
             observation = observation.unsqueeze(0)
@@ -203,7 +235,11 @@ def train_encoder():
         if epoch % 10 == 0:
             save_image(out[:4], 'vae.png')
             save_image(replay_buffer.items[:4], 'truth.png')
+        loss_encoder.add_loss(loss.item())
+        loss_encoder.save()
+
     return encoder
+
 
 class Agent:
     def __init__(self, rnn: Rnn, encoder: Vae) -> None:
@@ -226,7 +262,7 @@ class Agent:
         )[0]
         self.h = new_h
         return action, old_h
-    
+
     def forward(self, observation, h):
         observation = observation.to(DEVICE)
         h = h.to(DEVICE)
@@ -249,6 +285,7 @@ class Agent:
             )
         return action, new_h
 
+
 def train_controller(rnn: Rnn, encoder: Vae):
     env = Env()
     agent = Agent(
@@ -256,10 +293,11 @@ def train_controller(rnn: Rnn, encoder: Vae):
         encoder
     )
     optimizer = torch.optim.Adam(agent.controller.parameters())
+    loss_controller = LossTracker("controller")
 
-    progress = tqdm(range(TRAINING_STEPS), desc='Training agent')
+    progress = tqdm(range(OTHER_TRAINING_STEPS), desc='Training agent')
     for _ in progress:
-        
+
         agent.controller.zero_grad()
         loss = 0
         sum_reward = 0
@@ -272,15 +310,23 @@ def train_controller(rnn: Rnn, encoder: Vae):
             reward += reward
         loss.backward()
         optimizer.step()
-        progress.set_description(f'Agent loss {loss.item()} Reward: {sum_reward}')
+        progress.set_description(
+            f'Agent loss {loss.item()} Reward: {sum_reward}')
+        loss_controller.add_loss(loss.item())
+        loss_controller.save()
 
     return agent
 
+
 if __name__ == "__main__":
+    env = Env().reset()
+   # print(env.shape)
+   # save_image(env, 'env.png')
+   # exit(0)
+
     encoder = train_encoder()
     rnn = train_predictor(encoder)
     agent = train_controller(
         rnn,
         encoder,
     )
-
