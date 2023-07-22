@@ -1,8 +1,6 @@
 from env import Env
 from optimization_playground_shared.models.SimpleVaeModel import SimpleVaeModel
 import torch.optim as optim
-from PIL import Image
-import numpy as np
 from torchvision.utils import save_image
 import torch
 from replay_buffer import ReplayBuffer
@@ -13,9 +11,10 @@ from optimization_playground_shared.plot.Plot import Plot, Figure
 
 DEVICE = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
-VAE_TRAINING_STEPS = 1_000  # 10_000
-OTHER_TRAINING_STEPS = 1_000  # 10_000
 
+TRAINING_STEPS = 10_000
+VAE_TRAINING_STEPS = TRAINING_STEPS #1_000  # 10_000
+OTHER_TRAINING_STEPS = TRAINING_STEPS  #1_000  # 10_000
 
 class LossTracker:
     def __init__(self, name):
@@ -39,7 +38,32 @@ class LossTracker:
                     x_scale='symlog'
                 )
             ],
-            name=self.name + '.png'
+            name="loss_" + self.name + '.png'
+        )
+
+class RewardTracker:
+    def __init__(self, name):
+        self.reward = []
+        self.name = name
+
+    def add_reward(self, item):
+        self.reward.append(item)
+
+    def save(self):
+        plot = Plot()
+        plot.plot_figures(
+            figures=[
+                Figure(
+                    plots={
+                        "Reward": self.reward,
+                    },
+                    title="Reward",
+                    x_axes_text="Epochs",
+                    y_axes_text="Reward",
+                    x_scale='symlog'
+                )
+            ],
+            name="reward_" + self.name + '.png'
         )
 
 
@@ -93,7 +117,14 @@ class Controller(nn.Module):
 class Vae:
     def __init__(self) -> None:
         self.vae = SimpleVaeModel(
-            input_shape=(1, 160, 160)
+            input_shape=(1, 160, 160),
+            conv_shape=[
+                32,
+                64,
+                128,
+                256,
+                512,
+            ]
         ).to(DEVICE)
         self.optimizer = optim.Adam(self.vae.parameters())
 
@@ -126,12 +157,7 @@ class Vae:
         observation = observation.to(DEVICE)
         out = self.encode(observation)
         out = self.decode(out)
-   #     print((observation.shape, out.shape))
-#        print()
-#        out = out[:, :3, :observation.shape[2], :observation.shape[3]]
         loss = torch.nn.MSELoss(reduction='sum')(out, observation)
-        
-        ##((observation - out) ** 2).mean()
         loss.backward()
 
         self.optimizer.step()
@@ -208,8 +234,7 @@ def train_predictor(encoder: Vae):
                 hidden
             )
             expected = next_image_replay_buffer.items[index].unsqueeze(0)
-
-            loss += ((output - expected) ** 2).mean()
+            loss += torch.nn.MSELoss(reduction='sum')(output, expected)
         loss.backward()
         optimizer.step()
         progress.set_description(f'RNN loss {loss.item()}')
@@ -235,9 +260,9 @@ def train_encoder():
         if epoch % 10 == 0:
             save_image(out[:4], 'vae.png')
             save_image(replay_buffer.items[:4], 'truth.png')
+        #    exit(0)
         loss_encoder.add_loss(loss.item())
         loss_encoder.save()
-
     return encoder
 
 
@@ -256,10 +281,17 @@ class Agent:
     def action(self, observation):
         old_h = self.h.clone()
         action, new_h = self.forward(observation, self.h)
+ #       print(action)
+ #       print(torch.argmax(
+ #           action,
+ #           dim=1
+ #       ))
         action = torch.argmax(
             action,
             dim=1
         )[0]
+#        print(action)
+#        print(action)
         self.h = new_h
         return action, old_h
 
@@ -294,6 +326,7 @@ def train_controller(rnn: Rnn, encoder: Vae):
     )
     optimizer = torch.optim.Adam(agent.controller.parameters())
     loss_controller = LossTracker("controller")
+    reward_over_time = RewardTracker("reward_controller")
 
     progress = tqdm(range(OTHER_TRAINING_STEPS), desc='Training agent')
     for _ in progress:
@@ -306,14 +339,17 @@ def train_controller(rnn: Rnn, encoder: Vae):
             cloned = predicted.clone().detach()
             cloned[0][action] = reward
 
-            loss += ((cloned - predicted) ** 2).mean()
-            reward += reward
+            #loss += ((cloned - predicted) ** 2).mean()
+            loss += torch.nn.MSELoss(reduction='sum')(cloned, predicted)
+            sum_reward += reward
         loss.backward()
         optimizer.step()
         progress.set_description(
             f'Agent loss {loss.item()} Reward: {sum_reward}')
         loss_controller.add_loss(loss.item())
+        reward_over_time.add_reward(sum_reward)
         loss_controller.save()
+        reward_over_time.save()
 
     return agent
 

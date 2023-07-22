@@ -45,10 +45,16 @@ class Env:
                 break
 
     def _get_torch_tensor(self, observation):
-#        tensor = torch.from_numpy(observation).float().permute(2, 0, 1) / 255
-        tensor = torch.from_numpy(observation).float() / 255 #.permute(2, 0, 1) / 255
-        
-#        return tensor[:, 34:-16]
+        # making it easier for the model to distinguish 
+        observation[:, :][observation[:, :] == 87] = 0
+        # Player 2
+        observation[:, :][observation[:, :] == 147] = 255
+        # Player 1
+        observation[:, :][observation[:, :] == 148] = 255
+
+        tensor = torch.from_numpy(observation).float() / 255 
+        #.permute(2, 0, 1) / 255
+        # return tensor[:, 34:-16]
         return tensor[34:-16].unsqueeze(0)
 
     def save_observation(self, observation):
