@@ -18,6 +18,7 @@ class Figure:
     y_min: Optional[int] = None
     y_max: Optional[int] = None
     x_scale: Optional[str] = None
+    y_scale: Optional[str] = None
 
 
 @dataclass
@@ -74,7 +75,10 @@ class Plot:
             axes[index].set_xlabel(i.x_axes_text)
             axes[index].set_ylabel(i.y_axes_text)
             axes[index].legend(loc="upper left")
-            axes[index].set_xscale('symlog')
+            if i.x_scale is not None:
+                axes[index].set_xscale(i.x_scale)
+            if i.y_scale is not None:
+                axes[index].set_yscale(i.y_scale)
 
         plt.savefig(name)
         plt.clf()

@@ -1,11 +1,16 @@
 import gymnasium as gym
 from PIL import Image 
 import torch
+import torchvision.transforms as transforms
 
 class Env:
     def __init__(self):
-        self.env = gym.make("ALE/Pong-v5", obs_type="grayscale")
+        self.env = gym.make("ALE/MsPacman-v5", obs_type="grayscale")
         self.action_size = self.env.action_space.n
+        self.transforms = transforms.Compose([
+             transforms.Resize((40, 40)),
+             transforms.ConvertImageDtype(torch.float),
+         ])
 
     def reset(self) -> torch.Tensor:
         observation, _info = self.env.reset()
@@ -16,13 +21,13 @@ class Env:
         observation, _ = self.env.reset()
         while True:
             old_observation = self._get_torch_tensor(observation)
-            action, info = agent.action(
+            action, old_h = agent.action(
                 old_observation
             )
             
             observation, reward, terminated, _, _ = self.env.step(action)
 
-            yield (old_observation, action, reward, info)
+            yield (old_observation, action, reward, old_h)
 
             if terminated:
                 break
@@ -45,17 +50,19 @@ class Env:
                 break
 
     def _get_torch_tensor(self, observation):
+        """
         # making it easier for the model to distinguish 
         observation[:, :][observation[:, :] == 87] = 0
         # Player 2
         observation[:, :][observation[:, :] == 147] = 255
         # Player 1
         observation[:, :][observation[:, :] == 148] = 255
-
+        """
         tensor = torch.from_numpy(observation).float() / 255 
         #.permute(2, 0, 1) / 255
         # return tensor[:, 34:-16]
-        return tensor[34:-16].unsqueeze(0)
+#        return tensor[34:-16].unsqueeze(0)
+        return self.transforms(tensor[:-50].unsqueeze(0))
 
     def save_observation(self, observation):
         data = Image.fromarray(observation)

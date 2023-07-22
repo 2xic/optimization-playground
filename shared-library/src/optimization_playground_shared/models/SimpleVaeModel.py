@@ -29,22 +29,20 @@ class Z(nn.Module):
 
 
 class SimpleVaeModel(nn.Module):
-    def __init__(self, input_shape=(1, 28, 28), conv_shape=None):
+    def __init__(self, input_shape=(1, 28, 28), z_size=128, conv_shape=None):
         super().__init__()
-        self.z_size = 512
+        self.z_size = z_size
         self.channels = input_shape[0]
         if conv_shape is None:
             self.conv_shape = [
                 32,
                 64,
                 128,
-        #     256,
-        #     512,
             ]
         else:
             self.conv_shape = conv_shape
         self.encoder = self.get_encoder(input_shape)
-        self.decoder = self.get_decoder(input_shape)
+        self.decoder = self.get_decoder()
 
     def forward(self, image):
         z = self.encode(image)
@@ -56,7 +54,7 @@ class SimpleVaeModel(nn.Module):
     def decode(self, z):
         return self.decoder(z)
 
-    def get_decoder(self, input_shape):
+    def get_decoder(self):
         self.decoder_input = nn.Linear(self.z_size, self.conv_shape[-1] * 4)
         decoders = [
             self.decoder_input,
