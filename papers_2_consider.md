@@ -11,6 +11,7 @@ Papers that I have saved, and should look at.
 - [https://distill.pub/](https://distill.pub/)
 - [https://github.com/lucidrains](https://github.com/lucidrains)
 - [https://nn.labml.ai/index.html](https://nn.labml.ai/index.html)
+- [https://openai.com/blog/learning-day](https://openai.com/blog/learning-day)
 
 # Some I'm considering
 

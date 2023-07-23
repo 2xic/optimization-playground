@@ -421,3 +421,17 @@ This is much better than just an outcome based model.
 ### [RLTF: Reinforcement Learning from Unit Test Feedback](https://arxiv.org/pdf/2307.04349.pdf)
 Use unit tests to guide an LLM to write code. 
 
+
+### [How Is ChatGPT’s Behavior Changing over Time?](https://arxiv.org/pdf/2307.09009.pdf)
+TLDR: GPT behavior has drastically changed over the last couple of months. Mostly for the worse.
+
+[related tweet thread](https://twitter.com/svpino/status/1681614284613099520)
+
+[OpenAi even extended the support for the old models because users were not happy](https://twitter.com/openai/status/1682059830499082240?s=12)
+
+[Counter article](https://www.aisnakeoil.com/p/is-gpt-4-getting-worse-over-time) that adds a bit more nuance to the issue. 
+
+### [Llama 2](https://ai.meta.com/llama/)
+- Public weights
+- [Karpathy therad on llama 2](https://twitter.com/karpathy/status/1681667444895539202?s=12)
+- 

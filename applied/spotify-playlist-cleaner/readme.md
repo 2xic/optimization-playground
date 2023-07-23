@@ -5,6 +5,21 @@ When I find a song I put it in `songs that has to be relocated`, and then later 
 - Cluster them to playlist
 - Reorganize the playlist, or at least give suggestions with a simple frontend
 
+## How to run
+1. Setup https://github.com/2xic-speedrun/wirehead/ and run the server
+2. Add the cookie from wirehead into `.env` (because we use "auth", but this step should be removed imo)
+3. create a config.json with the playlist you want to include
+```json
+{
+    "include": [
+        "*playlist id*"
+    ], 
+    "reorganize_playlist": "*playlist id*"
+}
+```
+4. Run `python3 download_all_features.py`
+5. Run `python3 server.py`
+
 ## Results
 ![example](./images/frontend.png)
 Super simple frontend, but it helped me organize the playlist :) The select option will be automatically set to the model prediction of the target playlist, but user can also override this. Move song naturally moves the song, but the user can also listen to the song if they have to recall it.

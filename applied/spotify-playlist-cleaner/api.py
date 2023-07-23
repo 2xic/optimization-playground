@@ -52,6 +52,9 @@ def get_requests_cache(url, max_age=float('inf')):
     data = requests.get(url, verify=False, headers={
         "Cookie": "auth_token=" + os.getenv("cookie")
     }).json()
+    if data is None:
+        print("Got none from the api, have you added the cookie ?")
+        exit(0)
     time.sleep(1)
     with open(path, "w") as file:
         file.write(json.dumps(data))

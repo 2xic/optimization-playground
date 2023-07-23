@@ -79,6 +79,7 @@ class Plot:
                 axes[index].set_xscale(i.x_scale)
             if i.y_scale is not None:
                 axes[index].set_yscale(i.y_scale)
+            # axes[index].set_ylim(bottom=0)
 
         plt.savefig(name)
         plt.clf()

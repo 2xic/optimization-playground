@@ -5,7 +5,6 @@ import json
 if __name__ == "__main__":
     with open("config.json", "r") as file:
         json_data = json.loads(file.read())
-        exclude = json_data["exclude"]
         for playlist_id in json_data["include"]:
             offset = 0
             while True:

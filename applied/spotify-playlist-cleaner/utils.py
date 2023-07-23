@@ -71,8 +71,10 @@ def get_distribution_playlist_predictions(model, dataset):
     return distribution
 
 def build_suggestion(model, dataset: Dataset):
+    print("Building suggestions ...")
     predictions = namedtuple('prediction', ['playlist_id', 'playlist_name', 'predicted'])
     reorganize_playlist = get_reorganize_playlist()
+    print("Building dataset ...")
     x_pred, songs = Dataset().load_playlist(reorganize_playlist).get_song_prediction(
         reorganize_playlist,
         features=features
@@ -81,6 +83,7 @@ def build_suggestion(model, dataset: Dataset):
 
     ]
     print(dataset.ids_to_name)
+    print("Predicting ...")
     for x, song in zip(x_pred, songs):
         playlist_id = dataset.class_id[model.predict([x])[0]]
        # playlist_name = dataset.ids_to_name[playlist_id]

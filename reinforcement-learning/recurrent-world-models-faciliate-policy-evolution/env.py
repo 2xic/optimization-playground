@@ -27,7 +27,22 @@ class Env:
             
             observation, reward, terminated, _, _ = self.env.step(action)
 
-            yield (old_observation, action, reward, old_h)
+            yield (old_observation, action, reward, old_h.clone())
+
+            if terminated:
+                break
+
+    def eval_agent_play(self, agent):
+        agent.reset()
+        observation, _ = self.env.reset()
+        while True:
+            old_observation = self._get_torch_tensor(observation)
+            action, old_h = agent.action(
+                old_observation
+            )
+            observation, _, terminated, _, _ = self.env.step(action)
+
+            yield self._raw_get_torch_tensor(observation)
 
             if terminated:
                 break
@@ -63,6 +78,10 @@ class Env:
         # return tensor[:, 34:-16]
 #        return tensor[34:-16].unsqueeze(0)
         return self.transforms(tensor[:-50].unsqueeze(0))
+
+    def _raw_get_torch_tensor(self, observation):
+        tensor = torch.from_numpy(observation).float() / 255 
+        return tensor
 
     def save_observation(self, observation):
         data = Image.fromarray(observation)
