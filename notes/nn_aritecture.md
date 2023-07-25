@@ -12,3 +12,7 @@ Karpathy switches brings new life to an old model architecture
 -> Added dropout and switched out activation functions which also gave a nice boost (Karpathy mentions that the improvement boost is mostly from dropout)
 
 Just scaling up the dataset gives quite the improvement also :) 
+
+## [Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift](http://proceedings.mlr.press/v37/ioffe15.pdf)
+Using batch normalization makes it easier to train neural networks without thinking about the learning rate. Why ? Because the distribution between layers will be more normalized. Since the input passes through all layers during training this makes the distribution much less noisy. 
+

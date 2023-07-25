@@ -51,4 +51,3 @@ The code itself is just 14 lines which is the most inresting part of this.
 
 ### [GLaM: Efficient Scaling of Language Models with Mixture-of-Experts](https://icml.cc/media/icml-2022/Slides/17378.pdf)
 Training a multiple models to combat costs. Creates a simple layer that routes the input to a selected numbers of experts. The final prediction is the weighted results of these experts.
-

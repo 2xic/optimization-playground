@@ -42,3 +42,10 @@ CLIP is cool, but it required a lot of recourses for training. The authors of th
 What they figured out was that by using a larger text / image encoder, the sequence length can be smaller when training (allowing faster training). In other words, less text tokens, and smaller image.
 
 Thereby the name "inverse scaling law". By using a larger model, you can decrease the input size, and still get the same or close to the same results.
+
+### [Rosetta Neurons: Mining the Common Units in a Model Zoo](https://arxiv.org/pdf/2306.09346.pdf)
+Question: Does computer visions models share some common representation ? 
+Answer: Yes based on the investigations done by the authors they do.
+
+In short the method works by comparing activations maps between models. Some activations maps might have different sizes and to deal with that they do a bilinear resizing of the smallest activation map.
+

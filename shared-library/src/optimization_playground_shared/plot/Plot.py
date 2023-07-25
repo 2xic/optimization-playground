@@ -24,16 +24,19 @@ class Figure:
 @dataclass
 class Image:
     image: Any
-    title: str
+    title: Optional[str] = None
 
 
 class Plot:
     def __init__(self):
         pass
 
-    def plot_image(self, images, name):
+    def plot_image(self, images, name, row_direction=True):
         n_cols = len(images)
         n_rows = 1
+
+        if not row_direction:
+            n_cols, n_rows = n_rows, n_cols
 
         _, axes = plt.subplots(nrows=n_rows, ncols=n_cols,
                                figsize=(5 * n_cols, 5))
@@ -50,7 +53,9 @@ class Plot:
                 axes[index].imshow(image, cmap='gray')
             else:
                 axes[index].imshow(image)
-            axes[index].set_title(i.title)
+    
+            if i.title is not None:
+                axes[index].set_title(i.title)
             axes[index].axis('off')
 
         plt.savefig(name)

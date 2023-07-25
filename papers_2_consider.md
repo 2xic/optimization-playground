@@ -26,9 +26,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Wojciech Zaremba (PHD) - Learning Algorithms from Data](https://cs.nyu.edu/media/publications/zaremba_wojciech.pdf)
 
-### LLMs
-[AI Agent Basics: Let’s Think Step By Step](https://www.jonstokes.com/p/ai-agent-basics-lets-think-step-by)
-
 ### Computer vision
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
 
@@ -68,35 +65,15 @@ Reading research done by (famous) students can be nice, it's one way to read the
 [The Curious Case of Absolute Position Embeddings](https://arxiv.org/pdf/2210.12574.pdf)
 [The Use Case for Relative Position Embeddings](https://ofir.io/The-Use-Case-for-Relative-Position-Embeddings/?utm_source=pocket_saves)
 
-[AttentionViz: A Global View of Transformer Attention](https://arxiv.org/pdf/2305.03210.pdf)
-
-[The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)
 
 [Direct Preference Optimization: Your Language Model is Secretly a Reward Model](https://arxiv.org/pdf/2305.18290.pdf)
 
 ## GAN
-[Neural Networks with Recurrent Generative Feedback](https://arxiv.org/pdf/2007.09200.pdf)
-
-[Fast Text-Conditional Discrete Denoising on Vector-Quantized Latent Spaces](https://arxiv.org/abs/2211.07292)
-
-[DiffusionRig: Learning Personalized Priors for Facial Appearance Editing ](https://diffusionrig.github.io/?utm_source=pocket_saves)
+*empty*
 
 ## NN architecture
 [Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)
 
-[Iriguing properties of neural networks](https://arxiv.org/pdf/1312.6199.pdf)
-
-[http://proceedings.mlr.press/v37/ioffe15.pdf](http://proceedings.mlr.press/v37/ioffe15.pdf)
-
-[Going Deeper with Convolutions](https://www.cv-foundation.org/openaccess/content_cvpr_2015/papers/Szegedy_Going_Deeper_With_2015_CVPR_paper.pdf)
-
-[Seeing is Believing: Brain-Inspired Modular Training for Mechanistic Interpretability](https://arxiv.org/abs/2305.08746)
-
-[Rosetta Neurons](https://twitter.com/arankomatsuzaki/status/1669524634910466049?s=12)
-
-## Infrastructure
-[Velox: Meta’s Unified Execution Engine](https://scontent.fosl3-2.fna.fbcdn.net/v/t39.8562-6/302757195_3033291893628871_4556621853780203235_n.pdf?_nc_cat=109&ccb=1-7&_nc_sid=ad8a9d&_nc_ohc=83s6lshWWAEAX8A3wdW&_nc_ht=scontent.fosl3-2.fna&oh=00_AfAq1jZlnHlM139fSBQvQ1mQmgT-cyGDgwMlP-GixFdobw&oe=64080F67)
-[Velox introduction](https://engineering.fb.com/2022/08/31/open-source/velox/?utm_source=pocket_reader)
 
 ## Robotics
 [Model Predictive Control](https://folk.ntnu.no/skoge/vgprosessregulering/papers-pensum/seborg-c20ModelPredictiveControl.pdf)

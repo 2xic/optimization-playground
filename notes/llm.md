@@ -435,3 +435,11 @@ TLDR: GPT behavior has drastically changed over the last couple of months. Mostl
 - Public weights
 - [Karpathy therad on llama 2](https://twitter.com/karpathy/status/1681667444895539202?s=12)
 - 
+
+### [The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)
+- They train a classifier based on the the hidden layers of a LLM 
+- Using the classifier they are able to more robustly know if a statement is true or not
+- This also shows that the LLM is aware of the fact that it's lying.
+
+
+
