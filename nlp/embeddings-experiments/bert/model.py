@@ -53,7 +53,7 @@ class BertEmbedding(nn.Module):
         self.init_weights()
         
     def forward(self, x):
-        # TODO: Add segment
+        # TODO: Add segment layer
         return self.pos_encoder(x) + self.encoder(x)
 
     def init_weights(self) -> None:

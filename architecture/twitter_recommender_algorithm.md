@@ -46,6 +46,21 @@ Looking at the image that goes in a bit more details
 7. Timeline is created :)
 
 
-[Source code](https://github.com/twitter/the-algorithm)
--> TODO: Look at the various parts of the stack, looks like good resource. 
+## [Source code](https://github.com/twitter/the-algorithm)
+Look at the various parts of the stack, looks like good resource. 
+
+### General
+- Interesting that most of the code is in scala and Java
+  - Because this fetches the features and data pipeline
+  - https://github.com/twitter/the-algorithm/blob/main/tweetypie/server/README.md
+  - 
+
+### Models
+Looking at some of the models
+  - https://github.com/twitter/the-algorithm/tree/main/trust_and_safety_models
+    - Most of the training scripts are "single purpose" (not modular at all)
+  - [SimCluster](https://www.kdd.org/kdd2020/accepted-papers/view/simclusters-community-based-representations-for-heterogeneous-recommendatio)
+    - Published and has the job of finding similar communities based on embeddings
+  - [Tweepcred](https://github.com/twitter/the-algorithm/blob/main/src/scala/com/twitter/graph/batch/job/tweepcred/README)
+    - Modified pagerank for Twitter reputation
 

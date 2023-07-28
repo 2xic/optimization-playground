@@ -52,21 +52,8 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [RLHF: Reinforcement Learning from Human Feedback](https://huyenchip.com/2023/05/02/rlhf.html)
 
-[MuZero with Self-competition for Rate Control in VP9 Video Compression](https://arxiv.org/pdf/2202.06626.pdf) - [blog](https://www.deepmind.com/blog/muzeros-first-step-from-research-into-the-real-world)
-
 ## NLP 
 [MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
-
-[Meet in the Middle: A New Pre-training Paradigm](https://arxiv.org/pdf/2303.07295.pdf)
-
-[Reflexion: an autonomous agent with dynamic memory and self-reflection](https://arxiv.org/pdf/2303.11366.pdf)
-[Reflecting on Reflexion](https://nanothoughts.substack.com/p/reflecting-on-reflexion?utm_source=pocket_saves)
-
-[The Curious Case of Absolute Position Embeddings](https://arxiv.org/pdf/2210.12574.pdf)
-[The Use Case for Relative Position Embeddings](https://ofir.io/The-Use-Case-for-Relative-Position-Embeddings/?utm_source=pocket_saves)
-
-
-[Direct Preference Optimization: Your Language Model is Secretly a Reward Model](https://arxiv.org/pdf/2305.18290.pdf)
 
 ## GAN
 *empty*

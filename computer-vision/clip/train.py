@@ -5,6 +5,7 @@ from model import Model
 import torch
 import torch.optim as optim
 from plot import plot
+from tqdm import tqdm
 
 dataset = Flickr8Parser(
     max_dataset_size=100
@@ -17,7 +18,8 @@ optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
 normalize = lambda x:  torch.nn.functional.normalize(x, dim=1)
 
-for i in range(1_00):
+progress = tqdm(range(1_000))
+for i in progress:
     sum_loss = 0
     for index, (x, y) in enumerate(dataset_loader):
         encoded = vocab.encode_sentence(y)
@@ -38,7 +40,8 @@ for i in range(1_00):
         loss.backward()
         optimizer.step()
         sum_loss += loss.item()
-    print(i, sum_loss)
+    #print(i, sum_loss)
+    progress.set_description(f'loss {sum_loss}')
 
 X, y = next(iter(dataset_loader))
 plot(
@@ -47,3 +50,4 @@ plot(
     y=y,
     vocab=vocab
 )
+torch.save(model.state_dict(), 'model.pkt')

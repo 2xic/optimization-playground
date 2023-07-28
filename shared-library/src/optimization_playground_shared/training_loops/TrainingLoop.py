@@ -3,10 +3,10 @@ import torch.nn as nn
 from tqdm import tqdm
 
 class TrainingLoop:
-    def __init__(self, model, optimizer):
+    def __init__(self, model, optimizer, loss=nn.NLLLoss()):
         self.model = model
         self.optimizer = optimizer
-        self.loss = nn.NLLLoss()
+        self.loss = loss
         self.epoch = 1
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
         print(f"Using {self.device} for training")

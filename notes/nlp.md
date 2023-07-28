@@ -51,3 +51,12 @@ The code itself is just 14 lines which is the most inresting part of this.
 
 ### [GLaM: Efficient Scaling of Language Models with Mixture-of-Experts](https://icml.cc/media/icml-2022/Slides/17378.pdf)
 Training a multiple models to combat costs. Creates a simple layer that routes the input to a selected numbers of experts. The final prediction is the weighted results of these experts.
+
+### [The Use Case for Relative Position Embeddings](https://ofir.io/The-Use-Case-for-Relative-Position-Embeddings/?utm_source=pocket_saves)
+TLDR: The author want us to move away from absolute to relative position embeddings
+
+The idea in general makes sense to me, having a fixed relative scope is nicer also. The model just need to focus on one spot which improved performance.
+
+Referenced papers
+[Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation](https://arxiv.org/pdf/2108.12409.pdf)
+[The Curious Case of Absolute Position Embeddings](https://arxiv.org/pdf/2210.12574.pdf)

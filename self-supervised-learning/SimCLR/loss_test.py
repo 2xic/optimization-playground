@@ -1,4 +1,3 @@
-import imp
 import unittest
 import torch
 from loss import Loss

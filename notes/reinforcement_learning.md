@@ -81,3 +81,8 @@ The paper is cool, might be worth implementing.
 - Pipeline only works for sorting, and has to be retrained for other tasks.
 
 [Understanding DeepMind's Sorting Algorithm](https://justine.lol/sorting/) is a way better blog post explaining the actual work.
+
+## [MuZero with Self-competition for Rate Control in VP9 Video Compression](https://arxiv.org/pdf/2202.06626.pdf)
+TLDR: They create a self-competition environment by having the model compete against it's past performance as a WIN/LOSS signal. It's laid out in the appendix A.5
+
+[blog](https://www.deepmind.com/blog/muzeros-first-step-from-research-into-the-real-world)

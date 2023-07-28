@@ -10,14 +10,20 @@ class TransferLearning(pl.LightningModule):
         super().__init__()
         
         self.backend = backend.eval()
-        for params in self.backend.parameters():
+        for params in list(self.backend.parameters())[:3]:
             params.requires_grad = False
 
-        self.classifier = nn.Linear(64, output_size)
+        self.classifier = nn.Sequential(
+            nn.Linear(100, 64),
+            nn.ReLU(),
+            nn.Linear(64, 32),
+            nn.ReLU(),
+            nn.Linear(32, output_size),
+            nn.Softmax(dim=1)
+        )
 
     def forward(self, x):
         x = self.backend(x)
-        x = F.relu(x)
         x = self.classifier(x)
         return x
 

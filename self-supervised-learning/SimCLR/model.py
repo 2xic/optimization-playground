@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
-from loss import Loss
+from loss import Loss, ContrastiveLoss
 import random
-
+import torchvision
 
 DEBUG = False
 
@@ -44,10 +44,41 @@ class Projection(nn.Module):
         self.projection_out = nn.Linear(64, 10)
 
     def forward(self, x):
-        x = F.relu(self.projection_in(x))
-     #   x = (self.projection_out(x))
+        x = F.sigmoid(self.projection_in(x))
         return x
 
+class SimClrTorch(nn.Module):
+    def __init__(self, model, projection, debug=False):
+        super().__init__()
+        self.model = model
+        self.projection = projection
+        self.debug = debug
+
+    def forward(self, X):
+        return self.projection(self.model(X))
+
+    def _forward(self, batch):
+        x, y = batch
+        model_device = next(self.projection.parameters()).device
+        x = x.to(model_device)
+        y = y.to(model_device)
+
+        z_k_1 = self.forward(x)
+        z_k_2 = self.forward(y)
+
+        if self.debug:  
+            assert debug_assert((z_k_1).isnan().any() == False), z_k_1
+            assert debug_assert((z_k_2.isnan()).any() == False), z_k_2
+
+        loss_value = Loss().loss(z_k_1, z_k_2)
+
+        if random.randint(0, 10) == 5 and self.debug:
+            print(z_k_1[0])
+            print(z_k_2[0])
+            print(loss_value)
+            exit(0)
+
+        return loss_value
 
 class SimClrModel(pl.LightningModule):
     def __init__(self, model, projection, debug=False):

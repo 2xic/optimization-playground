@@ -18,12 +18,9 @@ They also tried to use a [FT_Transformer](https://paperswithcode.com/method/ft-t
 Why do tree-based model outperform deep learning models ? 
 -> So given that hyperparameter does not make NN any more powerful, it gives the suggestion that there is something inherit to the model architectures
 -> So one the findings which where also mentioned in the Numerai quant club is that NN are biased to smooth solutions. 
--> Uninformative features affects NN like architectures. They see that removing / adding features of  importance affects the gap between NN like architectures and tree based models
-    -> **TODO** Run a an experiment to test this, if this is the case that would be super interesting.
+-> Uninformative features affects NN like architectures. They see that removing / adding features of importance affects the gap between NN like architectures and tree based models
+    -> Run a an experiment to test this, if this is the case that would be super interesting.
 -> "invariant by rotation" (unitary matrix applied to the training and testing dataset). 
 
 In the appendix one can see that with large dataset the SAINT and FT Transformer model starts to be able to compete with the XGBoost like models. This is both for numerical and categorical features. 
-
-
-
 

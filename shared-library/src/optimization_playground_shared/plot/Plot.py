@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 import torch
+from typing import List
 
 
 @dataclass
@@ -20,12 +21,21 @@ class Figure:
     x_scale: Optional[str] = None
     y_scale: Optional[str] = None
 
-
 @dataclass
 class Image:
     image: Any
     title: Optional[str] = None
 
+
+@dataclass
+class ScatterEntry:
+    X: List[int]
+    y: List[int]
+
+@dataclass
+class Scatter:
+    plots: Dict[str, ScatterEntry]
+    title: Optional[str] = None
 
 class Plot:
     def __init__(self):
@@ -86,6 +96,17 @@ class Plot:
                 axes[index].set_yscale(i.y_scale)
             # axes[index].set_ylim(bottom=0)
 
+        plt.savefig(name)
+        plt.clf()
+        plt.cla()
+        plt.close('all')
+
+    def plot_scatter(self, figure: Scatter, name: str):
+        for legend, value in figure.plots.items():
+            plt.scatter(value.X, value.y, label=legend)
+
+        plt.legend(loc="upper left")
+        plt.title(figure.title)
         plt.savefig(name)
         plt.clf()
         plt.cla()
