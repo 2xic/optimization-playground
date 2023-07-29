@@ -92,4 +92,3 @@ class SimClrCifar100Dataloader(Dataset):
         t_y  = transformation_2(X)
 
         return t_x, t_y
-

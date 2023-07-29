@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
-from loss import Loss, ContrastiveLoss
+from loss import Loss
 import random
-import torchvision
 
 DEBUG = False
 
@@ -44,7 +43,7 @@ class Projection(nn.Module):
         self.projection_out = nn.Linear(64, 10)
 
     def forward(self, x):
-        x = F.sigmoid(self.projection_in(x))
+        x = torch.sigmoid(self.projection_in(x))
         return x
 
 class SimClrTorch(nn.Module):
@@ -66,7 +65,7 @@ class SimClrTorch(nn.Module):
         z_k_1 = self.forward(x)
         z_k_2 = self.forward(y)
 
-        if self.debug:  
+        if self.debug:
             assert debug_assert((z_k_1).isnan().any() == False), z_k_1
             assert debug_assert((z_k_2.isnan()).any() == False), z_k_2
 

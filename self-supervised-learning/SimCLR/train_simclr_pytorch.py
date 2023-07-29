@@ -19,7 +19,7 @@ def create_model():
     model = SimClrTorch(
         base_encoder,
         projection
-    )
+    ).to(device)
     return model
 
 def clone_model(base_model):
@@ -30,13 +30,17 @@ def clone_model(base_model):
 model = create_model()
 
 train_loader = DataLoader(SimClrCifar100Dataloader(),
-                          batch_size=128,
+                          batch_size=256,
                           shuffle=True, 
                           num_workers=8)
 optimizer = torch.optim.Adam(model.parameters())
 
 training_loss = []
 training_accuracy = []
+reference_training_accuracy = []
+
+training_loss_reference = []
+training_loss_simclr_backend = []
 for epoch in tqdm(range(1_500)):
     sum_loss = 0
     for index, batch in enumerate(train_loader):
@@ -48,9 +52,12 @@ for epoch in tqdm(range(1_500)):
     training_loss.append(sum_loss)
 
     if epoch % 10 == 0:
-        accuracy = test_model(model=clone_model(model))
+        accuracy, reference_accuracy, loss_simclr_backend, reference_loss = test_model(model=clone_model(model), device=device)
         training_accuracy.append(accuracy)
+        reference_training_accuracy.append(reference_accuracy)
 
+        training_loss_simclr_backend += (loss_simclr_backend)
+        training_loss_reference += (reference_loss)
     plot = Plot()
     plot.plot_figures(
         figures=[
@@ -58,16 +65,26 @@ for epoch in tqdm(range(1_500)):
                 plots={
                     "Loss training encoder": training_loss,
                 },
+                title="Loss of SimCLR projection",
+                x_axes_text="Epochs",
+                y_axes_text="Loss",
+            ),
+            Figure(
+                plots={
+                    "Loss with SimClr backend": training_loss_simclr_backend,
+                    "Loss without pre-training": training_loss_reference,
+                },
                 title="Loss",
                 x_axes_text="Epochs",
                 y_axes_text="Loss",
             ),
             Figure(
                 plots={
-                    "Accuracy over time with the base model": training_accuracy,
+                    "Accuracy with SimCLR backend": training_accuracy,
+                    "Accuracy without pre-training": reference_training_accuracy,
                 },
                 title="Accuracy",
-                x_axes_text="One data point for each 10th epoch",
+                x_axes_text="Epoch",
                 y_axes_text="Accuracy",
             )
         ],
