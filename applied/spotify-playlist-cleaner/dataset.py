@@ -84,11 +84,17 @@ class Dataset:
         songs = []
         for song, audio_features in zip(self.ids_songs[playlist_id], self.ids_features[playlist_id]):
             songs.append(song)
-            x.append([
-                getattr(audio_features, feature)
-                for feature in features
-            ])
+            x.append(self.get_song_features(
+                audio_features=audio_features,
+                features=features,
+            ))
         return x, songs
+
+    def get_song_features(self, audio_features, features):
+        return [
+            getattr(audio_features, feature)
+            for feature in features
+        ]
 
     def _get_songs(self, playlist_id):
         offset = 0

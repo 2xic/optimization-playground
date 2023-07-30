@@ -8,7 +8,7 @@ from optimization_playground_shared.plot.Plot import Plot, Scatter, ScatterEntry
 import torch.nn as nn
 
 """
-Simple experiment with "fake" tabluar data
+Simple experiment with "fake" tabular data
 
 f(x, y) = |cos(2 * x + y)|
 

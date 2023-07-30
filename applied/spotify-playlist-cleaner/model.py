@@ -11,7 +11,7 @@ def get_model():
     print(f"Best acc : {best_accuracy}")
     return best_model, dataset
 
-def get_features():
+def evaluate_features():
     for (x, y, x_test, y_test, feature) in get_dataset_features():
         _, best_accuracy = find_model(
             x, 
@@ -25,6 +25,7 @@ def get_features():
 
 if __name__ == "__main__":
     give_distribution = False
+    should_evaluate_features = False
     best_model, dataset = get_model()
 
     if give_distribution:
@@ -32,5 +33,6 @@ if __name__ == "__main__":
             best_model,
             dataset
         ))
-    get_features()
+    if should_evaluate_features:
+        evaluate_features()
     

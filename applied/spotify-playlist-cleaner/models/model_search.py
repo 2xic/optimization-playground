@@ -1,13 +1,17 @@
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn import svm
 from .cosine_sim import CosineSim
+from .torch_models.linear_torch_model import LinearTorchModel
+from .torch_models.conv_torch_model import ConvTorchModel
 
 def find_model(X, y, x_test, y_test, log=True):
     best_model = None
     best_accuracy = 0
+
     for clf in [
+        ConvTorchModel(len(X[0]), max(y) + 1),
+        LinearTorchModel(len(X[0]), max(y) + 1),
         RandomForestClassifier(max_depth=22),
         RandomForestClassifier(max_depth=14),
         RandomForestClassifier(max_depth=12),
@@ -22,12 +26,12 @@ def find_model(X, y, x_test, y_test, log=True):
             max_depth=1, 
             random_state=0
         ),
-        CosineSim()
+        CosineSim(),
     ]:
         clf.fit(X, y)
         accuracy = accuracy_score(clf.predict(x_test), y_test)
         if log:
-            print(f"Accuracy {accuracy}")
+            print(f"{clf.__class__.__name__} Accuracy {accuracy}")
         if best_accuracy < accuracy:
             best_accuracy = accuracy
             best_model = clf

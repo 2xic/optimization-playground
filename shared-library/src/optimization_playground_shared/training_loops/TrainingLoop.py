@@ -28,8 +28,8 @@ class TrainingLoop:
         accuracy = torch.tensor(0.0, device=device)
         length = 0
 
-        loop = tqdm(dataloader, desc="Training" if train else "Testing")
-        for _, (X, y) in enumerate(loop):
+        #loop = tqdm(dataloader, desc="Training" if train else "Testing")
+        for (X, y) in dataloader:
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)

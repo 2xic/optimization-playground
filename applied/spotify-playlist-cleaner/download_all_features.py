@@ -1,5 +1,4 @@
 import api
-import time
 import json
 
 if __name__ == "__main__":

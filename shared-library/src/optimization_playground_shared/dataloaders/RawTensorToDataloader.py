@@ -10,9 +10,13 @@ class _RawTensorDataset(Dataset):
         return self.X.shape[0]
 
     def __getitem__(self, idx):
-        x = self.X[idx]
-        y = self.y[idx]
-        return (x, y)
+        if self.y is None:
+            x = self.X[idx]
+            return x
+        else:
+            x = self.X[idx]
+            y = self.y[idx]
+            return (x, y)
 
 def get_dataloader(X, y, batch_size=32):
     loader = DataLoader(_RawTensorDataset(X, y), batch_size=batch_size)

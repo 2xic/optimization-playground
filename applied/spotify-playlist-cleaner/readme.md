@@ -36,3 +36,8 @@ Tested with some basic models and got around 60% accuracy on the test dataset, e
 ![tsne](./images/t_sne.png)
 
 ![pca](./images/pca.png)
+
+## Spotify Million Dataset Challenge
+Spotify released an interesting [dataset](https://www.aicrowd.com/challenges/spotify-million-playlist-dataset-challenge) a few years back.
+Will try to experiment it for music recommendations.
+

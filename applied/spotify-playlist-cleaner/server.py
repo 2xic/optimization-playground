@@ -2,9 +2,10 @@ from flask import Flask, request
 from flask import render_template
 from model import get_model
 from utils import build_suggestion
-from api import play_song, move_song
+from api import play_song, move_song, get_song_feature
 from move_songs import MoveSongs
 import atexit
+from utils import features
 
 best_model, dataset = get_model()
 combined, reorganize_playlist =  build_suggestion(best_model, dataset)
@@ -17,12 +18,31 @@ def save_move():
 atexit.register(save_move)
 
 @app.route("/")
-def hello_world():
+def index():
     suggestions = list(filter(
         lambda x: x["song"].id not in moved.list,
         combined
     ))[:400]
     return render_template('frontend.html', suggestions=suggestions)
+
+@app.route("/song", methods=["GET"])
+def api_get_song_features():
+    song_id = request.args.get("song_id")
+    return get_song_feature(song_id)
+
+@app.route("/recommendations", methods=["GET"])
+def api_get_song_playlist_recommendation():
+    song_id = request.args.get("song_id")
+    song_features = list(get_song_feature(song_id))[0]
+    print(song_features)
+    dataset_features = dataset.get_song_features(
+        song_features,
+        features,
+    )
+    playlist_id = dataset.class_id[best_model.predict([
+        dataset_features
+    ])[0]]
+    return dataset.ids_to_name[playlist_id]
 
 @app.route("/play", methods=["POST"])
 def play():

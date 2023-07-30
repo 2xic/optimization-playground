@@ -71,9 +71,13 @@ class TransformerModel(nn.Module):
         output = self.forward(X.long(), mask).reshape((X.shape[0], -1))
 
         labels = torch.arange(output.shape[0])
-#        print(labels.shape)
-#        print(output.shape)
 
+        """
+        TODO
+        No, this loss is wrong ...
+
+        The embedding output should be compared from two perspectives
+        """
         loss_i = torch.nn.CrossEntropyLoss()(output, labels)
         loss_t = torch.nn.CrossEntropyLoss()(output, labels)
         loss = (loss_i + loss_t)/2

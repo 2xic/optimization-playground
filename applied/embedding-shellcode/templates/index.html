@@ -1,0 +1,64 @@
+<html>
+
+<head>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+</head>
+
+
+<div id="container">
+    <div id="mynetwork"></div>
+    <div id="code">
+        <h1>code (click a node)</h1>
+        <div id="assembly">
+
+        </div>
+    </div>
+</div>
+
+<style>
+    #container {
+        display: flex;
+        height: 100%;
+    }
+
+    #mynetwork {
+        width: 70%;
+        height: 100%;
+        border: 1px solid lightgray;
+    }
+
+    #code {
+        width: 30%;
+        height: 100%;
+        border: 1px solid lightgray;
+    }
+</style>
+
+<script>
+    (async () => {
+        var data = await fetch('/data').then((a) => {
+            return a.json()
+        }).then((a) => {
+            return a["rows"]
+        })
+
+        var nodes = new vis.DataSet(data);
+
+        var container = document.getElementById("mynetwork");
+        var data = {
+            nodes: nodes,
+        };
+        var options = {
+        };
+        var network = new vis.Network(container, data, options);
+        network.on('click', function (properties) {
+            var ids = properties.nodes;
+            console.log(properties)
+            var clickedNodes = nodes.get(ids);
+            console.log('clicked nodes:', clickedNodes);
+            document.getElementById('assembly').innerText = clickedNodes[0].code;
+        });
+    })()
+</script>
+
+</html>
