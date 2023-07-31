@@ -2,7 +2,7 @@ from get_shellcode import get_shellcode
 import json
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 import torch
-
+import os
 class TokenTracker:
     def __init__(self) -> None:
         self.token_index = {}
@@ -27,6 +27,7 @@ class TokenizedShellCode:
         self.end_instruction = self.tokens_tracker.add_token("<END_T_INSTRUCTION>")
         self.program_mapping = {}
         self.program_array = []
+        self.raw_program = []
         self.MINIMUM_PROGRAM_LENGTH = 356
 
     @property
@@ -34,9 +35,9 @@ class TokenizedShellCode:
         return len(self.tokens_tracker.token_index) + 1
 
     def create(self):
-        for (i, name) in get_shellcode():
+        for (raw_program, name) in get_shellcode():
             program = []
-            for j in i.split("\n"):
+            for j in raw_program.split("\n"):
                 split = j.split(":")
                 offset = split[0].strip()
                 instruction = split[1]
@@ -56,6 +57,7 @@ class TokenizedShellCode:
                     self.tokens_tracker.add_token(opcode),
                 ] + arguments + [self.end_instruction]
                 program += instruction
+            self.raw_program.append(raw_program)
             self.program_mapping[name] = program
             self.program_array.append(program)
         return self
@@ -64,18 +66,26 @@ class TokenizedShellCode:
         with open("metadata.json", "w") as file:
             json.dump({
                 "program_mapping":self.program_mapping,
-                "token_index": self.tokens_tracker.token_index
+                "token_index": self.tokens_tracker.token_index,
+                "raw_program": self.raw_program
             }, file)
     
     def load(self):
-        with open("metadata.json", "r") as file:
-            data = json.load(file)
-            self.program_mapping = data["program_mapping"]
-            for key in data["token_index"]:
-                self.tokens_tracker.add_token(key)
-            self.program_array = list(self.program_mapping.values())
-        return self
-    
+        if os.path.isfile("metadata.json"):
+            with open("metadata.json", "r") as file:
+                data = json.load(file)
+                self.program_mapping = data["program_mapping"]
+                for key in data["token_index"]:
+                    self.tokens_tracker.add_token(key)
+                self.program_array = list(self.program_mapping.values())
+                self.raw_program = data["raw_program"]
+            return self
+        else:
+            print("File does not exists, creating it")
+            self.create()
+            self.save()
+            return self
+            
     @property
     def program_tensor(self):
         self.tensor = torch.zeros((len(self.program_array), self.MINIMUM_PROGRAM_LENGTH)).fill_(

@@ -4,6 +4,7 @@ from torch.nn import TransformerEncoder, TransformerEncoderLayer
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from optimization_playground_shared.plot.Plot import Plot, Figure
 
 class TransformerEncoderModel(nn.Module):
     def __init__(self, n_token, device, n_head: int = 1, n_layers: int = 6):
@@ -67,6 +68,7 @@ class ModelWrapper:
     def __init__(self, model) -> None:
         self.model = model
         self.optimizer = optim.Adam(self.model.parameters())
+        self._EPOCHS = 1
 
     def fit(self, X):
         loss = self.model.fit(X)
@@ -75,3 +77,43 @@ class ModelWrapper:
         loss.backward()
         self.optimizer.step()
         return loss
+
+    def train(self, dataloader, dataset):
+        loss_over_time = []
+        for epoch in range(self._EPOCHS):
+            sum_loss = 0
+            for X in dataloader:
+                loss = self.fit(X)
+                sum_loss += loss.item()
+                print(epoch, loss)
+            loss_over_time.append(sum_loss)
+            torch.save({
+                "model": self.model.state_dict(),
+            }, 'model.pkt')
+
+            """
+            Loss over time
+            """
+            plot = Plot()
+            plot.plot_figures(
+                figures=[
+                    Figure(
+                        plots={
+                            "Loss": loss_over_time,
+                        },
+                        title="Training loss",
+                        x_axes_text="Epochs",
+                        y_axes_text="Loss",
+                    ),
+                ],
+                name=f'loss.png'
+            )
+
+    def predict(self, dataloader, dataset):
+        X = dataset.program_tensor
+
+        shape = X.shape[0]
+        mask = torch.triu(torch.ones(shape, shape) * float('-inf'), diagonal=1)
+        output = self.model.forward(X, mask)
+        return outputr.detach().numpy()
+    

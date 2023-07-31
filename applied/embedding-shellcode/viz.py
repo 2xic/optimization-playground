@@ -1,15 +1,12 @@
 import os
 from get_tokenized_shellcode import get_dataloader
-from models.TransformerEncoder import TransformerEncoderModel, ModelWrapper
+from models.TransformerEncoder import TransformerEncoderModel
 import torch
-import torch.nn.functional as F
-from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.manifold import TSNE
-import matplotlib.pyplot as plt
-from get_shellcode import get_shellcode
 from flask import Flask, render_template
 from flask import Flask
 import json
+from eval import get_2d_embeddings
 
 app = Flask(__name__)
 
@@ -37,38 +34,12 @@ def test():
     model.load_state_dict(data)
 
     batch = dataset.program_tensor
-    code = list(get_shellcode())
-    names = list(map(lambda x: x[1], code))
-    assembly_code = list(map(lambda x: x[0], code))
-    print(names)
     output = model._forward(batch, model.embedding_a)
 
-    tsne = TSNE(random_state=1, n_iter=15000, metric="cosine")
-    embs = tsne.fit_transform(output.detach().numpy())
+    rows = get_2d_embeddings(
+        output.detach().numpy()
+    )
 
-    ids = list(range(len(names)))
-    X = embs[:, 0]
-    Y = embs[:, 1]
-    labels = names
-
-    for (id, x, y, label, assembly) in zip(
-        ids,
-        X,
-        Y,
-        labels,
-        assembly_code
-    ):
-        print((x, y, label, id))
-        rows.append(
-            {
-                "id": id,
-                "label": label,
-                "x": float(x) * 100,
-                "y": float(y) * 100,
-                "fixed": True,
-                "code": str(assembly)
-            },
-        )
     with open("dump.json", "w") as file:
         json.dump({
             "rows": rows,
