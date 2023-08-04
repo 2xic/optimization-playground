@@ -37,9 +37,6 @@ model.to(device)
 step_size = 4
 
 for epoch in range(1_00):
-#    X_label = [] 
-#    AugmentedLabel = []
-#    accuracy = 0
     for index, (x, y, unlabeled) in enumerate(dataloader):
         x = x.to(device)
         y = y.to(device)
@@ -55,9 +52,6 @@ for epoch in range(1_00):
             aug_label = sharpen(model(aug), T=T)
         
         split = batch_size // 2
-
-#        print(aug_label)
-#        exit(0)
 
         (X_mixed, y_mixed) = MixUp()(x_augmentation[:split], y[:split], aug[:split], aug_label[:split], device)
         (u_mixed, uy_mixed) = MixUp()(x_augmentation[split:], y[split:], aug[split:], aug_label[split:], device)

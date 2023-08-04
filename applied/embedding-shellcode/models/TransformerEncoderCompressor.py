@@ -6,7 +6,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 from optimization_playground_shared.plot.Plot import Plot, Figure
 
-class TransformerEncoderModel(nn.Module):
+class TransformerEncoderCompressor(nn.Module):
     def __init__(self, n_token, device, sequence_size: int, n_head: int = 1, n_layers: int = 6):
         super().__init__()
         self.device = device
@@ -18,8 +18,6 @@ class TransformerEncoderModel(nn.Module):
         I want sequence size 32 that can be iterated over
         """
         self.n_token = n_token
-        self.output_shape = 1
-
         self.embedding = nn.Embedding(
             n_token,
             self.sequence_size,
@@ -27,74 +25,47 @@ class TransformerEncoderModel(nn.Module):
         )
         encoder_layers = TransformerEncoderLayer(self.sequence_size, n_head)
         self.transformer_encoder = TransformerEncoder(encoder_layers, n_layers)
-        self.output_embedding = nn.Linear(self.sequence_size, self.output_shape)
-        self.compressed_output = nn.Linear(self.output_shape * self.sequence_size, 128)
+        self.Z = nn.Linear(self.sequence_size, 1024)
+        self.output_embedding = nn.Linear(1024, n_token)
 
     def forward(self, src: Tensor, src_mask: Tensor) -> Tensor:
         src = self.embedding(src)
-        output = self.transformer_encoder(src, src_mask)
-        output = nn.Sigmoid()(self.output_embedding(output))
-        output = output.view(output.shape[0], self.output_shape * self.sequence_size)
-        output = nn.Sigmoid()(self.compressed_output(output))
+        output = nn.Sigmoid()(self.transformer_encoder(src, src_mask))
+        output = nn.Sigmoid()(self.Z(output))
+        output = (self.output_embedding(output))
         return output
+    
+    def get_raw_embedding(self, src: Tensor, src_mask: Tensor) -> Tensor:
+        src = self.embedding(src)
+        output = self.transformer_encoder(src, src_mask)
+        output = nn.Sigmoid()(self.Z(output))
+        return output.mean(dim=1)
     
     def forward_group(self, X, mask, real_index):
         output = self.forward(X.long(), mask)
-
-        # Make sure we don't go above the batch size
-
-        # Step 1: Get unique indices and their corresponding counts
-        unique_indices, counts = torch.unique(real_index, return_counts=True)
-        # print(unique_indices)
-        index = unique_indices % X.shape[0]
-        select_index = real_index % X.shape[0]
-        # print(index)
-
-        real_count = torch.zeros(len(real_index)).long()
-        real_count[index] = counts
-
-        # Step 2: Use advanced indexing to group and sum the data_tensor for each index
-        grouped_sum = torch.zeros(len(real_index), output.size(1), dtype=output.dtype)
-        # print(grouped_sum.shape)
-        grouped_sum.index_add_(0, select_index, output)
-        averages = grouped_sum / real_count[:, None]
-
-        filtered_tensor = averages[~torch.any(averages.isnan(),dim=1)]
-        return filtered_tensor
+        predicted = output.view(X.shape[0] * self.sequence_size, self.n_token)
+        return predicted
 
     def fit(self, X, index):
         shape = X.shape[0]
         mask = torch.triu(torch.ones(shape, shape) * float('-inf'), diagonal=1)
 
-        filtered_tensor = self.forward_group(
+        predicted = self.forward_group(
             X,
             mask,
             index
         )
+        target = X.view(-1)
 
-        loss = self.sim_clr_loss(filtered_tensor, filtered_tensor)
-        return loss
+        print("Output / Expected")
+        print(predicted.argmax(dim=1)[:10], predicted.shape)
+        print(target[:10], target.shape)
+        print()
 
-    def sim_clr_loss(self, a, b):
-        self.temperature = 0.5
-        batch_size = a.shape[0]
-        mask = (~torch.eye(batch_size * 2, batch_size * 2, dtype=bool, device=self.device)).float()
-
-        representations = torch.cat([a, b], dim=0)
-        S = F.cosine_similarity(representations.unsqueeze(1), representations.unsqueeze(0), dim=2)
-
-        sim_ij = torch.diag(S, batch_size).to(self.device)
-        sim_ji = torch.diag(S, -batch_size).to(self.device)
-        positives = torch.cat([sim_ij, sim_ji], dim=0).to(self.device)
-
-        nominator = torch.exp(positives / self.temperature)
-        denominator = mask * torch.exp(S / self.temperature)
-
-        all_losses = -torch.log(nominator / torch.sum(denominator, dim=1))
-        loss = torch.sum(all_losses) / (2 * batch_size)
+        loss = torch.nn.CrossEntropyLoss(ignore_index=-1)(predicted, target.long())
         return loss
     
-class ModelWrapper:
+class ModelWrapperEncoder:
     def __init__(self, model, epochs=30) -> None:
         self.model = model
         self.optimizer = optim.Adam(self.model.parameters())
@@ -146,5 +117,6 @@ class ModelWrapper:
 
         shape = X.shape[0]
         mask = torch.triu(torch.ones(shape, shape) * float('-inf'), diagonal=1)
-        output = self.model.forward(X, mask)
+        output = self.model.get_raw_embedding(X, mask)
+        assert len(output.shape) == 2
         return output.detach().numpy()

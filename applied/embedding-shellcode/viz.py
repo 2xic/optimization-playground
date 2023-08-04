@@ -7,51 +7,41 @@ from flask import Flask, render_template
 from flask import Flask
 import json
 from eval import get_2d_embeddings
+import sys
+import argparse
+
 
 app = Flask(__name__)
 
-rows = []
-
+model_rows = {}
 
 @app.route('/data')
 def data():
-    return json.dumps(rows)
+    return json.dumps(model_rows)
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
 
-def test():
-    _, dataset = get_dataloader()
-
-    model = TransformerEncoderModel(
-        n_token=dataset.n_tokens,
-        device=torch.device('cpu'),
-        n_layers=1,
-    )
-    data = torch.load('model.pkt')['model']
-    model.load_state_dict(data)
-
-    batch = dataset.program_tensor
-    output = model._forward(batch, model.embedding_a)
-
-    rows = get_2d_embeddings(
-        output.detach().numpy()
-    )
-
-    with open("dump.json", "w") as file:
-        json.dump({
-            "rows": rows,
-        }, file)
-
 if __name__ == "__main__":
-    if os.path.isfile("dump.json"):
-        with open("dump.json", "r") as file:
-            rows = json.load(file)
-    else:
-        test()
+    parser = argparse.ArgumentParser(prog='visualization')
+    parser.add_argument('-f', '--file',  nargs='+', required=True)
 
+    args = parser.parse_args()
+    
+    dump_file = args.file
+    for model_dump_file in dump_file:    
+        print(model_dump_file)    
+        if os.path.isfile(model_dump_file):
+            with open(model_dump_file, "r") as file:
+                rows = json.load(file)
+                model_rows[rows["name"]] = rows["rows"]
+        else:
+            print("Run the train file first")
+            exit(0)
+    print(model_rows)
     app.run(
         host='0.0.0.0'
     )

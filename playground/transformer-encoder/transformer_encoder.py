@@ -34,7 +34,6 @@ class TestTransformerEncoder(nn.Module):
         src = self.embedding(src)
         output = self.transformer_encoder(src, src_mask)
         output = nn.Sigmoid()(self.output_vocab(output))
-        #output = nn.Softmax(dim=2)(output)
         return output
 
     def fit(self, X, y):
