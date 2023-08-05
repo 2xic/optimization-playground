@@ -4,6 +4,7 @@ from sklearn import svm
 from .cosine_sim import CosineSim
 from .torch_models.linear_torch_model import LinearTorchModel
 from .torch_models.conv_torch_model import ConvTorchModel
+from optimization_playground_shared.clustering.ElbowKmeans import ElbowKmeans
 
 def find_model(X, y, x_test, y_test, log=True):
     best_model = None
@@ -27,6 +28,7 @@ def find_model(X, y, x_test, y_test, log=True):
             random_state=0
         ),
         CosineSim(),
+        ElbowKmeans(),
     ]:
         clf.fit(X, y)
         accuracy = accuracy_score(clf.predict(x_test), y_test)

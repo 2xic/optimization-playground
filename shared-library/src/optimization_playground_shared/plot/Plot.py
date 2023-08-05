@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 import torch
 from typing import List
-
+import os
 
 @dataclass
 class Figure:
@@ -68,6 +68,7 @@ class Plot:
                 axes[index].set_title(i.title)
             axes[index].axis('off')
 
+        self._create_output_folder(name)
         plt.savefig(name)
 
     def plot_figures(self, figures, name):
@@ -96,6 +97,7 @@ class Plot:
                 axes[index].set_yscale(i.y_scale)
             # axes[index].set_ylim(bottom=0)
 
+        self._create_output_folder(name)
         plt.savefig(name)
         plt.clf()
         plt.cla()
@@ -116,3 +118,8 @@ class Plot:
         if isinstance(entry, torch.Tensor):
             entry = entry.detach().cpu()
         return entry
+
+    def _create_output_folder(self, name):
+        dirname = os.path.dirname(os.path.abspath(name))
+        os.makedirs(dirname, exist_ok=True)
+

@@ -137,7 +137,7 @@ class ModelWrapper:
                         y_axes_text="Loss",
                     ),
                 ],
-                name=f'loss.png'
+                name=f'./loss/loss_{self.model.__class__.__name__}.png'
             )
 
     def predict(self, dataloader, dataset):

@@ -19,13 +19,13 @@ def train():
             sequence_size=dataset.sequence_size,
             device=torch.device('cpu'),
             n_layers=1,
-        ), epochs=100)),
+        ), epochs=10)),
         ('transformer-encoder-compressor',  ModelWrapperEncoder(TransformerEncoderCompressor(
             n_token=dataset.n_tokens,
             sequence_size=dataset.sequence_size,
             device=torch.device('cpu'),
             n_layers=1,
-        ), epochs=100)),
+        ), epochs=10)),
     ]
     for (model_name, model) in models:
         print(f"Training {model_name}")

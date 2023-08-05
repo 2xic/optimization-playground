@@ -66,11 +66,18 @@ def get_requests_cache(url, max_age=float('inf')):
     if os.path.isfile(path):
         if file_age_in_seconds(path) < max_age:
             with open(path, "r") as file:
-                return json.loads(file.read())
+                content = file.read()
+                if len(content):
+                    results = json.loads(content)
+                    print(results)
+                    print(results.get("items", True) != None)
+                    if results.get("items", True) != None:
+                        return results
     data = requests.get(url, verify=False, headers={
         "Cookie": "auth_token=" + os.getenv("cookie")
     }).json()
-    if data is None:
+    print(data)
+    if data is None or data.get("items", True) == None:
         print("Got none from the api, have you added the cookie ?")
         exit(0)
     time.sleep(1)
@@ -85,7 +92,7 @@ def get_playlists():
         yield playlist(id=i["id"], name=i["name"])
 
 def get_playlist_songs(id, offset=0):
-  #  print(f"{api_url}/playlist/{id}?offset={offset}")
+    print(f"{api_url}/playlist/{id}?offset={offset}")
     for i in get_requests_cache(f"{api_url}/playlist/{id}?offset={offset}", max_age=playlist_max_age)["items"]:
         url = (i["track"]["album"]["images"][-1]["url"])
         yield song(id=i["track"]["id"], name=i["track"]["name"], image=url)

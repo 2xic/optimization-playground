@@ -60,3 +60,23 @@ The idea in general makes sense to me, having a fixed relative scope is nicer al
 Referenced papers
 [Train Short, Test Long: Attention with Linear Biases Enables Input Length Extrapolation](https://arxiv.org/pdf/2108.12409.pdf)
 [The Curious Case of Absolute Position Embeddings](https://arxiv.org/pdf/2210.12574.pdf)
+
+
+## [Transformers w/ Andrej Karpathy](https://www.youtube.com/watch?app=desktop&v=XfpMkf4rD6E)
+- Decade ago: 
+  - Feature detectors used everywhere
+  - separates models depending on context (nlp / cv etc)
+- Now
+  - Transformer - single architecture everywhere
+- Timeline to the transformer
+  - 2003
+    - Neural probabilistic language model
+  - 2014
+    - Sequence to sequence learning with Neural Networks
+    - Neural machine translation by jointly learning to algin and translate
+      - [Dzmitry Bahdanau](https://rizar.github.io/)
+  - 2017
+    -  Attention is all you need
+    -  
+
+

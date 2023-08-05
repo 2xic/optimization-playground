@@ -3,7 +3,6 @@ from torch import nn, Tensor
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 from optimization_playground_shared.plot.Plot import Plot, Figure
 
 class TransformerEncoderCompressor(nn.Module):
@@ -108,12 +107,11 @@ class ModelWrapperEncoder:
                         y_axes_text="Loss",
                     ),
                 ],
-                name=f'loss.png'
+                name=f'./loss/loss_{self.model.__class__.__name__}.png'
             )
 
     def predict(self, dataloader, dataset):
         X = dataset.program_tensor
-        y = dataset.index_tensor
 
         shape = X.shape[0]
         mask = torch.triu(torch.ones(shape, shape) * float('-inf'), diagonal=1)

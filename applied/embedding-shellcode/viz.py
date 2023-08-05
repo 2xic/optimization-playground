@@ -19,6 +19,10 @@ model_rows = {}
 def data():
     return json.dumps(model_rows)
 
+@app.route('/code/<page_id>')
+def code(page_id):
+    with open(f"cached/{page_id}") as file:
+        return file.read()
 
 @app.route('/')
 def index():
@@ -41,7 +45,7 @@ if __name__ == "__main__":
         else:
             print("Run the train file first")
             exit(0)
-    print(model_rows)
+    print(model_rows.keys())
     app.run(
         host='0.0.0.0'
     )

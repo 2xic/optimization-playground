@@ -1,73 +1,41 @@
-from get_shellcode import get_shellcode
+from get_shellcode import ShellcodeDataset
 import json
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 import torch
 import os
 import math
+from tokenizer import SimpleTokenizer
+from get_debug_dataset import ShellcodeDebugDataset
 
-class TokenTracker:
-    def __init__(self) -> None:
-        self.token_index = {}
-        self.index_token = {}
-
-    def add_token(self, token):
-        if token not in self.token_index:
-            index = len(self.token_index)
-            self.token_index[token] = index
-            self.index_token[index] = token
-            return index
-        else:
-            return self.token_index[token]
-        
-class TokenizedShellCode:
-    def __init__(self) -> None:
-        self.tokens_tracker = TokenTracker()
-        self._PADDING = self.tokens_tracker.add_token("<PADDING>")
-        self.start_offset = self.tokens_tracker.add_token("<START_OFFSET>")
-        self.end_offset = self.tokens_tracker.add_token("<END_OFFSET>")
-        self.start_instruction = self.tokens_tracker.add_token("<START_INSTRUCTION>")
-        self.end_instruction = self.tokens_tracker.add_token("<END_T_INSTRUCTION>")
+class TokenizedShellCode(SimpleTokenizer):
+    def __init__(self, dataloader) -> None:
+        super().__init__()
         self.program_mapping = {}
         self.program_array = []
         self.raw_program = []
         self.token_program = []
-        self.sequence_size = 100 # 356
+        """
+        How big sequence do you want to have as the input ? 
+        """
+        self.sequence_size = 256
         self.longest_program_length = 0
+        self.dataloader = dataloader
 
     @property
     def n_tokens(self):
         return len(self.tokens_tracker.token_index) + 1
 
     def create(self):
-        for (raw_program, name) in get_shellcode():
-            program = []
-            for j in raw_program.split("\n"):
-                split = j.split(":")
-                offset = split[0].strip()
-                instruction = split[1]
-
-                instruction_split = instruction.strip().split("   ")
-                opcode = instruction_split[0]
-                arguments = list(map(
-                    lambda x: self.tokens_tracker.add_token(x.strip()),
-                    instruction_split[1].strip().split(",")
-                )) if len(instruction_split) == 2 else []
-
-                instruction = [
-                    self.start_offset,
-                    self.tokens_tracker.add_token(offset),
-                    self.end_offset,
-                    self.start_instruction,
-                    self.tokens_tracker.add_token(opcode),
-                ] + arguments + [self.end_instruction]
-                program += instruction
-            self.raw_program.append(raw_program)
-            self.program_mapping[name] = program
-            self.token_program.append("\n".join(
-                list(map(str, program))
-            ))
-            self.program_array.append(program)
-            self.longest_program_length = max(len(program), self.longest_program_length)
+        for output_format in self.dataloader.get_shellcode():
+            sequence_program = []
+            for j in output_format.code.split("\n"):
+                instruction = self.dataloader.get_token_transformed(self, j)
+                sequence_program += instruction
+            self.raw_program.append(output_format.code)
+            self.program_mapping[output_format.id] = sequence_program
+            self.token_program.append("\n".join(list(map(str, sequence_program))))
+            self.program_array.append(sequence_program)
+            self.longest_program_length = max(len(sequence_program), self.longest_program_length)
         return self
 
     def save(self):
@@ -106,8 +74,6 @@ class TokenizedShellCode:
             padded_tensor = i + [self._PADDING] * (self.round_to_closest_sequence_batch_size(len(i)) - len(i))
             for index in range(0, len(padded_tensor), self.sequence_size):
                 current = torch.tensor(padded_tensor[index:index+self.sequence_size]).unsqueeze(0)
-             #   print(current.shape)
-             #   print(len(padded_tensor), len(i))
                 if self.tensor is None:
                     self.tensor = current
                 else:
@@ -123,10 +89,15 @@ class TokenizedShellCode:
         base = self.sequence_size
         return base * math.ceil(x/base)
 
+def get_current_dataset():
+    return TokenizedShellCode(
+        ShellcodeDataset()
+        #ShellcodeDebugDataset()
+    ).load()
+
 def get_dataloader():
-    dataset = TokenizedShellCode().load()
+    dataset =  get_current_dataset()
     return get_raw_dataloader(dataset.program_tensor, dataset.index_tensor, batch_size=8), dataset
 
 if __name__ == "__main__":
     TokenizedShellCode().create().save()
-    
