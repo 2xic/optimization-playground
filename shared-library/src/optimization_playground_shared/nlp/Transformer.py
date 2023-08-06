@@ -2,6 +2,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 from torch import Tensor
 import torch
+from .PositionalEncoding import PositionalEncoding
 
 @dataclass
 class Config:
@@ -33,14 +34,19 @@ class TransformerModel(nn.Module):
             nn.Linear(config.embedding_dim, config.decoder_vocab),
             nn.LogSoftmax(dim=1)
         ]) 
+        self.pos_encoder = PositionalEncoding(
+            config.embedding_dim, 
+            config.dropout
+        )
+
         # (SEQ_LEN, BATCH_SIZE, EMBEDDING_DIM)
 
     def forward(self, X: Tensor, y: Tensor):
         assert len(X.shape) == 2
         assert len(y.shape) == 2
         # embedding
-        source = self.encoder_embedding(X)#.permute(1, 0, 2)
-        target = self.decoder_embedding(y)#.permute(1, 0, 2)
+        source = self.encoder_embedding(X) + self.pos_encoder(X) #.permute(1, 0, 2)
+        target = self.decoder_embedding(y) + self.pos_encoder(X) #.permute(1, 0, 2)
         # forward
         memory = self.transformer_encoder(source)
         transformer_out = self.transformer_decoder(target, memory)
@@ -56,16 +62,23 @@ class TransformerModel(nn.Module):
         y  = []
         target = torch.zeros_like(X)
         for index in range(steps):
-            print(X)
-            print(target)
-            print("")
             y.append(
                 self.forward_argmax(
                     X,
                     target
-                )[0][index]
+                )[0][min(index, X.shape[1] - 1)]
             )
-            X[0][index + 1] = y[-1]
-            target[0][index] = y[-1]
+            """
+            TEMP: Hacky plz fix
+            """
+            if (index + 1) < X.shape[-1]:
+                X[0][index + 1] = y[-1]
+                target[0][index] = y[-1]
+            else:
+                # Shift then add at last index
+                X[0][:-2] = X.clone()[0][1:-1]
+                target[0][:-2] = target.clone()[0][1:-1]
+                # add
+                X[0][-1] = y[-1]
+                target[0][-1] = y[-1]
         return y
-
