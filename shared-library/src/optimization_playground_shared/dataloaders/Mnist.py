@@ -11,8 +11,8 @@ def get_dataloader(batch_size=64, overfit=False, subset=None):
         train_ds = torch.utils.data.Subset(train_ds, list(range(0, subset)))
         #test_ds = torch.utils.data.Subset(test_ds, list(range(0, subset)))
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size)
-    test_loader = DataLoader(test_ds, batch_size=batch_size)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=True)
 
     if overfit:
         idx = train_ds.targets == 8

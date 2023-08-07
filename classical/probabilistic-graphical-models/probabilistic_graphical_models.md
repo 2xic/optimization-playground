@@ -1,3 +1,4 @@
+## Graphical model
 ## theory
 - Chapter 14 in Artificial intelligence an modern approach
 

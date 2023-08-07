@@ -70,6 +70,7 @@ class Plot:
 
         self._create_output_folder(name)
         plt.savefig(name)
+        self._clear()
 
     def plot_figures(self, figures, name):
         n_cols = len(figures)
@@ -99,10 +100,8 @@ class Plot:
 
         self._create_output_folder(name)
         plt.savefig(name)
-        plt.clf()
-        plt.cla()
-        plt.close('all')
-
+        self._clear()
+        
     def plot_scatter(self, figure: Scatter, name: str):
         for legend, value in figure.plots.items():
             plt.scatter(value.X, value.y, label=legend)
@@ -110,9 +109,7 @@ class Plot:
         plt.legend(loc="upper left")
         plt.title(figure.title)
         plt.savefig(name)
-        plt.clf()
-        plt.cla()
-        plt.close('all')
+        self._clear()
 
     def _convert_list(self, entry):
         if isinstance(entry, torch.Tensor):
@@ -123,3 +120,7 @@ class Plot:
         dirname = os.path.dirname(os.path.abspath(name))
         os.makedirs(dirname, exist_ok=True)
 
+    def _clear(self):
+        plt.clf()
+        plt.cla()
+        plt.close('all')

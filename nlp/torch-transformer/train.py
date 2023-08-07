@@ -34,8 +34,7 @@ y_target = torch.concat([
     target_vocab.get_tensor("example text that should return <END>", sequence_length=SEQUENCE_LENGTH),
 ], dim=0)
 assert X.shape[0] == y.shape[0]
-#print(X)
-#print(y)
+
 source_vocab.lock()    
 target_vocab.lock()
 
