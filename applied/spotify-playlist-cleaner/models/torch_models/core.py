@@ -1,5 +1,4 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.training_loops.TrainingLoopPlot import TrainingLoopPlot
@@ -29,10 +28,9 @@ class BaseTorchModel(torch.nn.Module):
         y = torch.tensor(y)
 
         optimizer = torch.optim.Adam(self.parameters())
-        dataloader = get_dataloader(X, y)
+        dataloader = get_dataloader((X, y))
 
         TrainingLoopPlot(TrainingLoop(
             self,
             optimizer
         )).fit(dataloader, 3_000)
-

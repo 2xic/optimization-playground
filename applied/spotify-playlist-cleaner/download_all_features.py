@@ -1,7 +1,8 @@
-import api
+from api import Api
 import json
 
 if __name__ == "__main__":
+    api = Api()
     with open("config.json", "r") as file:
         json_data = json.loads(file.read())
         for playlist_id in json_data["include"]:

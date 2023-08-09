@@ -1,10 +1,13 @@
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn import svm
+from sklearn.cluster import KMeans
 from .cosine_sim import CosineSim
 from .torch_models.linear_torch_model import LinearTorchModel
 from .torch_models.conv_torch_model import ConvTorchModel
 from optimization_playground_shared.clustering.ElbowKmeans import ElbowKmeans
+from xgboost import XGBClassifier
+import numpy as np
 
 def find_model(X, y, x_test, y_test, log=True):
     best_model = None
@@ -13,6 +16,7 @@ def find_model(X, y, x_test, y_test, log=True):
     for clf in [
         ConvTorchModel(len(X[0]), max(y) + 1),
         LinearTorchModel(len(X[0]), max(y) + 1),
+        XGBClassifier(),
         RandomForestClassifier(max_depth=22),
         RandomForestClassifier(max_depth=14),
         RandomForestClassifier(max_depth=12),
@@ -29,6 +33,7 @@ def find_model(X, y, x_test, y_test, log=True):
         ),
         CosineSim(),
         ElbowKmeans(),
+        KMeans(n_clusters=np.max(np.unique(y)))
     ]:
         clf.fit(X, y)
         accuracy = accuracy_score(clf.predict(x_test), y_test)

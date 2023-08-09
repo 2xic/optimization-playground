@@ -2,20 +2,26 @@ from flask import Flask, request
 from flask import render_template
 from model import get_model
 from utils import build_suggestion
-from api import play_song, move_song, get_song_feature
+from api import Api
 from move_songs import MoveSongs
 import atexit
 from utils import features
 
 best_model, dataset = get_model()
-combined, reorganize_playlist =  build_suggestion(best_model, dataset)
+combined, reorganize_playlist = build_suggestion(best_model, dataset)
 moved = MoveSongs()
 app = Flask(__name__)
+api = Api(
+    is_cache_only_mode=False
+)
+
 
 def save_move():
     moved.save()
 
+
 atexit.register(save_move)
+
 
 @app.route("/")
 def index():
@@ -25,15 +31,17 @@ def index():
     ))[:400]
     return render_template('frontend.html', suggestions=suggestions)
 
+
 @app.route("/song", methods=["GET"])
 def api_get_song_features():
     song_id = request.args.get("song_id")
-    return get_song_feature(song_id)
+    return api.get_song_feature(song_id)
+
 
 @app.route("/recommendations", methods=["GET"])
 def api_get_song_playlist_recommendation():
     song_id = request.args.get("song_id")
-    song_features = list(get_song_feature(song_id))[0]
+    song_features = list(api.get_song_feature(song_id))[0]
     print(song_features)
     dataset_features = dataset.get_song_features(
         song_features,
@@ -44,17 +52,19 @@ def api_get_song_playlist_recommendation():
     ])[0]]
     return dataset.ids_to_name[playlist_id]
 
+
 @app.route("/play", methods=["POST"])
 def play():
     song_id = request.args.get("song_id")
-    play_song(song_id)
+    api.play_song(song_id)
     return "OK"
+
 
 @app.route("/move_song", methods=["POST"])
 def server_move_song():
     song_id = request.args.get("song_id")
     playlist_id = request.args.get("playlist_id")
-    move_song(
+    api.move_song(
         song_id,
         reorganize_playlist,
         playlist_id,

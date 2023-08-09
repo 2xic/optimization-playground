@@ -1,4 +1,4 @@
-import api
+from api import Api
 
 class Dataset:
     def __init__(self) -> None:
@@ -7,10 +7,11 @@ class Dataset:
         self.ids_songs = {}
         self.id_class = {}
         self.class_id = {}
+        self.api = Api(is_cache_only_mode=True)
 
     def load(self, exclude=[], include=None, minimum=10):
         count = 0
-        for playlist in api.get_playlists():
+        for playlist in self.api.get_playlists():
             if include is not None and playlist.id not in include:
                 continue
             if playlist.id in exclude:
@@ -23,7 +24,7 @@ class Dataset:
     
     def load_playlist(self, id):
         if id not in self.ids_features:
-            for playlist in api.get_playlists():
+            for playlist in self.api.get_playlists():
                 if playlist.id == id:
                     self.ids_to_name[playlist.id] = playlist.name
                     songs, features = self._get_songs(playlist.id)
@@ -101,10 +102,10 @@ class Dataset:
         features = []
         all_songs = []
         while True:
-            songs = api.get_playlist_songs(playlist_id, offset=offset)
+            songs = self.api.get_playlist_songs(playlist_id, offset=offset)
             delta = 0
             for song in songs:
-                i = list(api.get_song_feature(id=song.id))[0]
+                i = list(self.api.get_song_feature(id=song.id))[0]
                 features.append(i)
                 all_songs.append(song)
                 delta += 1

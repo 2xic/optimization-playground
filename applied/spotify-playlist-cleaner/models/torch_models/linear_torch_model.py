@@ -1,6 +1,4 @@
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from .core import BaseTorchModel
 
 class LinearTorchModel(BaseTorchModel):
