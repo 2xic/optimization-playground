@@ -14,7 +14,6 @@ from optimization_playground_shared.dataloaders.ResnetCifar10 import get_dataloa
 from optimization_playground_shared.utils.Timer import Timer
 from torch.utils.data.distributed import DistributedSampler
 import json
-from torch.utils.data.dataloader import default_collate
 import sys
 
 torch.backends.cudnn.benchmark = True
@@ -48,8 +47,7 @@ def core(gpu_id, size):
     pytorch_total_params = sum(p.numel() for p in model.parameters())
     train, test, _, _ = get_dataloader(
         shuffle=False,
-        sampler=(lambda dataset: DistributedSampler(
-            dataset)) if RUN_ON_MULTIPLE_GPUS else None,
+        sampler=(lambda dataset: DistributedSampler(dataset)) if RUN_ON_MULTIPLE_GPUS else None,
         transforms=data_transform,
         batch_size=512,
         num_workers=8,
@@ -57,10 +55,7 @@ def core(gpu_id, size):
     if torch.__version__.startswith("2."):
         torch.compile(model)
     optimizer = torch.optim.Adam(model.parameters())
-    global_timer = GlobalTimeSpentInFunction()
 
-    training = []
-    testing = []
     trainer = None
     if RUN_ON_MULTIPLE_GPUS:
         trainer = TrainingLoopDistributedAccumulate(

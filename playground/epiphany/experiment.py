@@ -3,7 +3,7 @@ Training on one GPU takes a long time
 """
 from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
-from optimization_playground_shared.models.TrainingLoop import TrainingLoop
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 import torch.optim as optim
 import json
 
