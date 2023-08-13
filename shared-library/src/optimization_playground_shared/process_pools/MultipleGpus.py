@@ -1,26 +1,22 @@
 """
 Training on multiple GPUs
 """
-from typing import Callable
-from ..distributed.TrainingLoopDistributed import TrainingLoopDistributed
-import torch.optim as optim
-import time
 import torch.multiprocessing as mp
-from torch.utils.data.distributed import DistributedSampler
 from torch.distributed import init_process_group, destroy_process_group
-import os
 import torch
-import json
+import atexit
 
 def ddp_setup(rank: int, world_size: int):
     """
-    Args:
-        rank: Unique identifier of each process
-       world_size: Total number of processes
+    Using a master port and master address sometimes work, but 
+    not on all machines like using `MASTER_ADDR` and `MASTER_PORT` 
     """
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    init_process_group(backend="nccl", rank=rank, world_size=world_size)
+    init_process_group(
+        backend="nccl", 
+        rank=rank, 
+        world_size=world_size,
+        init_method="file:///tmp/peers"
+    )
 
 def run_on_multiple_gpus(gpu_call, *args):
     world_size = torch.cuda.device_count()
@@ -28,3 +24,12 @@ def run_on_multiple_gpus(gpu_call, *args):
         world_size,
     ) + args, nprocs=world_size)
     return output
+
+def cleanup():
+    try:
+        destroy_process_group()
+    except Exception as e:
+        print("Failed to cleanup destroy")
+
+# destroys the process group
+atexit.register(cleanup)

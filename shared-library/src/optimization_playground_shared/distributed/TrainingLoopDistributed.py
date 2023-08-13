@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
+from tqdm import tqdm
 
 class TrainingLoopDistributed:
     def __init__(self, 
@@ -10,11 +11,12 @@ class TrainingLoopDistributed:
                  loss=nn.NLLLoss()
         ):
         self.gpu_id = gpu_id
-        self.model = DDP(model.to(gpu_id), device_ids=[gpu_id])#, find_unused_parameters=True)
+        self.model = DDP(model.to(gpu_id), device_ids=[gpu_id])
         self.optimizer = optimizer
         self.loss = loss
         self.epoch = 0
-        
+        self.is_main_gpu = self.gpu_id == 0
+
     def eval(self, dataloader):
         (_, acc) = self._iterate(dataloader, train=False)
         return acc
@@ -28,6 +30,8 @@ class TrainingLoopDistributed:
         accuracy = torch.tensor(0.0, device=device)
         length = 0
         dataloader.sampler.set_epoch(self.epoch)
+
+        dataloader = tqdm(dataloader) if self.is_main_gpu else dataloader
 
         for _, (X, y) in enumerate(dataloader):
             X = X.to(device)
@@ -47,11 +51,13 @@ class TrainingLoopDistributed:
             length += X.shape[0]
         accuracy = (accuracy / length) * 100 
 
-        if self.gpu_id == 0:
-            print(f"[GPU{self.gpu_id}] Epoch {self.epoch} | Loss {total_loss.item()} | Accuracy {accuracy}")
-
+        epoch = self.epoch
         self.epoch += 1
-        return (
-            total_loss,
-            accuracy
-        )
+
+        if self.gpu_id == 0:
+            print(f"[GPU{self.gpu_id}] Epoch {epoch} | Loss {total_loss.item()} | Accuracy {accuracy}")
+            return (
+                total_loss,
+                accuracy
+            )
+        return None

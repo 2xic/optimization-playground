@@ -2,10 +2,8 @@
 Train to predict next pixel from the previous batch of pixels
 """
 from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
-#from optimization_playground_shared.dataloaders.Mnist import get_dataloader
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
-# from optimization_playground_shared.nlp.Transformer import TransformerModel, Config
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 import torch
 import torch.optim as optim
@@ -27,7 +25,6 @@ train, _ = get_dataloader(
     ])
 )
 vocab = SimpleVocab()
-# device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 SEQUENCE_SIZE = image_size * image_size
 X_input = []

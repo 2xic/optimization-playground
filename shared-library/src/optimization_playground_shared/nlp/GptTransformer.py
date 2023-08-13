@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from torch import Tensor
 import torch
 from .PositionalEncoding import PositionalEncoding
+from .utils.sampling import temperature_sampling
 
 """
 GPT is a decoder only 
@@ -75,12 +76,11 @@ class GptTransformerModel(nn.Module):
         for index in range(steps):
             next_predicted = None
             if (len(seed) - 1) < index:
-                X = torch.zeros(1, self.sequence_size).reshape(
-                    1, -1).to(device).long()
+                X = torch.zeros(1, self.sequence_size).reshape(1, -1).to(device).long().fill_(self.config.padding_index)
                 copy = torch.tensor(output[-self.sequence_size:]).long()
                 X[0, :copy.shape[0]] = copy
 
-                next_predicted = self.forward_argmax(
+                next_predicted = temperature_sampling(
                     X
                 ).item()
                 output.append(next_predicted)

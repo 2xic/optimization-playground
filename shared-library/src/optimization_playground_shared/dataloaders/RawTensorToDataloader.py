@@ -6,7 +6,7 @@ class _RawTensorDataset(Dataset):
         self.tuple_list = tuple_list
 
     def __len__(self):
-        return len(self.tuple_list[0])
+        return self.tuple_list[0].shape[0]
 
     def __getitem__(self, idx):
         return ([item[idx] for item in self.tuple_list])

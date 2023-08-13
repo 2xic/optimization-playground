@@ -26,6 +26,12 @@ class SimpleVocab:
             self.vocab.add(i)
 
     def get_tensor(self, sentence, sequence_length):
+        if sequence_length == -1:
+            output = []
+            for index, i in enumerate(sentence.split(" ")[:sequence_length]):
+                output.append(self.vocab.add(i))
+            return torch.tensor([output])
+
         torch_tensor = torch.zeros((1, sequence_length)).fill_(self.vocab.PADDING_IDX).long()
         if sentence is not None:
             for index, i in enumerate(sentence.split(" ")[:sequence_length]):
