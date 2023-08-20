@@ -72,7 +72,7 @@ class MainNet(nn.Module):
         self.fc1 = nn.Linear(16 * self.output_shape[0] * self.output_shape[1], 256)
         self.out = nn.Sequential(
             self.fc1,
-            nn.Softmax(dim=1),
+            nn.LogSoftmax(dim=1),
         )
 
     def forward(self, x):

@@ -12,4 +12,7 @@ Some methods for exploration bonus used in the past is
 
 *Some notes*
 - The target network is never trained, it's has the seed random weigths from start to finish, but the predictor network is trained
-- 
+
+## Results
+
+![rewards](./rewards.png)

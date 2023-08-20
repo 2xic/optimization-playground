@@ -5,4 +5,7 @@ The policy network is an RNN which receives the tuple `(state, action, reward, t
 
 Some other notes
 - They use GRU to circumvent exploding gradients problems and output should be softmax.
-- ^ 
+
+
+## Results
+![rewards](./rewards.png)

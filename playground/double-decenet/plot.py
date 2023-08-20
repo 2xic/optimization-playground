@@ -61,7 +61,8 @@ for output_name, field, title in [
     step_size = 100
     img = np.zeros((max_width, (max_size // step_size) + 1))
     for i in line_plot:
-        y = line_plot[i][::step_size]
+        # show the error instance of accuracy
+        y = list(map(lambda x: 100 - x, line_plot[i][::step_size]))
         x = int(i)
         img[x, :len(y)] = y
     im = plt.imshow(img.T, cmap='jet')
@@ -69,6 +70,7 @@ for output_name, field, title in [
         matplotlib.ticker.FuncFormatter(lambda x, _: int(
             x * step_size
         )))
+    ax.invert_yaxis()
     ax.set_ylabel("Epochs")
     ax.set_xlabel("Resnet width")
     plt.title("Epoch wise double decent")

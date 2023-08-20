@@ -1,7 +1,7 @@
 # Writeup Recurrent World Models Facilitate Policy Evolution
 
 ## paper notes
-See [recurrent_world_models_facilitate_policy_evolution.md](./recurrent_world_models_faciliate_policy_evolution.md)
+See [recurrent_world_models_facilitate_policy_evolution.md](./recurrent_world_models_facilitate_policy_evolution.md)
 
 ## setup
 

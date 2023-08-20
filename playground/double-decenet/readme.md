@@ -6,9 +6,7 @@ Trying to replicate some of the plots from [deep double descent: where bigger mo
 Lambda used to have 8 GPU instances for me, but no more :( ended up switching to vast.ai
 
 ### Results
-The current results are without the label noise, since I don't see the same phenomena as OpenAI, I assume it might be a cause. The results are still interesting though. 
-
-Only a subset of the width are trained currently namely 1,2, ..., 10, 12, 16, 32, 64, 128. More models are trained as we speak :) 
+The current results are without the label noise, since I don't see the exact same phenomena as OpenAI, I assume it might be a cause. The results are still interesting though. 
 
 ![Resnet width / Test Accuracy](./plots/test_plot.png)
 

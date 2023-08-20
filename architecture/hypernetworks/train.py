@@ -7,8 +7,10 @@ import torch.optim as optim
 from optimization_utils.plotters.SimplePlot import SimplePlot
 from optimization_utils.plotters.LinePlot import LinePlot
 from optimization_utils.logging.EpochRuns import EpochRuns
+import torch
 
-EPOCHS = 3
+EPOCHS = 5
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 def train_hyper_network():
@@ -69,7 +71,7 @@ if __name__ == "__main__":
         [
             LinePlot(y=hyper_network, legend="hyper network",
                      title="Test accuracy", y_text="Accuracy (%)", x_text="Epoch"),
-            LinePlot(y=baseline, legend="non hyper network variant", y_max=100, y_min=0),
+            LinePlot(y=baseline, legend="non hyper network variant", y_max=100, y_min=50),
         ],
     )
 
