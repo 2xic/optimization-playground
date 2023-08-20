@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from tqdm import tqdm
 
 class TrainingLoop:
     def __init__(self, model, optimizer, loss=nn.NLLLoss()):

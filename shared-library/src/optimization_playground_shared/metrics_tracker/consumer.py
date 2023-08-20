@@ -9,6 +9,7 @@ import json
 import dataclasses
 import glob
 from.plot import plot_xy
+import base64
 
 root_data_directory = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -142,16 +143,29 @@ def run(project_name, run_id):
     accuracy_plot = plot_xy(
         list(map(lambda x: x["training_accuracy"], data))
     )
-    predictions = list(map(lambda x: "<br>".join([
-        "<h1>" + str( x["epoch"]) + "</h1>",
-        x["prediction"]["value"].replace("\n", "<br>")
-    ]), data))[-5:]
+    predictions = list(map(lambda x: get_prediction_format(x), data))[-5:]
     return "<br>".join([
-        "<h1>Metrics</h1>",
+        "<h2>Loss</h2>",
         loss_plot,
+        "<h2>Accuracy</h2>",
         accuracy_plot,
-        "<br>".join(predictions)
+        "<br>".join(predictions),
+        "<h1>Metrics</h1>",
     ])
+
+def get_prediction_format(entry):
+    value = [
+        "<h3>{epoch}</h3>".format(epoch=entry["epoch"])
+    ]
+    if entry["prediction"]["prediction_type"] == "text":
+        value.append(entry["prediction"]["value"].replace("\n", "<br>"))
+    elif entry["prediction"]["prediction_type"] == "image":
+        data = base64.b64encode(
+            # slice the 0x
+            bytes.fromhex(entry["prediction"]["value"][2:])
+        ).decode("ascii")
+        value.append(f"<img src='data:image/png;base64,{data}'/>")
+    return "<br>".join(value)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=8181)

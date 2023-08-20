@@ -17,6 +17,7 @@ class MultipleGpuTrainWrapper(abc.ABC):
     def _main(self, gpu_id, world_size, is_debug_mode):
         if not is_debug_mode:
             ddp_setup(gpu_id, world_size)
+        print(f"is_debug_mode : {is_debug_mode}, gpu_id: {gpu_id}")
         self._core(
             gpu_id,
             is_debug_mode
@@ -39,12 +40,14 @@ class MultipleGpuTrainWrapper(abc.ABC):
             trainer = TrainingLoop(
                 model=model,
                 optimizer=optimizer,
+                loss=self._loss()
             )
         print(f"Starting to train on {gpu_id}")
         for epoch in range(1_000):
             results = trainer.train(dataloader)
             if results is not None:
                 (loss, accuracy) = results
+                print(f"loss: {loss}, accuracy: {accuracy}")
                 self._epoch_done(epoch, model, loss, accuracy, gpu_id)
 
     @abc.abstractmethod

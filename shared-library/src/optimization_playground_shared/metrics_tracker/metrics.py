@@ -19,6 +19,16 @@ class Prediction:
             prediction_type="text"
         )
 
+    @classmethod
+    def image_prediction(cls, path):
+        with open(path, "rb") as image:
+            f = image.read()
+            b = bytearray(f).hex()
+            return Prediction(
+                value="0x" + b,
+                prediction_type="image"
+            )
+
 @dataclass
 class Metrics:
     epoch: int

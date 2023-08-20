@@ -14,6 +14,11 @@ from torchvision.transforms import Compose, ToTensor, Resize, Grayscale
 from collections import defaultdict
 from optimization_playground_shared.distributed.TrainWrapper import MultipleGpuTrainWrapper
 from torch.utils.data.distributed import DistributedSampler
+from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
+from optimization_playground_shared.metrics_tracker.metrics import Prediction
+from optimization_playground_shared.utils.GetParameterCoumt import get_parameter_count
+
+metrics_tracker = Tracker("image_gpt_overfit")
 
 image_size = 20
 train, _ = get_dataloader(
@@ -52,13 +57,15 @@ for X, _ in train:
             vector_state[" ".join(
                 vector[max(0, index - SEQUENCE_SIZE):index])] += 1
         vectors.append(vector)
+        # remove to not overfit
+        break
     break
 
 
 X_input = torch.concat(X_input, dim=0)
 y_target = torch.concat(y_target, dim=0)
 
-print(X_input.shape)
+print("Ready to serve ", X_input.shape)
 # exit(0)
 
 class Trainer(MultipleGpuTrainWrapper):
@@ -70,26 +77,29 @@ class Trainer(MultipleGpuTrainWrapper):
     def _get_model_and_optimizer(self):
         config = Config(
             vocab_size=vocab.size,
-            embedding_dim=512,
-            transformer_layers=4,
+            # try to overfit
+            embedding_dim=1024,
+            transformer_layers=1,
             attention_heads=8,
             dropout=0,
-            feed_forward=256,
+            feed_forward=512,
             padding_index=vocab.vocab.PADDING_IDX,
             sequence_size=SEQUENCE_SIZE
         )
         model = GptTransformerModel(config)
-        optimizer = optim.Adam(model.parameters())
+        optimizer = optim.Adam(model.parameters(), lr=1e-4)
+        print(f"Total Trainable Params: {get_parameter_count(model)}")
+
         return model, optimizer
 
-    def _get_dataloader(self, device):
+    def _get_dataloader(self, device, is_debug_mode):
         return get_raw_dataloader((
             X_input.clone(),
             y_target.clone()
         ),
             batch_size=256,
-            shuffle=False,
-            sampler=lambda dataset: DistributedSampler(dataset, shuffle=True)
+            shuffle=(False if not is_debug_mode else True),
+            sampler=(lambda dataset: DistributedSampler(dataset, shuffle=True) if not is_debug_mode else None)
         )
 
     def _epoch_done(self, epoch, model, loss, accuracy, device):
@@ -124,7 +134,7 @@ class Trainer(MultipleGpuTrainWrapper):
                 device=device,
             )
             output_image = decode_image(y)
-            Plot().plot_image([
+            inference = Plot().plot_image([
                 Image(
                     image=input_image,
                     title='input'
@@ -137,36 +147,24 @@ class Trainer(MultipleGpuTrainWrapper):
                     image=expected_tensor,
                     title='truth'
                 )
-            ], f'debug/{epoch}.png')
+            ], f'inference.png')
 
-            plot = Plot()
-            name = 'image_gpt'
-            plot.plot_figures(
-                figures=[
-                    Figure(
-                        plots={
-                            "Loss": self.training_loss,
-                        },
-                        title="Training loss",
-                        x_axes_text="Epochs",
-                        y_axes_text="Loss",
-                    ),
-                    Figure(
-                        plots={
-                            "Training accuracy": self.training_accuracy,
-                        },
-                        title="Accuracy",
-                        x_axes_text="Epochs",
-                        y_axes_text="accuracy",
-                    ),
-                ],
-                name=f'debug/training_{name}.png'
+            metrics_tracker.log(
+                Metrics(
+                    epoch=epoch,
+                    loss=loss,
+                    training_accuracy=accuracy,
+                    prediction=Prediction.image_prediction(
+                        inference
+                    )
+                )
             )
 
-#    @abc.abstractclassmethod
     def _loss(self):
         return torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX)
 
 if __name__ == "__main__":
     trainer = Trainer()
-    trainer.start()
+    trainer.start(
+        is_debug_mode=True
+    )

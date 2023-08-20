@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from torch import Tensor
 import torch
 from .PositionalEncoding import PositionalEncoding
-from .utils.sampling import temperature_sampling
+from .utils.sampling import temperature_sampling, argmax_sampling
 
 """
 GPT is a decoder only 
@@ -39,7 +39,6 @@ class GptTransformerModel(nn.Module):
         self.output = nn.Sequential(*[
             nn.Linear(config.embedding_dim *
                       config.sequence_size, config.vocab_size),
-            #    nn.LogSoftmax(dim=1)
         ])
         self.pos_encoder = PositionalEncoding(
             config.embedding_dim,
@@ -64,13 +63,6 @@ class GptTransformerModel(nn.Module):
         prediction = self.forward(x)
         return prediction.argmax(dim=1)
 
-    def forward_sample_top5(self, x, y):
-        prediction = self.forward(x, y)
-        (_, indexes) = torch.topk(prediction, 3)
-        indexes = indexes[0]
-        random_index = torch.randperm(len(indexes))[:1]
-        return indexes[random_index]
-
     def rollout(self, seed, steps, device):
         output = []
         for index in range(steps):
@@ -80,6 +72,7 @@ class GptTransformerModel(nn.Module):
                 copy = torch.tensor(output[-self.sequence_size:]).long()
                 X[0, :copy.shape[0]] = copy
 
+                X = self.forward(X)
                 next_predicted = temperature_sampling(
                     X
                 ).item()

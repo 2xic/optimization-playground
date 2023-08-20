@@ -5,12 +5,15 @@ import torch.multiprocessing as mp
 from torch.distributed import init_process_group, destroy_process_group
 import torch
 import atexit
+import os
 
 def ddp_setup(rank: int, world_size: int):
     """
     Using a master port and master address sometimes work, but 
     not on all machines like using `MASTER_ADDR` and `MASTER_PORT` 
     """
+    if os.path.isfile("/tmp/peers"):
+        print(f"Note that peer exists :) ({rank})")
     init_process_group(
         backend="nccl", 
         rank=rank, 

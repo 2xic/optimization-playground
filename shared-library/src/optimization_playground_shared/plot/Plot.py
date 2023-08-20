@@ -72,6 +72,8 @@ class Plot:
         plt.savefig(name)
         self._clear()
 
+        return name
+
     def plot_figures(self, figures, name):
         n_cols = len(figures)
         n_rows = 1

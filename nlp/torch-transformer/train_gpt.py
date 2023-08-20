@@ -126,4 +126,6 @@ class Trainer(MultipleGpuTrainWrapper):
 
 if __name__ == "__main__":
     trainer = Trainer()
-    trainer.start()
+    trainer.start(
+        is_debug_mode=False
+    )

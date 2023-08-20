@@ -44,7 +44,7 @@ TODO: Look at this blogpost
 - Builds up an intuition about how the chatgpt model works from a n-char probability model to a n-word probability model.
 - In addition he has some nice visualizations for the attention layers
 
-### GPT-v4 
+## GPT-v4 
 GPT-4 is out [paper](https://cdn.openai.com/papers/gpt-4.pdf) has to be read.
 So the first thing is that the new model is now a MLLM model, so it's able to take both images and text as input, and gives text as output (following the trend set by other models).
 Core part of the project was the infrastructure and optimization methods to give predictability, and they were able to infer (in some aspects) how the model would behave on as little as 1 / 1000th of the compute of the final model.
@@ -73,4 +73,9 @@ The interference cluster is assumed to be 128 GPUs.
 **Cost of training**
 ~63 mil USD
 
+
+## [Five years of GPT progress](https://finbarr.ca/five-years-of-gpt-progress/)
+- The initial GPT paper wasn't all that special. Even OpenAI might have had it as just a side project.
+- GPT-2 is scaled up. Bigger dataset and more tokens. Minor tweaks of the model with usage of layernorm.
+- GPT-3 is scaled up again.
 
