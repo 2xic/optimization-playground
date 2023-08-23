@@ -1,4 +1,4 @@
-from env import Env
+from optimization_playground_shared.rl.atari_env import Env
 import torch
 from replay_buffer import ReplayBuffer
 import torch.nn as nn

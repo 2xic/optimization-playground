@@ -51,12 +51,14 @@ class Env:
         observation, _ = self.env.reset()
         action = None
         previous_observation = None
+        reward = None
         while True:
             if action is not None and previous_observation is not None:
                 yield (
                     self._get_torch_tensor(observation),
                     self._get_torch_tensor(previous_observation),
-                    action
+                    action,
+                    reward
                 )
             action = self.env.action_space.sample()
             previous_observation = observation

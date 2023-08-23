@@ -1,6 +1,6 @@
 from utils import *
 from replay_buffer import ReplayBuffer
-from env import Env
+from optimization_playground_shared.rl.atari_env import Env
 import random
 import torch.optim as optim
 from optimization_playground_shared.models.SimpleVaeModel import SimpleVaeModel
@@ -56,7 +56,7 @@ def train_encoder():
     progress = tqdm(range(VAE_TRAINING_STEPS), desc='Training encoder')
     for epoch in progress:
         while not replay_buffer.is_filled or random.randint(0, 10) == 2:
-            for (observation, _, _) in env.random_play():
+            for (observation, _, _, _) in env.random_play():
                 observation = observation.unsqueeze(0)
                 replay_buffer.add(observation)
 

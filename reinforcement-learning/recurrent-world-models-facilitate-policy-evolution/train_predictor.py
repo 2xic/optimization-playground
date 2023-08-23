@@ -1,6 +1,6 @@
 from utils import *
 from replay_buffer import ReplayBuffer
-from env import Env
+from optimization_playground_shared.rl.atari_env import Env
 import torch.nn as nn
 from train_encoder import Vae, get_trained_encoder
 import random

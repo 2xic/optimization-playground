@@ -1,7 +1,7 @@
 from train import Agent
 from train_encoder import get_trained_encoder
 from train_predictor import get_trained_predictor
-from env import Env
+from optimization_playground_shared.rl.atari_env import Env
 from utils import save_image
 
 def eval_loop():
