@@ -140,24 +140,29 @@ def run(project_name, run_id):
     loss_plot = plot_xy(
         list(map(lambda x: x["loss"], data))
     )
-    accuracy_plot = plot_xy(
-        list(map(lambda x: x["training_accuracy"], data))
-    )
+    accuracy = ""
+    if not all(list(map(lambda x: x["training_accuracy"] is None, data))):
+        accuracy_plot = plot_xy(
+            list(map(lambda x: x["training_accuracy"], data))
+        )
+        accuracy =  "<h2>Accuracy</h2>" + accuracy_plot
+        
     predictions = list(map(lambda x: get_prediction_format(x), data))[-5:]
     return "<br>".join([
         "<h2>Loss</h2>",
         loss_plot,
-        "<h2>Accuracy</h2>",
-        accuracy_plot,
-        "<br>".join(predictions),
+        accuracy,
         "<h1>Metrics</h1>",
+        "<br>".join(predictions),
     ])
 
 def get_prediction_format(entry):
     value = [
         "<h3>{epoch}</h3>".format(epoch=entry["epoch"])
     ]
-    if entry["prediction"]["prediction_type"] == "text":
+    if entry["prediction"] is None:
+        value.append("*no metrics*")
+    elif entry["prediction"]["prediction_type"] == "text":
         value.append(entry["prediction"]["value"].replace("\n", "<br>"))
     elif entry["prediction"]["prediction_type"] == "image":
         data = base64.b64encode(

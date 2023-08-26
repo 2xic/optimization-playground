@@ -1,36 +1,51 @@
 import gymnasium as gym
-from PIL import Image 
+from PIL import Image
 import torch
 import torchvision.transforms as transforms
+from .Agent import Agent
+from .Buffer import Buffer, EnvStateActionPairs
 
 class Env:
-    def __init__(self):
+    def __init__(self, size=40):
+        self.size = size
         self.env = gym.make("ALE/MsPacman-v5", obs_type="grayscale")
         self.action_size = self.env.action_space.n
         self.transforms = transforms.Compose([
-             transforms.Resize((40, 40)),
-             transforms.ConvertImageDtype(torch.float),
-         ])
+            transforms.Resize((size, size)),
+            transforms.ConvertImageDtype(torch.float),
+        ])
 
     def reset(self) -> torch.Tensor:
         observation, _info = self.env.reset()
         return self._get_torch_tensor(observation)
-    
-    def agent_play(self, agent):
+
+    def agent_play(self, agent: Agent) -> Buffer:
         agent.reset()
         observation, _ = self.env.reset()
+        buffers = Buffer()
+        eps = 1e6
+        rewards = []
         while True:
             old_observation = self._get_torch_tensor(observation)
-            action, old_h = agent.action(
-                old_observation
-            )
-            
+            action = agent.get_action(old_observation)
+
             observation, reward, terminated, _, _ = self.env.step(action)
-
-            yield (old_observation, action, reward, old_h.clone())
-
+            buffers.add(
+                EnvStateActionPairs(
+                    state=old_observation,
+                    next_state= self._get_torch_tensor(observation),
+                    action=action,
+                    reward=None
+                )
+            )
+            rewards.append(reward)
             if terminated:
                 break
+        rewards = torch.tensor(rewards)
+        rewards = (rewards - rewards.mean()) / (rewards.std() + eps)
+        for index in range(len(buffers.entries)):
+            buffers.entries[index].reward = rewards[index]
+        return buffers
 
     def eval_agent_play(self, agent):
         agent.reset()
@@ -75,14 +90,14 @@ class Env:
         # Player 1
         observation[:, :][observation[:, :] == 148] = 255
         """
-        tensor = torch.from_numpy(observation).float() / 255 
-        #.permute(2, 0, 1) / 255
+        tensor = torch.from_numpy(observation).float() / 255
+        # .permute(2, 0, 1) / 255
         # return tensor[:, 34:-16]
 #        return tensor[34:-16].unsqueeze(0)
-        return self.transforms(tensor[:-50].unsqueeze(0))
+        return self.transforms(tensor[:-int(50* (self.size/40))].unsqueeze(0))
 
     def _raw_get_torch_tensor(self, observation):
-        tensor = torch.from_numpy(observation).float() / 255 
+        tensor = torch.from_numpy(observation).float() / 255
         return tensor
 
     def save_observation(self, observation):

@@ -48,7 +48,9 @@ The actor is actually trained to output the actions. The critic should output th
 
 ## Other links
 - https://xlnwel.github.io/blog/reinforcement%20learning/DreamerV2/
-- https://arxiv.org/pdf/1912.01603.pdf which is the v1 of the paper
+- https://arxiv.org/pdf/1912.01603.pdf which is the v1 of the paper - best diagrams and explanations imo.
+- https://arxiv.org/pdf/2010.02193.pdf v2 of the paper
+  - 
 - https://arxiv.org/pdf/2301.04104v1.pdf which is the v3 of the paper. 
 - https://www.youtube.com/watch?v=vfpZu0R1s1Y v3 overview of the paper
 - https://www.youtube.com/watch?v=o75ybZ-6Uu8 v2 overview of the paper 
@@ -56,3 +58,7 @@ The actor is actually trained to output the actions. The critic should output th
 - https://www.youtube.com/watch?v=_e3BKzK6xD0 <- quick video from the authors, also good
 - 
 
+### Dreamer v1 
+Big difference from newer version is that it does not use the GRU for memory. It only uses the latest observation.
+
+General trick is to have the world model and use that to explore trajectories so that the actor critic don't need to interact with the real world.

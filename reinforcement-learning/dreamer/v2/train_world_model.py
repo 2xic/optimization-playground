@@ -1,10 +1,10 @@
 import torch.optim as optim
 import torch 
 import torch.nn as nn
-from vae import SimpleVaeModel
-from train_actor_critic import HiddenLatentRepresentation
+from .vae import SimpleVaeModel
+from .train_actor_critic import HiddenLatentRepresentation
 
-device = torch.device('cuda)') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 """
 The core model deals with the memory
@@ -42,8 +42,10 @@ The representation model takes in the input image and crates a representation ve
 
 This also has the component for going from the representation vector back into a env like image.
 """
-class WorldModel:
+class WorldModel(nn.Module):
     def __init__(self) -> None:
+        super().__init__()
+        z_size = 128
         self.vae = SimpleVaeModel(
             input_shape=(1, 40, 40),
             conv_shape=[
@@ -53,19 +55,13 @@ class WorldModel:
             ],
             z_size=128,
         )
-        self.transition_model = torch.nn.Sequential(*[
-            nn.Linear(128, 256),
-            nn.Sigmoid(),
-            nn.Linear(256, 128),
-            nn.Sigmoid(),
-        ])
         self.image_predictor_model = HiddenLatentRepresentation(
-            128,
-            64
+            latent_size=z_size,
+            hidden_size=64,
+            output_size=z_size
         )
         self.optimizer = optim.Adam(
-            list(self.vae.parameters()) +
-            list(self.transition_model.parameters())
+            list(self.vae.parameters()) 
         )
 
     def representation(self, observation, hidden):
@@ -83,13 +79,20 @@ class WorldModel:
         z = mean + var*epsilon
         return z
 
-    def image_predictor(self, hidden, latent):
+    def dynamic_predictor(self, hidden, latent):
         """
-        goes from latent vector and hidden state into a image
+        goes from latent vector and hidden state into a the next hidden state
         """
         assert latent.shape[0] == hidden.shape[1], "Mismatch between batch"
         hidden = hidden.permute(1, 2, 0).reshape(latent.shape[0], -1)        
         return self.image_predictor_model(hidden, latent)
 
-    def transition(self, hidden_state):
-        return self.transition_model(hidden_state)
+    def decode_latent(self, latent, hidden):
+        """
+        goes from latent into the image of the environment
+        """
+        # hidden has batch on the second argument
+        assert latent.shape[0] == hidden.shape[1], "Mismatch between batch"
+        hidden = hidden.permute(1, 2, 0).reshape(latent.shape[0], -1)        
+        return self.vae.decode(latent, hidden)
+

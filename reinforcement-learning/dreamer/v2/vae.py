@@ -41,7 +41,10 @@ class SimpleVaeModel(nn.Module):
             ]
         else:
             self.conv_shape = conv_shape
+        # size of the hidden state to model        
+        self.hidden_size = 64
         self.encoder = self.get_encoder(input_shape)
+        self.decoder = self.get_decoder()
 
 
     def encode(self, image, hidden_state):
@@ -50,6 +53,10 @@ class SimpleVaeModel(nn.Module):
         z_hidden = hidden_state_encoder(hidden_state)
         z_combined = z_image + z_hidden
         return output(z_combined)
+
+    def decode(self, image, hidden):
+        z_combined = torch.concat((image, hidden), dim=1)
+        return self.decoder(z_combined)
 
     def get_encoder(self, input_shape):
         last_channel = input_shape[0]
@@ -85,7 +92,7 @@ class SimpleVaeModel(nn.Module):
             fc1,
         ])
         hidden_state_encoder = torch.nn.Sequential(*[
-            torch.nn.Linear(64, hidden_dim),
+            torch.nn.Linear(self.hidden_size, hidden_dim),
             nn.Sigmoid(),
         ])
         
@@ -93,3 +100,43 @@ class SimpleVaeModel(nn.Module):
             nn.LeakyReLU(),
             Z(hidden_dim, self.z_size)
         ])
+
+    def get_decoder(self):
+        # z_size = latent vector + hidden_size
+        self.decoder_input = nn.Linear(self.z_size + self.hidden_size, self.conv_shape[-1] * 4)
+        decoders = [
+            self.decoder_input,
+            Reshape(-1, self.conv_shape[-1], 2, 2),
+        ]
+        reversed = self.conv_shape[::-1]
+        for index, conv_shape in enumerate(reversed[:-1]):
+            decoders.append(
+                nn.ConvTranspose2d(
+                    conv_shape,
+                    reversed[index + 1],
+                    kernel_size=6,
+                    stride=2,
+                    padding=1,
+                    output_padding=1
+                )
+            )
+            decoders.append(
+                nn.BatchNorm2d(reversed[index + 1])
+            )
+            decoders.append(
+                nn.LeakyReLU(),
+            )
+        output = nn.Sequential(
+            nn.ConvTranspose2d(reversed[-1],
+                               reversed[-1],
+                               kernel_size=9,
+                               stride=2,
+                               padding=1,
+                               output_padding=1),
+            nn.Conv2d(reversed[-1], out_channels=self.channels,
+                      kernel_size=3, padding=1),
+            nn.Sigmoid(),
+        )
+        return torch.nn.Sequential(
+            *decoders + [output]
+        )
