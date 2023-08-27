@@ -30,13 +30,13 @@ class Agent:
             last_state, 
             action
         ), dim=1)
-        encoded = self.world_model.representation(
+        (encoded, logvar, mu) = self.world_model.representation(
             observation,
             combined_tensor
         )
         reward = self.world_model.reward_model(encoded)
         return (
-            encoded,
+            (encoded, logvar, mu),
             reward
         )
 
@@ -45,7 +45,7 @@ class Agent:
         observation = observation.to(self.config.device).float()
         if len(observation.shape) == 3:
             observation = observation.unsqueeze(0)
-        self.last_state, _ = self.forward(observation, self.last_state, self.last_action)
+        self.last_state, _, _ = self.forward(observation, self.last_state, self.last_action)[0]
         self.last_action = self.actor_critic.action_distribution(self.last_state)
        # print(int((self.last_action * (self.config.action_size - 1)).item()))
         return int((self.last_action * (self.config.action_size - 1)).item())

@@ -1,3 +1,4 @@
+from torch.nn import functional as F
 import torch
 from optimization_playground_shared.rl.Buffer import Buffer
 from optimization_playground_shared.rl.atari_env import Env
@@ -14,8 +15,7 @@ from typing import List
 from torch.distributions import Categorical
 
 metrics = Tracker("dreamer-v1-encoder")
-device = torch.device(
-    'cuda') if torch.cuda.is_available() else torch.device('cpu')
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 
 class TensorMapTracker:
@@ -37,9 +37,9 @@ class TensorMapTracker:
 
 
 config = Config(
-    z_size=128,
+    z_size=256,
     image_size=80,
-    action_size=9,
+    action_size=3,
     device=device,
 )
 experience = Buffer()
@@ -49,13 +49,13 @@ agent = Agent(config)
 -> Tensors that then can be added to, but they keep the same indexes.
 """
 
-tensor_batch = TensorMapTracker(
-    5
-)
 
 
 def get_training_data():
-    global agent, tensor_batch
+    global agent
+    tensor_batch = TensorMapTracker(
+        5
+    )
     env = Env(
         config.image_size
     )
@@ -76,50 +76,77 @@ def get_training_data():
     return tensor_batch
 
 
-def train_encoder():
-    tensor_batch = get_training_data()
+def loss_function(recon_x, logvar, mu, x):
+    BCE = F.binary_cross_entropy(recon_x.reshape((-1, config.image_size * config.image_size)),
+                                 x.view(-1, config.image_size * config.image_size), reduction='sum')
+    BCE += F.binary_cross_entropy(recon_x.reshape((-1, config.image_size * config.image_size)),
+                                 x.view(-1, config.image_size * config.image_size), reduction='sum')
+    KLD = 0
+    if not (logvar is None or mu is None):
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+    return BCE + KLD
+
+
+def train_encoder(tensor_batch):
     for epoch in range(1_000):
         sum_loss = 0
         dataset_size = 0
-        if epoch % 10 == 0:
-            # add more training data to the mix
+        if 0 < epoch and epoch % 10 == 0:
             tensor_batch = get_training_data()
-        for (state, next_state, action, encoded_state, reward) in get_dataloader(tensor_batch.tensors, batch_size=64):
-            (predicted_state, predicted_reward) = agent.forward(state, encoded_state, action)
-            recovered_next_state = agent.world_model.decode_latent(
+
+        for (state, next_state, action, encoded_state, reward) in get_dataloader(tensor_batch.tensors, batch_size=64, shuffle=True):
+            ((predicted_state, logvar, mu), predicted_reward) = agent.forward(
+                state, encoded_state, action)
+            recovered_state = agent.world_model.decode_latent(
                 predicted_state
             )
-            loss_reward = nn.L1Loss(reduction='sum')(
+            loss_reward = nn.MSELoss(reduction='sum')(
                 predicted_reward,
                 reward,
             )
-            loss_construction = nn.L1Loss(reduction='sum')(
-                recovered_next_state,
+            loss_construction = loss_function(
+                recovered_state,
+                logvar,
+                mu,
+                state
+            )
+            next_predicted_state = agent.world_model.decode_latent(
+                agent.world_model.transition(
+                    predicted_state,
+                    action,
+                )
+            )
+            loss_transition = loss_function(
+                next_predicted_state,
+                None,
+                None,
                 next_state
             )
 
             agent.world_model.optimizer.zero_grad()
-            loss = loss_reward + loss_construction
+            loss = loss_reward + loss_construction + loss_transition
             loss.backward()
             agent.world_model.optimizer.step()
-            dataset_size += recovered_next_state.shape[0]
+            dataset_size += recovered_state.shape[0]
             sum_loss += loss.item()
 
-        idx = random.randint(0, next_state.shape[0] - 1)
-        true_next_state = next_state[idx]
-        recovered_next_state = recovered_next_state[idx]
+        idx = random.randint(0, state.shape[0] - 1)
+        truth_state = state[idx]
+        recovered_state = recovered_state[idx]
         inference = Plot().plot_image([
             Image(
-                image=recovered_next_state.detach().to(torch.device('cpu')).numpy(),
+                image=recovered_state.detach().to(torch.device('cpu')).numpy(),
                 title='recovered'
             ),
             Image(
-                image=true_next_state.detach().to(torch.device('cpu')).numpy(),
+                image=truth_state.detach().to(torch.device('cpu')).numpy(),
                 title='truth'
             ),
         ], f'inference.png')
         calculated_loss = sum_loss/dataset_size
-        print(f"loss: {calculated_loss}".format(calculated_loss=calculated_loss))
+        print(f"loss: {calculated_loss}".format(
+            calculated_loss=calculated_loss))
         metric = Metrics(
             epoch=epoch,
             loss=calculated_loss,
@@ -129,13 +156,13 @@ def train_encoder():
             )
         )
         print((calculated_loss, metric.loss))
-        assert calculated_loss == metric.loss,"error "+ type(calculated_loss)
+        assert calculated_loss == metric.loss, "error " + type(calculated_loss)
 #        print(metric.loss)
         metrics.log(metric)
-        break
+   #     break
 
 
-def train_behaviors():
+def train_behaviors(tensor_batch):
     """
     Use actor critic with model predictions
     """
@@ -151,7 +178,8 @@ def train_behaviors():
     sum_reward = 0
     for (state, _, action, encoded_state, _) in get_dataloader(tensor_batch.tensors, batch_size=1):
         # what if we .... imagine!
-        (predicted_state, predicted_reward) = agent.forward(state, encoded_state, action)
+        ((predicted_state, _, _), predicted_reward) = agent.forward(
+            state, encoded_state, action)
         actor = actor_critic.actor.forward(predicted_state)
         critic = torch.zeros((1), device=device)
         # planning into the future ....
@@ -166,10 +194,10 @@ def train_behaviors():
                 actor_critic.actor.forward(predicted_state)
             ).sample()
             (predicted_state, predicted_reward) = agent.transition(
-                predicted_state,  
+                predicted_state,
                 torch.tensor([[action]], device=device)
             )
-        # sum it 
+        # sum it
         predictions.append(ValueCritic(
             actor,
             critic
@@ -182,7 +210,7 @@ def train_behaviors():
 
 
 if __name__ == "__main__":
-    actions = get_training_data()
-    encoded_loss = train_encoder()
-    behavior = train_behaviors()
+    tensor_batch = get_training_data()
+    encoded_loss = train_encoder(tensor_batch)
+    behavior = train_behaviors(tensor_batch)
     print(behavior)

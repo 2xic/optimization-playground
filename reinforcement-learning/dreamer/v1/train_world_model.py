@@ -53,7 +53,7 @@ class WorldModel(nn.Module):
         var = torch.exp(0.5 * log_var)
         epsilon = torch.randn_like(var).to(self.config.device)
         z = mean + var*epsilon
-        return z
+        return (z, log_var, mean)
 
     def transition(self, latent, action):
         combined = torch.concat(

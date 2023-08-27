@@ -5,13 +5,14 @@ import torchvision.transforms as transforms
 from .Agent import Agent
 from .Buffer import Buffer, EnvStateActionPairs
 
-class Env:
+class CarRacing:
     def __init__(self, size=40):
         self.size = size
-        self.env = gym.make("ALE/MsPacman-v5", obs_type="grayscale")
+        self.env = gym.make("CarRacing-v2")
         self.action_size = self.env.action_space.n
         self.transforms = transforms.Compose([
             transforms.Resize((size, size)),
+            transforms.Grayscale(),
             transforms.ConvertImageDtype(torch.float),
         ])
 
@@ -90,8 +91,11 @@ class Env:
         # Player 1
         observation[:, :][observation[:, :] == 148] = 255
         """
-        tensor = torch.from_numpy(observation).float() / 255
-        return self.transforms(tensor[:-int(50* (self.size/40))].unsqueeze(0))
+       # tensor = torch.from_numpy(observation).float() / 255
+        # .permute(2, 0, 1) / 255
+        # return tensor[:, 34:-16]
+#        return tensor[34:-16].unsqueeze(0)
+        return self.transforms(observation).unsqueeze(0)
 
     def _raw_get_torch_tensor(self, observation):
         tensor = torch.from_numpy(observation).float() / 255

@@ -1,6 +1,6 @@
 ### [MASTERING ATARI WITH DISCRETE WORLD MODELS](https://arxiv.org/pdf/2010.02193.pdf)
 
-Initial thought was that it reminded me of MuZero, but it is not actually that similar.
+Initial thought was that it reminded me of MuZero, but it is not actually that similar. Kinda a combination of VAE and MuZero.
 
 ## Notes
 Some key points
