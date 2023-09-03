@@ -4,7 +4,7 @@ import torch.nn as nn
 from .train_actor_critic import MlpRepresentation
 from .config import Config
 from .vae import SimpleVaeModel
-
+import os
 """
 The representation model takes in the input image and crates a representation vector.
 
@@ -38,8 +38,23 @@ class WorldModel(nn.Module):
         ).to(config.device)
 
         self.optimizer = optim.Adam(
-            list(self.vae.parameters())
+            list(self.vae.parameters()),
+            weight_decay = 1e-8,
+            lr=1e-5
         )
+
+        self.load()
+
+    def load(self):
+        if os.path.isfile('world_model.pkt'):
+            data = torch.load('world_model.pkt')
+            self.load_state_dict(data['self_model'])
+            print("LOAD MODEL :D")
+
+    def save(self):
+        torch.save({
+            'self_model': self.state_dict(),
+        }, 'world_model.pkt')
 
     # this should be possible to train fully in isolation
     def save_model(self):

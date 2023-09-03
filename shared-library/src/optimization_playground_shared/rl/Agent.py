@@ -11,4 +11,3 @@ class Agent(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def get_action(self, state):
         pass
-

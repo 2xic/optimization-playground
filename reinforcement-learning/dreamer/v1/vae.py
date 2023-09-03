@@ -21,8 +21,8 @@ class Z(nn.Module):
         self.var = nn.Linear(hidden_dim, z_shape)
 
     def forward(self, x):
-        mean = self.mean(x)
-        log_var = self.var(x)
+        mean = torch.nn.Tanh()(self.mean(x))
+        log_var = torch.nn.Tanh()(self.var(x))
 
         return mean, log_var
 
@@ -43,16 +43,18 @@ class SimpleVaeModel(nn.Module):
             self.conv_shape = conv_shape
         # size of the hidden state to model        
         self.hidden_size = config.z_size + 1
-        self.encoder = self.get_encoder(input_shape)
+        (image_encoder, hidden_state_encoder, output) = self.get_encoder(input_shape)
+        self.image_encoder = image_encoder
+        self.hidden_state_encoder = hidden_state_encoder
+        self.output = output
         self.decoder = self.get_decoder()
 
 
     def encode(self, image, hidden_state):
-        (image_encoder, hidden_state_encoder, output) = self.encoder
-        z_image = image_encoder(image)
-        z_hidden = hidden_state_encoder(hidden_state)
+        z_image = self.image_encoder(image)
+        z_hidden = self.hidden_state_encoder(hidden_state)
         z_combined = z_image + z_hidden
-        return output(z_combined)
+        return self.output(z_combined)
 
     def decode(self, image):
         return self.decoder(image)
@@ -98,7 +100,6 @@ class SimpleVaeModel(nn.Module):
         return image_encoder.to(self.config.device),  \
                 hidden_state_encoder.to(self.config.device), \
                 torch.nn.Sequential(*[
-                    nn.LeakyReLU(),
                     Z(hidden_dim, self.z_size)
                 ]).to(self.config.device)
 

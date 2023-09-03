@@ -1,4 +1,4 @@
-### [MASTERING ATARI WITH DISCRETE WORLD MODELS](https://arxiv.org/pdf/2010.02193.pdf)
+### [Mastering atari with discrete world models](https://arxiv.org/pdf/2010.02193.pdf)
 
 Initial thought was that it reminded me of MuZero, but it is not actually that similar. Kinda a combination of VAE and MuZero.
 
@@ -58,7 +58,22 @@ The actor is actually trained to output the actions. The critic should output th
 - https://www.youtube.com/watch?v=_e3BKzK6xD0 <- quick video from the authors, also good
 - 
 
-### Dreamer v1 
+# Dreamer v1 
 Big difference from newer version is that it does not use the GRU for memory. It only uses the latest observation.
 
 General trick is to have the world model and use that to explore trajectories so that the actor critic don't need to interact with the real world.
+
+## Training run of v1
+
+Trained the encoder first. While the encoder is not perfect it is able to capture the most important part of the state. Namely location of the car in the road.
+
+![encoded state](./readme/encoded_state.png)
+
+Having the world model solved, we train a actor critic. Looking at my logs I don't think this model is perfect, but it might be connected to the world model as I see the simulated reward seems to stay close to constant. 
+
+One can see that agent suffer some from those defects, but is still able to work towards it goal on staying in the road and moving forward :) 
+Even though it is a bit shaky and goes off (but recovers) towards the end, but note that this is entirely trained in "simulation" and there are definitely things that could be improved. This is mostly a poc of the paper :) 
+
+<video width="320" height="240" controls>
+  <source src="./readme/example_run.mp4" type="video/mp4">
+</video>
