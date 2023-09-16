@@ -1,0 +1,2 @@
+## [Image Stacks and iPhone Racks - Building an Internet Scale Meme Search Engine](https://findthatmeme.com/blog/2023/01/08/image-stacks-and-iphone-racks-building-an-internet-scale-meme-search-engine-Qzrz7V6T.html)
+Found this article somewhat funny. They create a mini OCR farm from iPhones using the apple vision framework to be able to get the text out for memes to be able to make them searchable. 

@@ -86,3 +86,16 @@ The paper is cool, might be worth implementing.
 TLDR: They create a self-competition environment by having the model compete against it's past performance as a WIN/LOSS signal. It's laid out in the appendix A.5
 
 [blog](https://www.deepmind.com/blog/muzeros-first-step-from-research-into-the-real-world)
+
+## [ Ilya Sutskever - Opening Remarks: Confronting the Possibility of AGI ](https://www.youtube.com/watch?v=OPZxs6IXH00)
+Ideas mentioned that stuck with me from this presentation 
+- "RL is creative". For instance with AlphaGo doing ["move 37"](https://www.johnmenick.com/writing/move-37-alpha-go-deep-mind.html). 
+- RL is likely the reason for the hallucination also.
+
+## [Online and Offline Reinforcement Learning by Planning with a Learned Model](https://arxiv.org/pdf/2104.06294.pdf)
+Re-analyze buffer to have the model retrain on a already executed episode. The reanalyze fraction which is a parameter that is used to control how much to interact with the real world vs using using the replay.
+Note that during re-analysis no actions are taken. This process happens entirely in a supervised fashion. 
+No changes are required on the agent. 
+
+[presentation by the authors](https://slideslive.com/38967529/online-and-offline-reinforcement-learning-by-planning-with-a-learned-model?ref=recommended)
+ 

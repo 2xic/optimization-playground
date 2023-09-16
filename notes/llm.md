@@ -434,6 +434,10 @@ TLDR: GPT behavior has drastically changed over the last couple of months. Mostl
 ### [Llama 2](https://ai.meta.com/llama/)
 - Public weights
 - [Karpathy therad on llama 2](https://twitter.com/karpathy/status/1681667444895539202?s=12)
+
+[Difference between llama 1](https://www.apps4rent.com/blog/llama-vs-llama-2/)
+- More data and larger context window
+- Uses RLHF
 - 
 
 ### [The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)

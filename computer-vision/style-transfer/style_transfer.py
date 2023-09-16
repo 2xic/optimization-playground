@@ -5,7 +5,7 @@ from torchvision import transforms
 import torch.optim as optim
 import torchvision
 import os
-
+import sys
 
 def generate_image(content_image_path, style_image_path, output_path):
     if os.path.isfile(output_path):
@@ -26,15 +26,18 @@ def generate_image(content_image_path, style_image_path, output_path):
     assert content_image.shape[1] == style_image.shape[1], "Must have same height"
     original_content_image_shape = content_image.shape
     # Do the resize of width dynamically
-    transform = transforms.Pad(
-        (0, 0, abs(content_image.shape[3] - style_image.shape[3]), 0))
+    delta = abs(content_image.shape[3] - style_image.shape[3]) // 2
+    transform = transforms.Pad((delta, 0, delta, 0))
 
     def has_smaller_width(x, y): return x.shape[3] < y.shape[3]
     content_image = transform(content_image) if has_smaller_width(
         content_image, style_image) else content_image
     style_image = transform(style_image) if has_smaller_width(
         style_image, content_image) else style_image
-    assert content_image.shape[3] == style_image.shape[3], "Must have same width"
+    content_width = content_image.shape[3]
+    style_width = style_image.shape[3]
+    assert content_image.shape[3] == style_image.shape[3], f"Must have same width {content_width} vs {style_width}"
+
 
     class SaveOutput:
         def __init__(self):
@@ -143,20 +146,26 @@ def generate_image(content_image_path, style_image_path, output_path):
         if epoch % 10 == 0:
             torchvision.utils.save_image(
                 # reshape the width to the original width to not have artifacts
-                output_transforms(generated_image)[
-                    :, :, :, :original_content_image_shape[3]],
+                output_transforms(generated_image), # [:, :, :, :original_content_image_shape[3]]
                 output_path
             )
 
 
 if __name__ == "__main__":
-    generate_image(
-        "images/mona_lisa.jpg",
-        "images/the_scream.jpg",
-        "images/mona_lisa_style_of_scream.png",
-    )
-    generate_image(
-        "images/mona_lisa.jpg",
-        "images/portrait_of_picasso.jpg",
-        "images/mona_lisa_style_of_picasso_portrait.png",
-    )
+    if len(sys.argv) != 1:
+        generate_image(
+            sys.argv[1],
+            sys.argv[2],
+            sys.argv[3],
+        )
+    else:
+        generate_image(
+            "images/mona_lisa.jpg",
+            "images/the_scream.jpg",
+            "images/mona_lisa_style_of_scream.png",
+        )
+        generate_image(
+            "images/mona_lisa.jpg",
+            "images/portrait_of_picasso.jpg",
+            "images/mona_lisa_style_of_picasso_portrait.png",
+        )

@@ -30,8 +30,15 @@ It's a bit hard to see the whiteboard, might revisit.
 ### XLA compiler
 From the official documentation [here](https://cloud.google.com/tpu/docs/intro-to-tpu#xla_compiler) they say the ML graph has to be compiled with XLA to be possible to run on the TPU.
 
-There is some docs on XLA [here](https://www.tensorflow.org/xla).
+There is some docs on XLA [here](https://www.tensorflow.org/xla). ACtually it is even better described [here](https://www.tensorflow.org/xla/architecture). The input to XLA is what is refereed to as "HLO IR" (high level optimizer intermediate representation). 
 
-[Geohot again did some (small) documentation on this](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/tpu)
+What does XLA do ? Optimization like common subexpression elimination which eliminates identical expression with a single variable. It also uses target-specific code operation by using LLVM for low level IR optimization for the generated code.
 
-[OpenXLA](https://github.com/openxla/xla)
+[MLIR](https://llvm.org/devmtg/2019-04/slides/Keynote-ShpeismanLattner-MLIR.pdf) they go from a tensor flow graph into a xla hlo into llvm into machine ir into asm.
+[MLIR Tutorial](https://llvm.org/devmtg/2019-04/slides/Tutorial-AminiVasilacheZinenko-MLIR.pdf), traditional model is AST -> LLVM. MLIR is about operations not instructions and they are kinda complex just looking at one.
+[Building domain-specific compilers quickly with MLIR compiler infrastructure | Chris Lattner](https://www.youtube.com/watch?v=5OSP5DNAozU) it has little todo with ML btw. 
+
+## Other recourses
+- [Geohot again did some (small) documentation on this](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/tpu)
+- [OpenXLA](https://github.com/openxla/xla) which is an open source compiler
+- [ SysML 18: Jeff Dean, Systems and Machine Learning Symbiosis ](https://www.youtube.com/watch?v=Nj6uxDki6-0)
