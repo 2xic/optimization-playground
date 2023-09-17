@@ -15,6 +15,9 @@ Reproducing figure and algorithms from [Reinforcement Learning: An Introduction]
 [Figure 2.6 - Parameter study](./multi-armed-bandits/parameter_study.png)
 - **(does not match the book plot well currently)**
 
+### Chapter 4 - Dynamic programming
+Skipped (nothing that special there)
+
 ### Chapter 5 - Monte carlo methods
 (todo) Algorithm - First visit MC prediction, for estimating Value function 
 

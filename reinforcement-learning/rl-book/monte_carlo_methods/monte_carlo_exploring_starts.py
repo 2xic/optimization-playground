@@ -1,18 +1,21 @@
 """
-Section 5.7 -> page 111
+Section 5.3 -> page 99
 """
 from optimization_utils.envs.TicTacToe import TicTacToe
 import matplotlib.pyplot as plt
 from helpers.State import State
 from helpers.action_policy.softmax_soft_policy import SoftmaxSoftPolicy
+from helpers.StateValue import StateValue
 import random
 from helpers.get_plot_path import get_plot_path
 from helpers.action_policy.argmax_policy import ArgmaxPolicy
+from collections import defaultdict
 
 class Agent:
     def __init__(self, action) -> None:
-        self.q_s = State(action)
-        self.c_s = State(action)
+        self.q_s = State(action, value_constructor=lambda n: StateValue(n, initial_value=lambda: 0))
+        self.q_s = State(action, value_constructor=lambda n: StateValue(n, initial_value=lambda: 0))
+        self.n_s = State(action, value_constructor=lambda n: StateValue(n, initial_value=lambda: 0))
         self.argmax = ArgmaxPolicy()
 
         self.is_training = True
@@ -26,11 +29,17 @@ class Agent:
     
     def forward(self, env):
         state_actions = []
+        index = 0
+        timeout = 100
         while not env.done:
-            assert env.player == 1
+            assert env.player == 1                
             state = str(env.state)
             action = -1
-            while action not in env.legal_actions:
+            if index == 0 and self.is_training:
+                # we want all actions in s_0 to be equally likely.
+                action = random.sample(env.legal_actions, 1)[0]
+            else:
+                # we follow the policy.
                 action = self.argmax(self.q_s[state].np(), env.legal_actions)
             env.play(action)
             reward = env.winner
@@ -41,6 +50,7 @@ class Agent:
                     )
                 )
             )  
+            index += 1
         return state_actions
 
     def train(self, env: TicTacToe):
@@ -51,27 +61,21 @@ class Agent:
 
         if self.is_training:
             G = 0
-            W = 1
             gamma = .99
+            first_index_seen_state = {}
+            for index, (state, _, _) in enumerate(state_actions):
+                if state not in first_index_seen_state:
+                    first_index_seen_state[state] = index
+
             for index in range(len(state_actions) - 2, -1, -1):
                 (_, _, next_reward) = state_actions[index + 1]
-                (state, action, reward) = state_actions[index]
-
+                (state, action, _) = state_actions[index]
+                # for tic tac toe this should always be hit ...
                 G = gamma * G + next_reward
-                # C[S_t, A_t] += W
-                self.c_s[state][action] += W
-                # Q(S_t, A_t) += (W/C(S_t, A_t) * (G - Q[S_t, A_t]))
-                q = self.q_s[state][action]
-                c = self.c_s[state][action]
-                self.q_s[state][action] += (W/c) * (G - q)
-
-                # A_t != policy(S)
-                if self.q_s[state].argmax() != action:
-                    break
-
-                # W = W * (1 / B[A_t, S_t])
-                b_s_a = SoftmaxSoftPolicy().softmax(self.q_s[state].np())[action]
-                W = W * 1 / b_s_a
+                if index <= first_index_seen_state[state]:
+                    # simulate the avg
+                    self.q_s[state][action] = max(0, self.q_s[state][action] + (G - self.q_s[state][action]) * (1 / (1 + self.n_s[state][action])))
+                    self.n_s[state][action] += 1
           #  print(G)
         self.accumulated_reward += soft_reward
 
