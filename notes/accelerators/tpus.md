@@ -1,4 +1,4 @@
-## TPUs in general
+# TPUs in general
 ### [Understanding Matrix Multiplication on a Weight-Stationary Systolic Architecture](https://www.telesens.co/2018/07/30/systolic-architectures/)
 Most TPUs are built on top of a MXU (multiply-accumulate systolic array matrix unit).
 Basically it allows more operations to happen in parallel (for instance multiply and accumulate).
@@ -27,7 +27,7 @@ It's a bit hard to see the whiteboard, might revisit.
 ### [TPU v4: An Optically Reconfigurable Supercomputer for Machine Learning with Hardware Support for Embeddings](https://arxiv.org/ftp/arxiv/papers/2304/2304.01433.pdf)
 *TODO*
 
-### XLA compiler
+# XLA compiler
 From the official documentation [here](https://cloud.google.com/tpu/docs/intro-to-tpu#xla_compiler) they say the ML graph has to be compiled with XLA to be possible to run on the TPU.
 
 There is some docs on XLA [here](https://www.tensorflow.org/xla). ACtually it is even better described [here](https://www.tensorflow.org/xla/architecture). The input to XLA is what is refereed to as "HLO IR" (high level optimizer intermediate representation). 
@@ -38,7 +38,14 @@ What does XLA do ? Optimization like common subexpression elimination which elim
 [MLIR Tutorial](https://llvm.org/devmtg/2019-04/slides/Tutorial-AminiVasilacheZinenko-MLIR.pdf), traditional model is AST -> LLVM. MLIR is about operations not instructions and they are kinda complex just looking at one.
 [Building domain-specific compilers quickly with MLIR compiler infrastructure | Chris Lattner](https://www.youtube.com/watch?v=5OSP5DNAozU) it has little todo with ML btw. 
 
-## Other recourses
+
+### [https://llvm.org/devmtg/2019-04/slides/TechTalk-Joerg-Automated_GPU_Kernel_Fusion_with_XLA.pdf](Automated GPU Kernel Fusion with XLA)
+The slides by themselves were not that useful.This lead me however to find [this](https://arxiv.org/pdf/2301.13062.pdf) paper which is actually quite nice.
+
+### [Learning to Fuse](http://mlforsystems.org/assets/papers/neurips2019/learning_abdolrashidi_2019.pdf)
+Use ML to learn when to fuse - kinda cool.
+
+# Other recourses
 - [Geohot again did some (small) documentation on this](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/tpu)
 - [OpenXLA](https://github.com/openxla/xla) which is an open source compiler
 - [ SysML 18: Jeff Dean, Systems and Machine Learning Symbiosis ](https://www.youtube.com/watch?v=Nj6uxDki6-0)
