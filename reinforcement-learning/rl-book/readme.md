@@ -64,3 +64,12 @@ Skipped (nothing that special there)
 (todo) Algorithm - Off-policy n-step Q(sigma) for estimating Q
 
 
+### Chapter 13 - policy gradient methods
+- Learns a parametrized policy
+- Can use a value function, but does not need to.
+  
+[Algorithm - REINFORCE: Monte-Carlo Policy-Gradient Control (episodic)](./policy-gradient/reinforce.py)
+
+[Algorithm - REINFORCE with baseline](./policy-gradient/reinforce_with_baseline.py)
+
+[One-step Actor–Critic (episodic)](./policy-gradient/one_step_actor_critic.py)

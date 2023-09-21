@@ -9,6 +9,8 @@ This "simple" model is good enought to
 - stop for stop signs
 - stop for red lights
 
+[mentioned here](https://blog.comma.ai/end-to-end-lateral-planning/)
+
 ## why the need to improve ? 
 The model starts to cheat by using simulator artifacts. Small offset don't work well with larger offset.
 
