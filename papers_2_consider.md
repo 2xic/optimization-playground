@@ -44,13 +44,6 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Flow Network based Generative Models for Non-Iterative Diverse Candidate Generation](https://arxiv.org/pdf/2106.04399.pdf)
 
-[Scaling Goal-based Exploration via Pruning Proto-goals](https://arxiv.org/pdf/2302.04693.pdf)
-
-[Mastering Diverse Domains through World Models](https://arxiv.org/pdf/2301.04104.pdf)
-
-[Deep RL at Scale: Sorting Waste in Office Buildings with a Fleet of Mobile Manipulators](https://arxiv.org/pdf/2305.03270.pdf)
-
-[RLHF: Reinforcement Learning from Human Feedback](https://huyenchip.com/2023/05/02/rlhf.html)
 
 ## NLP 
 [MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)

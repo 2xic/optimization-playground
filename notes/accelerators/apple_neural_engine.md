@@ -1,8 +1,10 @@
-## The Apple Neural Engine
+# The Apple Neural Engine
 Very little public information about it, and no public api afaik.
 Seriously, searching for "site:machinelearning.apple.com apple neural engine" only gives information about 
 
 [Gehot has reversed part of it](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/ane)
+
+[Linux driver (Asahi Neural Engine) for it the cip](https://github.com/eiln/ane) which has some good [docs](https://github.com/eiln/ane/tree/main/docs) also. For instance it shows that hte ANE was mainly built to handle Convnets. There is also a [Compiler/Converter](https://github.com/eiln/anecc) to run CoreML models with the driver.
 
 ### [Apple Neural Engine Internal: From ML Algorithm to HW Registers](https://www.blackhat.com/asia-21/briefings/schedule/#apple-neural-engine-internal-from-ml-algorithm-to-hw-registers-22039)
 Cool, so FaceId actually uses "Secure Neural Engine" and is also documented at [apples page on secure enclave](https://support.apple.com/lv-lv/guide/security/sec59b0b31ff/web).
@@ -30,6 +32,7 @@ It's not the same as SIMD Vector Engine, but closer to that then the Neural engi
 
 [The Secret Apple M1 Coprocessor](https://web.archive.org/web/20210206122953/https://medium.com/swlh/apples-m1-secret-coprocessor-6599492fc1e1) 
 
-[  BLIS & TBLIS for the Undocumented Apple Matrix Coprocessor - BLIS Retreat2021 Long Version ](https://www.youtube.com/watch?v=HpgRxT3m80U)
+[BLIS & TBLIS for the Undocumented Apple Matrix Coprocessor - BLIS Retreat2021 Long Version](https://www.youtube.com/watch?v=HpgRxT3m80U)
 
 [BLIS fork with kernels for Apple M1](https://github.com/xrq-phys/blis_apple)
+
