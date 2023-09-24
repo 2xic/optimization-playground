@@ -2,12 +2,18 @@ import torch
 
 class Vocab:
     def __init__(self):
+        self.is_locked = False
         self.idx_token = {}
         self.token_idx = {}
         self.PADDING_IDX = self.add_token("<PADDING>")
+        self.UNKNOWN_IDX = self.add_token("<UNKNOWN>")
+
+    def lock(self):
+        self.is_locked = True
+        return self
 
     def add_token(self, i):
-        if not i in self.token_idx:
+        if not i in self.token_idx and not self.is_locked:
             idx = len(self.idx_token)
             self.idx_token[idx] = i
             self.token_idx[i] = idx
@@ -46,6 +52,14 @@ class Vocab:
             y_torch[index, :len(j)] = torch.tensor(j)
         return x_torch, y_torch
 
+    def get_encoded(self, sentence, device=None):
+        assert type(sentence) == str
+        x_torch = torch.zeros((1, len(sentence)), device=device, dtype=torch.long).fill_(self.PADDING_IDX)
+
+        for index, i in enumerate(sentence):
+            x_torch[0][index] = self.add_token(i)
+        return x_torch
+        
     def get_vocab_size(self):
         return len(self.idx_token)
     
