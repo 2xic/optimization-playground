@@ -63,13 +63,22 @@ Skipped (nothing that special there)
 
 (todo) Algorithm - Off-policy n-step Q(sigma) for estimating Q
 
+## Chapter 8 - Planning and Learning with Tabular Methods
+[(Unofficial) Slides on this chapter](https://web.stanford.edu/class/cme241/lecture_slides/rich_sutton_slides/16-17-planning-and-learning.pdf)
+
+[Algorithm - Random-sample one-step tabular Q-planning](./planning-and-learning-wth-tabluar-methods/random_sample_one_step_tabluar_q_planning.py)
+- [Plot of the reward against random agent](./planning-and-learning-wth-tabluar-methods/plot/random_sample_with_one_step_tabluar_q_planning.png)
 
 ### Chapter 13 - policy gradient methods
 - Learns a parametrized policy
 - Can use a value function, but does not need to.
   
 [Algorithm - REINFORCE: Monte-Carlo Policy-Gradient Control (episodic)](./policy-gradient/reinforce.py)
+- [Plot of the reward against random agent](./policy-gradient/plot/reinforce.png)
 
 [Algorithm - REINFORCE with baseline](./policy-gradient/reinforce_with_baseline.py)
+- [Plot of the reward against random agent](./policy-gradient/plot/reinforce_with_baseline.png)
 
 [One-step Actor–Critic (episodic)](./policy-gradient/one_step_actor_critic.py)
+- [Plot of the reward against random agent](./policy-gradient/plot/one_step_actor_critic.png)
+

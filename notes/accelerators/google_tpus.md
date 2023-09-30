@@ -9,3 +9,16 @@ Looking at this before the paper, and quite infesting. They wanted to make inter
 
 ### [In-Datacenter Performance Analysis of a Tensor Processing Unit (Paper)](https://arxiv.org/abs/1704.04760)
 *TODO*
+
+### [Domain-Specific Architectures for Deep Neural Networks](https://inst.eecs.berkeley.edu//~cs152/sp19/lectures/L20-DSA.pdf)
+- The V1 of the TPU was used for 4+ years
+- [A Domain-Specific Architecture for Deep Neural Networks](https://cacm.acm.org/magazines/2018/9/230571-a-domain-specific-architecture-for-deep-neural-networks/fulltext)
+- Use `Bfloat16`
+- [Image Classification at Supercomputer Scale](https://arxiv.org/pdf/1811.06992.pdf)
+
+## [Ten Lessons From Three Generations Shaped Google’s TPUv4i](https://gwern.net/doc/ai/scaling/hardware/2021-jouppi.pdf)
+*todo*
+Mostly hardware stuff where I don't know that much atm.
+
+## [The Design Process for Google’s Training Chips: TPUv2 and TPUv3](https://gwern.net/doc/ai/scaling/hardware/2021-norrie.pdf)
+*todo*
