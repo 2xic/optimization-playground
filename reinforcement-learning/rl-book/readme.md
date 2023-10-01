@@ -69,6 +69,10 @@ Skipped (nothing that special there)
 [Algorithm - Random-sample one-step tabular Q-planning](./planning-and-learning-wth-tabluar-methods/random_sample_one_step_tabluar_q_planning.py)
 - [Plot of the reward against random agent](./planning-and-learning-wth-tabluar-methods/plot/random_sample_with_one_step_tabluar_q_planning.png)
 
+(todo) Algorithm - Tabluar Dyna-Q
+
+(todo) Algorithm - Prioritized sweeping for a deterministic environment
+
 ### Chapter 13 - policy gradient methods
 - Learns a parametrized policy
 - Can use a value function, but does not need to.
