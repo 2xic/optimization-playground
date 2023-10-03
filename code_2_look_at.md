@@ -8,16 +8,10 @@
 [https://github.com/facebookresearch/fairseq](https://github.com/facebookresearch/fairseq)
 
 ## Tools / Libraries
-[Jax](https://jax.readthedocs.io/en/latest/notebooks/quickstart.html)
-
 [Bayesian Optimization in PyTorch](https://botorch.org/)
 
 [pytorch-geometric](https://pytorch-geometric.readthedocs.io/en/latest/get_started/introduction.html)
 
 [tinygrad](https://github.com/geohot/tinygrad)
-
-[https://github.com/openai](https://github.com/openai/triton)
-
-[Mojo analysis](https://twitter.com/shshnkp/status/1656008696483438592?s=12)
 
 [prompt-optimizer](https://github.com/vaibkumr/prompt-optimizer)
