@@ -22,3 +22,9 @@ Mostly hardware stuff where I don't know that much atm.
 
 ## [The Design Process for Google’s Training Chips: TPUv2 and TPUv3](https://gwern.net/doc/ai/scaling/hardware/2021-norrie.pdf)
 *todo*
+
+## [An in-depth look at Google’s first Tensor Processing Unit (TPU)](https://cloud.google.com/blog/products/ai-machine-learning/an-in-depth-look-at-googles-first-tensor-processing-unit-tpu)
+- Google has used ASICs for NN since 2006
+- Uses CISC over RISC
+- 
+

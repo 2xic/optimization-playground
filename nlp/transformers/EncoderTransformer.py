@@ -46,4 +46,3 @@ class EncoderTransformer(nn.Module):
 
 if __name__ == "__main__":
     train_transformer(EncoderTransformer)
-    
