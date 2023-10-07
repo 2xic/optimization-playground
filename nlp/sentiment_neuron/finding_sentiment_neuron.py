@@ -9,10 +9,11 @@ How we can approach this
 
 """
 from model import Model
-from model import Model, Config
+from model import Model
 from vocab import Vocab
 from dataset import Dataset
 import torch
+import matplotlib.pyplot as plt
 
 max_size = 400
     
@@ -61,7 +62,8 @@ def look_for_sentiment_neuron(model: Model, vocab: Vocab, device):
     ]):
         i.register_forward_hook(j)
     
-    text, sentiment = Dataset().get_score_and_text(max_size) 
+    text, sentiment = Dataset(dataset_entries=100).get_score_and_text(max_size) 
+    text, sentiment = zip(*list(sorted(list(zip(text, sentiment)), key=lambda x: x[1])))
     for tokens in text:
         _ = model.forward_feed(vocab.get_encoded(tokens, device=device))
         # create one neuron layer map
@@ -85,6 +87,7 @@ def look_for_sentiment_neuron(model: Model, vocab: Vocab, device):
                 output_values.add_firing_value(i, scores[i])
     # index -> [best neuron index, score]
     best_layer_score_index = {}
+    best_neuron_firing_scores = {}
     scores = sentiment
     for index, i in enumerate([
             saved_output_1,
@@ -98,20 +101,20 @@ def look_for_sentiment_neuron(model: Model, vocab: Vocab, device):
             neuron_score.append([neuron_id, error])
         best_score = sorted(neuron_score, key=lambda x: x[1])[0]
         best_layer_score_index[index] = best_score
+        # best_neuron_id
+        best_neuron_id = best_score[0]
+        best_neuron_firing_scores[f"{index}_{best_neuron_id}"] = i.firing_scores[best_neuron_id]
     print(best_layer_score_index)
-
-
+    print(best_neuron_firing_scores)
+    plt.plot(list(range(len(scores))), scores, label="sentiment")
+    for key, value in best_neuron_firing_scores.items():
+        print((max(value), min(value), key))
+        plt.plot(list(range(len(value))), value, label=key)
+    plt.legend(loc="upper left")
+    plt.savefig(f'sentiment_neuron.png')
 
 if __name__ == "__main__":
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    dataset = Vocab()
-    sentences = Dataset().get_text(max_size)
-    dataset = dataset.process_dataset(sentences).lock()
-    config = Config(
-        tokens=dataset.get_vocab_size(),
-        padding_index=dataset.PADDING_IDX,
-        sequence_size=1
-    )
-    model = Model(config).to(device)
-    model.load()
+    dataset = Vocab().load()
+    model = Model.load().to(device)
     look_for_sentiment_neuron(model, dataset, device)

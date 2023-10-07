@@ -27,7 +27,6 @@ class WorldModel(nn.Module):
             ],
             z_size=config.z_size,
         ).to(config.device)
-    #    print(self.vae)
         self.transition_model = MlpRepresentation(
             latent_size=(config.z_size + 1),
             output_size=config.z_size

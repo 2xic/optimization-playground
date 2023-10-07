@@ -13,8 +13,6 @@ from non_maxiumu_supression import soft_nms, nms
 import matplotlib.pyplot as plt
 device = torch.device(
     'cuda') if torch.cuda.is_available() else torch.device('cpu')
-print(device)
-
 
 if __name__ == "__main__":
     # hot dog

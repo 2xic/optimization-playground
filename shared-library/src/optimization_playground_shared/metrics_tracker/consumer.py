@@ -100,12 +100,13 @@ def index():
                 f"<a href={name}>{name}</a>".format(name=name)
             )
         return "<br>".join(results)
-    
-@app.route('/<project_name>', methods=['GET'])
-def runs(project_name):
-    """
-    Shows the project run data
-    """
+
+def get_sorted_run_ids_for_project(project_name):
+    project_metadata_path = os.path.join(
+        root_data_directory,
+        project_name,
+        "metadata.json",
+    )
     project_metadata_path = os.path.join(
         root_data_directory,
         project_name,
@@ -113,19 +114,24 @@ def runs(project_name):
     )
     with open(project_metadata_path, "r") as file:
         data = json.load(file)
-        results = []
-        for (name, last_commit) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
-            print(name)
-            results.append(
-                f"<a href={project_name}/{name}>{name}</a>".format(project_name=project_name,name=name)
-            )
-        return "<br>".join(results)
-
-@app.route('/<project_name>/<run_id>', methods=['GET'])
-def run(project_name, run_id):
+        ids = []
+        for (run_id, _) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
+            ids.append(run_id)
+        return ids
+    
+@app.route('/<project_name>', methods=['GET'])
+def runs(project_name):
     """
     Shows the project run data
     """
+    results = []
+    for run_id in get_sorted_run_ids_for_project(project_name):
+        results.append(
+            f"<a href={project_name}/{run_id}>{run_id}</a>".format(project_name=project_name, run_id=run_id)
+        )
+    return "<br>".join(results)
+
+def load_run_id(project_name, run_id):
     run_metadata_path = os.path.join(
         root_data_directory,
         project_name,
@@ -136,9 +142,11 @@ def run(project_name, run_id):
     for i in glob.glob(run_metadata_path):
         with open(i, "r") as file:
             data.append(json.load(file))
+    if len(data) == 0:
+        return None
     data = sorted(data, key=lambda x: x["epoch"])
     loss_plot = plot_xy(
-        list(map(lambda x: x["loss"], data))
+        list(filter(lambda x: x is not None, list(map(lambda x: x["loss"], data))))
     )
     accuracy = ""
     if not all(list(map(lambda x: x["training_accuracy"] is None, data))):
@@ -155,6 +163,20 @@ def run(project_name, run_id):
         "<h1>Metrics</h1>",
         "<br>".join(predictions),
     ])
+
+@app.route('/<project_name>/<run_id>', methods=['GET'])
+def run(project_name, run_id):
+    """
+    Shows the project run data
+    """
+    if run_id == "latest":
+        run_ids = get_sorted_run_ids_for_project(project_name)
+        if len(run_ids):
+            run_id = run_ids[0]
+    results = load_run_id(project_name, run_id)
+    if results is None:
+        return f"Unknown run id {run_id}"
+    return results
 
 def get_prediction_format(entry):
     value = [

@@ -58,6 +58,8 @@ class Plot:
 
             if len(image.shape) == 3 and image.shape[0] == 1:
                 image = image.reshape(image.shape[1:])
+            elif len(image.shape) == 3 and image.shape[0] == 3:
+                image = np.moveaxis(image, 0, 2)
 
             if len(image.shape) == 2:
                 axes[index].imshow(image, cmap='gray')

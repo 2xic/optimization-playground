@@ -22,17 +22,19 @@ config = Config(
     sequence_size=1
 )
 print(config)
+dataset.save()
 
-model = Model(config).to(device)
-if not model.load() or True:
-    optimizer = optim.Adam(model.parameters())
-    for i in range(100):
-        optimizer.zero_grad()
-        loss = model.fit(x, y, debug=True)
-        loss.backward()
-        optimizer.step()
+model = Model.load() 
+model = Model(config).to(device) if model is None else model
+optimizer = optim.Adam(model.parameters())
+for i in range(100):
+    optimizer.zero_grad()
+    loss = model.fit(x, y, debug=True)
+    loss.backward()
+    optimizer.step()
 
-        print(f"loss {loss}")
+    print(f"loss {loss}")
+    model.save()
 
 for i in ["hello", "this", "gift", "I"]:
     predict_vector = dataset.get_encoded(f"{i}", device=device)

@@ -1,11 +1,11 @@
 import json
 
 class Dataset:
-    def __init__(self) -> None:
+    def __init__(self, dataset_entries) -> None:
         self.data = None
         with open("reviews_Video_Games.json", "r") as file:
             self.data = file.read().split("\n")
-        self.max_data_entries = 1_000
+        self.max_data_entries = dataset_entries
 
     def get_text(self, max_size):
         sentences = []

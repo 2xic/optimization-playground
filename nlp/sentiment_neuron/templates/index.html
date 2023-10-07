@@ -1,0 +1,23 @@
+<html>
+    <body>
+        <h1>Input</h1>
+        <textarea id="input" placeholder="text to send to the network"></textarea>
+        <h1>Output</h1>
+    </body>
+</html>
+
+<script>
+    let lastText = "";
+    window.onload = (() => {
+        console.log("hie")
+        setInterval(() => {
+            const input = document.getElementById("input").value;
+            console.log(input);
+            if (input !== lastText){
+                // send request
+                console.log(input);
+            }
+            lastText = input;
+        }, 5_00);
+    });
+</script>

@@ -1,5 +1,8 @@
 import setuptools
 
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
+
 print(setuptools.find_packages(where="src"))
 
 setuptools.setup(
@@ -8,4 +11,5 @@ setuptools.setup(
     author = "2xic",
     package_dir = {"": "src"},
     packages = setuptools.find_packages(where="src"),
+    install_requires=required,
 )

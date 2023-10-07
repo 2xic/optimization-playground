@@ -1,7 +1,9 @@
 import torch
+import json
 
 class Vocab:
     def __init__(self):
+        self.UNKNOWN_IDX = None
         self.is_locked = False
         self.idx_token = {}
         self.token_idx = {}
@@ -17,7 +19,7 @@ class Vocab:
             idx = len(self.idx_token)
             self.idx_token[idx] = i
             self.token_idx[i] = idx
-        return self.token_idx[i]
+        return self.token_idx.get(i, self.UNKNOWN_IDX)
     
     def add_sentence(self, sentence):
         x = []
@@ -68,3 +70,17 @@ class Vocab:
         for i in indexes:
             output.append(self.idx_token[i])
         return "".join(output)
+
+    def save(self):
+        with open("dataset.json", "w") as file:
+            json.dump(self.idx_token, file)
+
+    def load(self):
+        data = None
+        with open("dataset.json", "r") as file:
+            data = json.load(file)
+        for key, value in data.items():
+          #  print((key, value))
+            self.idx_token[int(key)] = value
+            self.token_idx[value] = int(key)
+        return self.lock()

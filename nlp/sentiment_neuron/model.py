@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 import os
 from collections import defaultdict
 
@@ -8,13 +8,14 @@ from collections import defaultdict
 class Config:
     padding_index: int
     tokens: int
-    embedding_dim = 8
-    sequence_size = 1
+    embedding_dim: int
+    sequence_size: int
 
-    def __init__(self, tokens, padding_index, sequence_size):
+    def __init__(self, tokens, padding_index, sequence_size=1, embedding_dim=8):
         self.padding_index = padding_index
         self.tokens = tokens
         self.sequence_size = sequence_size
+        self.embedding_dim = embedding_dim
 
 class Model(torch.nn.Module):
     def __init__(self, config: Config):
@@ -27,25 +28,25 @@ class Model(torch.nn.Module):
         )
         self.lstm = nn.LSTM(
             input_size=config.embedding_dim,
-            hidden_size=512,
+            hidden_size=1024,
             num_layers=4,
             batch_first=True
         )
         self.activation_1 = nn.Sequential(*[
             nn.Linear(
-                512, 512
+                1024, 2048
             ),
             nn.Tanh(),
         ])
         self.activation_2 = nn.Sequential(*[
             nn.Linear(
-                512, 512
+                2048, 1024
             ),
             nn.Tanh(),
         ])
         self.activation_3 = nn.Sequential(*[
             nn.Linear(
-                512, 512
+                1024, 512
             ),
             nn.Tanh(),
         ])
@@ -53,7 +54,6 @@ class Model(torch.nn.Module):
             nn.Linear(
                 512, config.tokens
             ),
-          #  nn.Softmax(dim=1)
         )
     
     def forward(self, x, hidden=None):
@@ -116,8 +116,10 @@ class Model(torch.nn.Module):
                 print(output)
         y_tokens.append(x_token.item())
         return y_tokens
-    
+
     def forward_feed(self, forward_pass):
+        # Does a forward, but only predicts one token at the time. 
+        # Does not use the model preidction to predict next token
         assert len(forward_pass.shape) == 2
         assert forward_pass.shape[0] == 1, "single batch size plz"
         hidden = None
@@ -135,14 +137,21 @@ class Model(torch.nn.Module):
 
     def save(self):
         torch.save({
-            'params': self.state_dict()
+            'params': self.state_dict(),
+            'config': asdict(self.config),
         }, 'model.pkt')
 
-    def load(self):
+    @staticmethod
+    def load():
         if os.path.isfile('model.pkt'):
             try:
-                self.load_state_dict(torch.load('model.pkt')['params'])
-                return True
+                data = torch.load('model.pkt')
+                config = Config(**data["config"])
+                print(config)
+                print(data["config"])
+                model = Model(config)
+                model.load_state_dict(data['params'])
+                return model
             except Exception as e:
                 print(e)
-        return False
+        return None
