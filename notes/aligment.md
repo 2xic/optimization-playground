@@ -28,5 +28,4 @@ This is the OpenAI "master" plan
 ```
 ^ quoted from the link.
 
-
-
+[Healthy critic that I agree with on this post](https://twitter.com/ProfNoahGian/status/1710633967911583994)
