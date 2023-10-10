@@ -1,4 +1,0 @@
-
-
-GAMES_EACH_EPOCH = 100
-

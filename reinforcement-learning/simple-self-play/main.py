@@ -1,81 +1,108 @@
+"""
+Simple actor critic
+"""
+from optimization_playground_shared.plot.Plot import Plot, Figure
 import torch
-from optimization_utils.envs.SimpleEnv import SimpleEnv
-from optimization_utils.exploration.EpsilonGreedyManual import EpsilonGreedyManual
+import gymnasium as gym
+from torch.distributions import Categorical
+import torch.nn as nn
+import torch.nn.functional as F
 import random
-from model import SimpleModel
-from game import Game
-from parameters import GAMES_EACH_EPOCH
-from optimization_utils.diagnostics.Diagnostics import Diagnostics
+from optimization_playground_shared.rl.actor_critic import Episode, eps
 
-env = SimpleEnv()
+class Actor(torch.nn.Module):
+    def __init__(self, state_size, action_size):
+        super().__init__()
+        self.actor = nn.Sequential(
+            nn.Linear(state_size, 128),
+            nn.Sigmoid(),
+            nn.Linear(128, action_size),
+            nn.Softmax(dim=1)
+        )
 
-def play(model: SimpleModel, epsilon: EpsilonGreedyManual, optimizer: torch.optim.Adam, diagnostics: Diagnostics):
-    global env
-    env.reset()
+    def forward(self, x):
+        return self.actor(x)
 
-    games = []
-    for i in range(GAMES_EACH_EPOCH):
-        game = Game()
-        total_reward = 0
-        while not env.done():
-            action_distribution = model(env.env.float())
-            #print(action_distribution)
-            action = epsilon.get_action(lambda: torch.argmax(action_distribution).item())
+device = torch.device('cpu')
+env = gym.make('CartPole-v1')
+env.reset(seed=42)
 
-            (_, reward, action, _) = env.step(action)
-            total_reward += reward
+EPOCHS = 1_300
 
-            game.add(action_distribution, action)
-            diagnostics.profile(action)
-            epsilon.update()
+def random_agents():
+    scores = []
+    for epochs in range(EPOCHS):
+        _, _ = env.reset()
+        sum_reward = 0
+        for _ in range(EPOCHS):
+            action = random.randint(0, 1)
+            _, reward, done, _, _ = env.step(action)
+            sum_reward += reward
+            if done:
+                break
+        if epochs % 100 == 0:
+            scores.append(sum_reward)
+            print(epochs)
+    return scores
 
-    #    print(total_reward)
+def train():
+    agent = Actor(
+        state_size=4,
+        action_size=2
+    )
+    scores = []
+    optimizer = torch.optim.Adam(agent.parameters())
+    for epochs in range(EPOCHS):
+        state, _ = env.reset()
+        sum_reward = 0
 
-        game.set_score(total_reward)
-        games.append(game)
-        diagnostics.reward(total_reward)
-        total_reward = 0
+        loss = 0
+        episode = Episode()
+        action_estimate = []
+        for _ in range(EPOCHS):
+            actor = agent.forward(
+                torch.from_numpy(state).unsqueeze(0)
+            )
+            dist = Categorical(actor)
+            action = dist.sample()
+            state, reward, done, _, _ = env.step(action.item())
+            sum_reward += reward
+            episode.add(reward)
+            action_estimate.append(actor[0][action])
+            if done:
+                break
+        returns = episode.get_value_reward()
+        returns = torch.tensor(returns, device=device)
+        returns = (returns - returns.mean()) / (returns.std() + eps)
+        for index, i in enumerate(returns):
+            # loss is how much this this reward contribute to the error 
+            # reward -> 1 then we want action high
+            # reward -> 0 then we want action low
+            loss += (1 / action_estimate[index] * i)
 
-
-    """
-    Hm, this simple way does nto seem to converge.
-    """
-    games_sorted = sorted(games, key=lambda x: x.score)
-    bad_games = games_sorted[:GAMES_EACH_EPOCH // 2]
-    good_games = games_sorted[GAMES_EACH_EPOCH // 2:]
-
-    loss = torch.tensor(0).float()
-    # actions done in the lost games = bad
-    for i in bad_games:
-        for j in i.action_distributions:
-            loss += (-min(i.score, 1) * j).sum()
-
-    # actions done in the win games = good
-    for i in good_games:
-        for j in i.action_distributions:
-            loss += (i.score * j).sum()
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        print(f"{epochs}: sum reward: {sum_reward} loss: {loss.item()}")
+        if epochs % 100 == 0:
+            scores.append(sum_reward)
     
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
-    
-    return loss
+    plot = Plot()
+    plot.plot_figures(
+        figures=[
+            Figure(
+                plots={
+                    "Agent": scores,
+                    "Random": random_agents(),
+                },
+                title="Rewards",
+                x_axes_text="Epochs",
+                y_axes_text="Rewards",
+            )
+        ],
+        name='rewards.png'
+    )
+
 
 if __name__ == "__main__":
-    model = SimpleModel(
-        input_size=env.state_size,
-        output_size=env.action_space,
-    )
-    epsilon = EpsilonGreedyManual(env.action_space - 1)
-    optimizer = torch.optim.Adam(model.parameters())
-
-    diagnostics = Diagnostics()
-
-    for epoch in range(10_000):
-        loss = play(model, epsilon, optimizer, diagnostics)
-
-        if epoch % 100 == 0:
-            diagnostics.print(epoch, metadata={
-                "loss": loss.item() 
-            })
-
+    train()
