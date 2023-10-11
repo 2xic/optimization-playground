@@ -1,4 +1,4 @@
-## stream codes
+# Stream codes
 In this chapter we will discuss two data compression schemes
 - Arithmetic coding (which we already wrote a tiny implementation for in [../../compression/arithmetic_coding.py](../../compression/arithmetic_coding.py)). Many state of the art compression algorithms uses this method.
 - Lempel-Ziv coding which is a universal method that does a reasonable job for any source. 

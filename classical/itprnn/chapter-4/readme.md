@@ -1,4 +1,4 @@
-## The Source Coding Theorem
+# The Source Coding Theorem
 In this chapter we will look at 
 - Shannon information is a sensible way of measuring information
 - Entropy of the ensemble is a sensible measure of the average information

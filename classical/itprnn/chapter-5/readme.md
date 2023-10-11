@@ -1,4 +1,4 @@
-## Symbol codes
+# Symbol codes
 Previously we have looked at block codes with a fixed length and in the previous chapter it was also loosy meaning that we lost information.
 In this chapter we will look at symbol codes which are not lossy and are also variable in size. Most common codewords will have a shorter length and less common longer code words.
 

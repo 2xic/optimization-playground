@@ -1,4 +1,4 @@
-## Introduction toInformation Theory
+# Introduction to Information Theory
 
 The first chapter is on how to communicate over noisy channels. The example case is that we have a noisy disk drive and there are generally two approaches on how to deal with this, we could either improve the quality of the disk drive or we could solve it with information theory (error correcting codes to be more precise).
 

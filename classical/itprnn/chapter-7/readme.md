@@ -1,6 +1,5 @@
 # Code for integers
 
-
 ## Unary codes
 - Send n zeros then a one to mark the end
 - The length of the unary code should be l_u(n) = n

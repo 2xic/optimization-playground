@@ -1,4 +1,4 @@
-### Inference
+# Inference
 
 ```
 probability theory reaches parts that ad hoc methods cannot reach.
