@@ -13,4 +13,3 @@
   - Randn vs rand
   - Bug in how normalization was done, so discriminator could easily see what was fake and real.
   - Plotting the output of the discriminator over time for real and fake images.
-  

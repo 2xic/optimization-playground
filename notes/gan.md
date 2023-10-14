@@ -78,3 +78,6 @@ Side note: I think' I read a paper similar to this, where they just use special 
 
 They basically feed a GAN it's own output and see what happens. 
 The conclusion is that you need a certain amount of fresh/real data to not have the model degrade. You can't have model generation on only GAN output.
+
+### [DALL·E 3 system card](https://cdn.openai.com/papers/DALL_E_3_System_Card.pdf)
+Not that useful of an paper (technically speaking and that is just my opinion), but might be interesting for people who want to see some information on the evolution of the model.

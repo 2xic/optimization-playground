@@ -32,3 +32,15 @@ This is an interesting paper
 
 The result is quite cool, look at figure 6 and you can see input context of a list of MNIST image and one query is "an image of 1+7" and the output is a mnist image of the number 8.
 
+## [Prompt injection in GPT4-V](https://twitter.com/simonw/status/1712976440969646543)
+Use the text from the image as a way to inject instructions into the model.
+
+[This user](https://twitter.com/wunderwuzzi23/status/1712996824364048444) embedded a link into the image which the model happily displayed and then also sent over the chat logs.
+
+## [GPT-4V(ision) system card](https://cdn.openai.com/papers/GPTV_System_Card.pdf)
+- Does explore the jailbreaking of this model
+- "Disinformation risks" has some interesting examples to say the least ....
+
+Not that useful of an paper (technically speaking and that is just my opinion), but might be interesting for people who want to see some information on the evolution of the model.
+
+[Used to trick people that use GPT for reviewing CVs lol](https://twitter.com/d_feldman/status/1713019158474920321)

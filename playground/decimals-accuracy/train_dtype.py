@@ -48,7 +48,7 @@ class BasicConvModel(nn.Module):
 def train_and_test_with_same_decimals():
     x_decimal_places = []
     y_accuracy = []
-    train, test = get_dataloader(max_train_size=10_000)
+    train, test = get_dataloader(subset=10_000)
 
     for (bits, dtype) in [
         [4, torch.ByteTensor],

@@ -9,28 +9,36 @@ def _call_if_func(func, dataset):
         return func(dataset)
     return func
 
-class CorruptedMnistDataloader(Dataset):
-    def __init__(self,  max_train_size, train, transforms):
-        self.train_ds = MNIST("./", train=train, download=True, transform=transforms)
-        self.len = min(max_train_size, len(self.train_ds))
-
-    def __len__(self):
-        return self.len
-
-    def __getitem__(self, idx):
-        X, y = self.train_ds[idx]
-        return (X, y)
     
-def get_dataloader(batch_size=64, overfit=False, subset=None, shuffle=False, transforms=transforms.ToTensor(), sampler=None, max_train_size=float('inf')):
-    train_ds = CorruptedMnistDataloader(train=True, transforms=transforms, max_train_size=max_train_size)
-    test_ds = CorruptedMnistDataloader(train=False, transforms=transforms, max_train_size=max_train_size)
+def get_dataloader(batch_size=64, overfit=False, subset=None, shuffle=False, transforms=transforms.ToTensor(), sampler=None):
+    (train, test, _) = get_dataloader_validation(
+        batch_size=batch_size,
+        overfit=overfit,
+        subset=subset,
+        shuffle=shuffle,
+        transforms=transforms,
+        sampler=sampler,
+    )
+    return (
+        train,
+        test
+    )
+
+def get_dataloader_validation(batch_size=64, overfit=False, subset=None, shuffle=False, transforms=transforms.ToTensor(), sampler=None):
+    train_ds = MNIST("./", train=True, download=True, transform=transforms)
+    test_ds = MNIST("./", train=False, download=True, transform=transforms)
+    validation_ds = None
 
     if subset is not None:
-        train_ds = torch.utils.data.Subset(train_ds, list(range(0, subset)))
-        #test_ds = torch.utils.data.Subset(test_ds, list(range(0, subset)))
+        validation_end_offset = int(subset * 0.1)
+        validation_ds = torch.utils.data.Subset(train_ds, list(range(0, validation_end_offset)))
+        validation_ds = torch.utils.data.Subset(train_ds, list(range(validation_end_offset, subset)))
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, test_ds))
+    validation_loader = None
+    if validation_ds is not None:
+        validation_loader = DataLoader(validation_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, validation_ds))
 
     if overfit:
         idx = train_ds.targets == 8
@@ -39,5 +47,6 @@ def get_dataloader(batch_size=64, overfit=False, subset=None, shuffle=False, tra
 
     return (
         train_loader,
-        test_loader
+        test_loader,
+        validation_loader,
     )
