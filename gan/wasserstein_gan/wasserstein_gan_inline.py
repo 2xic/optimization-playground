@@ -1,16 +1,11 @@
-import enum
 from generator import Generator
 from discriminator import Discriminator
 import torch
-import torch.nn.functional as F
-import pytorch_lightning as pl
-from pytorch_lightning import Trainer
 import torchvision
 from parameters import Parameters
 from torchvision.datasets import MNIST
 from torchvision import transforms
 from torch.utils.data import DataLoader
-import torch.nn as nn
 
 def train(parameters: Parameters, generator, discriminator, dataloader):
     opt_g = torch.optim.RMSprop(
