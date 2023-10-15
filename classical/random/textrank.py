@@ -9,9 +9,6 @@ from nltk.corpus import stopwords
  
 nltk.download('stopwords')
 stop_words = stopwords.words('english')
-#print(stop_words)
-#print(type(stop_words))
-#print(dir(stop_words))
 
 class TextRank:
     def __init__(self) -> None:

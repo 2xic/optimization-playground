@@ -450,3 +450,10 @@ Just use less words to save money on the llm apis.
 
 It is just a wrapper around `nltk`.
 
+## [HYPOTHESIS SEARCH: INDUCTIVE REASONING WITH LANGUAGE MODELS](https://arxiv.org/pdf/2309.05660.pdf)
+- Give the LLM some program examples
+- Have it generate a program for the examples
+  - If it succeeds on all examples then return it
+  - If it fails, have `n` searches where you give it the feedback (exceptions etc) so it can retry
+
+[Twitter thread](https://twitter.com/ericzelikman/status/1701405044610851230)

@@ -1,6 +1,5 @@
 Applying machine learning to solve some issue / challenge.
 
-
 ## OpenAI request for search
 [OpenAi requests for research v1](https://web.archive.org/web/20190213165912/https://openai.com/requests-for-research/)
 
@@ -14,3 +13,6 @@ Some project they mention that seem cool
 
 ## University of Bergen thesis idea's
 [Available Master's thesis topics in machine learning](https://www.uib.no/en/rg/ml/128703/available-masters-thesis-topics-machine-learning)
+
+## Other ideas
+- [Language model distillation](https://oven.rippling-ats.com/job/535740/runtime-engineer-zig-or-c-c)

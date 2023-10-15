@@ -9,4 +9,9 @@ Things that are randomized
 - Action delay
 - Action latency
 - Gravity
+
+### [Dynamic Handover: Throw and Catch with Bimanual Hands](https://arxiv.org/pdf/2309.05655.pdf)
+[Project page](https://binghao-huang.github.io/dynamic_handover/)
+- System trained in simulation (IsaacGym physical simulator) and then sim2real is applied
+- Neural network used as a goal estimator to be abel to remove some of the gaps between the simulation and the real world
 - 
