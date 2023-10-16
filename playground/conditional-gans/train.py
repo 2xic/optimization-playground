@@ -7,108 +7,126 @@ from optimization_playground_shared.metrics_tracker.producer import Tracker
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 from optimization_playground_shared.plot.Plot import Plot, Image
 from optimization_playground_shared.metrics_tracker.metrics import Prediction
-import random
+import torch.nn.functional as F
 
 metrics_tracker = Tracker("conditional_gan")
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-train_dataloader, _ = get_dataloader(shuffle=True)
-lr = 1e-3
+train_dataloader, _ = get_dataloader(shuffle=True, batch_size=32)
 ITERATIONS_CRITIC = 2
 n_classes = 10
 
+
+def epoch_scale(epochs):
+    if epochs < 3:
+        return 3
+    if epochs < 5:
+        return 2
+    else:
+        return 1
+
+def forward_loss(generator, discriminator, x_real, y_real, is_generator_loss, epochs):
+    x_real = x_real.to(device)
+    y_real = y_real.to(device)
+    y_real_one_hot =  F.one_hot(y_real, num_classes=10).to(device).float() 
+
+    # loss on the real data
+    (is_real_data_real, real_data_labels) = discriminator(x_real)
+    real_data_loss = epoch_scale(epochs) * torch.nn.CrossEntropyLoss()(
+        real_data_labels,
+        y_real
+    ) + torch.nn.CrossEntropyLoss()(
+        is_real_data_real,
+        torch.ones((is_real_data_real.shape[0]), device=device).long()
+    )
+    # loss on the fake data
+    noise = torch.normal(mean=0, std=1,  size=(x_real.shape[0], 100), device=device)
+    random_labels = torch.argmax(torch.rand(size=(y_real.shape[0], 10), device=device), dim=1)
+    y_fake =  F.one_hot(random_labels, num_classes=10).to(device).float() 
+
+    #target_zero_class = torch.zeros((noise.shape[0]), device=device).long()
+    generator_images = generator(noise, y_fake)
+    (is_real, labels) = discriminator(generator_images)
+    fake_data_loss = epoch_scale(epochs) * torch.nn.CrossEntropyLoss()(
+        labels,
+        random_labels,
+    ) +  torch.nn.CrossEntropyLoss()(
+        is_real,
+        torch.zeros((is_real.shape[0]), device=device).long()
+    )
+    loss = (real_data_loss + fake_data_loss)
+
+    if is_generator_loss:
+        is_real.detach()
+        labels.detach()
+        is_real_data_real.detach()
+        real_data_labels.detach()
+#        return - (loss )
+        return -loss
+    else:
+        generator_images.detach()
+        return loss
+
 def train(discriminator, generator):
-    opt_g = torch.optim.RMSprop(
-        generator.parameters(), lr=lr)
-    opt_d = torch.optim.RMSprop(
-        discriminator.parameters(), lr=lr)
-    slow_start_until_epoch = 10
+    opt_g = torch.optim.RMSprop(generator.parameters(), lr=0.0002)
+    opt_d = torch.optim.RMSprop(discriminator.parameters(), lr=0.0002)
+
     for current_epoch in range(205):
-        sum_real_data_loss = torch.tensor(0, device=device).float()
-        sum_fake_data_loss = torch.tensor(0, device=device).float()
-        loss = torch.tensor(0, device=device).float()
-        for index, (real, classes) in enumerate(train_dataloader):
-            real = real.to(device).float()
-            classes = classes.to(device)
-            noise = torch.normal(mean=0, std=1,  size=(real.shape[0], 100), device=device)
-            (is_real, labels) = discriminator(real)
-            real_data_loss = torch.nn.CrossEntropyLoss()(
-                labels,
-                classes
-            )
-            real_data_loss += torch.nn.L1Loss()(
-                is_real,
-                torch.ones(is_real.shape[0], device=device)
-            )
-            # we want the generator to try everything :D 
-            #noise = torch.normal(mean=0, std=1,  size=(classes.shape[0], 100), device=device)
-            target_zero_class = torch.zeros((noise.shape[0]), device=device).long()
-            (is_real, labels) = discriminator(generator(noise, (classes / 10).reshape((-1, 1)).float()).detach())
-            fake_data_loss = torch.nn.CrossEntropyLoss()(
-                labels,
-                target_zero_class,
-            )
-            fake_data_loss += torch.nn.L1Loss()(
-                is_real,
-                torch.zeros(is_real.shape[0], device=device)
-            )
-            sum_real_data_loss += real_data_loss
-            sum_fake_data_loss += fake_data_loss
-            loss += (real_data_loss + 0.5 * fake_data_loss) / 2
-            if index > ITERATIONS_CRITIC:
-                break
-        discriminator.zero_grad()
-        (loss ).backward()
-        opt_d.step()
+      #  sum_real_data_loss = torch.tensor(0, device=device).float()
+      #  sum_fake_data_loss = torch.tensor(0, device=device).float()
+        total_loss = torch.tensor(0, device=device).float()
+        total_loss_generator = torch.tensor(0, device=device).float()
 
-        #loss_generator = - discriminator(generator(noise)).sum() / real.shape[0]
-        loss_generator = torch.tensor(0, device=device).float()
-        n_generator =  1 if current_epoch < slow_start_until_epoch else 1
-        for _ in range(n_generator):
-            classes = torch.arange(0, 10, device=device).reshape((-1, 1)).float()
-            noise = torch.normal(mean=0, std=1,  size=(classes.shape[0], 100), device=device)
-            target_zero_class = torch.zeros((noise.shape[0]), device=device).long()
-            generated = generator(noise, classes / 10)
-            (is_real, labels) = discriminator(generated)
-            loss_generator -= torch.nn.CrossEntropyLoss()(
-                labels,
-                classes.long().reshape((-1)),
-            )
-            loss_generator -= torch.nn.L1Loss()(
-                is_real,
-                torch.ones(is_real.shape[0], device=device)
-            )
-        generator.zero_grad()
-        (loss_generator ).backward()
-        opt_g.step()
+        for _, (real, classes) in enumerate(train_dataloader):
+            """"
+            Training the discriminator
+            """
+            for _ in range(5):
+                loss = forward_loss(generator, discriminator, real, classes, is_generator_loss=False, epochs=current_epoch)
+                discriminator.zero_grad()
+                (loss).backward()
+                opt_d.step()
+                total_loss += loss.item()
 
-        print(f"Loss discriminator {loss.item()}, generator {loss_generator.item()}")
-        print(f"Loss generator real {sum_real_data_loss.item()}, fake {sum_fake_data_loss.item()}")
+            """
+            Training the generator
+            """
+            loss_generator = forward_loss(generator, discriminator, real, classes, is_generator_loss=True, epochs=current_epoch)
+            generator.zero_grad()
+            loss_generator.backward()
+            opt_g.step()
+            total_loss_generator += loss_generator.item()
+
+        print(f"Loss discriminator {total_loss.item()}, generator {total_loss_generator.item()}")
+       # print(f"Loss generator real {sum_real_data_loss.item()}, fake {sum_fake_data_loss.item()}")
         print("")
 
-        if current_epoch % 10:
-            with torch.no_grad():
-                noise = torch.normal(mean=0, std=1,  size=(10, 100), device=device)
-                classes = torch.arange(0, 10, device=device).reshape((-1, 1)).float()
-                output = generator(noise, classes)
-                grid_image = torchvision.utils.make_grid(output)
-            # print(grid_image.shape)
-                inference = Plot().plot_image([
-                    Image(
-                        image=grid_image.cpu().numpy(),
-                        title='output'
-                    )
-                ], f'inference.png')
+        with torch.no_grad():
+            noise = torch.normal(mean=0, std=1,  size=(10, 100), device=device)
+            classes = torch.arange(0, 10, device=device)
+            y_real_one_hot =  F.one_hot(classes, num_classes=10).to(device).float() 
 
-                metrics_tracker.log(
-                    Metrics(
-                        epoch=current_epoch,
-                        loss=None,
-                        training_accuracy=None,
-                        prediction=Prediction.image_prediction(
-                            inference
-                        )
+            generator_images = generator(noise, y_real_one_hot)
+            grid_image = torchvision.utils.make_grid(generator_images)
+            inference = Plot().plot_image([
+                Image(
+                    image=grid_image.cpu().numpy(),
+                    title='output'
+                )
+            ], f'inference.png')
+
+            metrics_tracker.log(
+                Metrics(
+                    epoch=current_epoch,
+                    loss={
+                        "generative loss": total_loss_generator.item(),
+                        "discriminator loss": total_loss.item(),
+                    },
+                    training_accuracy=None,
+                    prediction=Prediction.image_prediction(
+                        inference
                     )
                 )
+            )
 
 if __name__ == '__main__':
     gan = train(

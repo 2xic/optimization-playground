@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, Union, Dict
 import time
 import torch
 
@@ -32,14 +32,21 @@ class Prediction:
 @dataclass
 class Metrics:
     epoch: int
-    loss: float
+    loss: Union[float, Dict[str, float]]
     training_accuracy: Optional[float] = None
     testing_accuracy: Optional[float] = None
     timestamp: float=time.time()
     prediction: Prediction = None
     
-    def __init__(self, epoch: int, loss: float, training_accuracy=None, testing_accuracy=None, timestamp=time.time(), prediction=None):
+    def __init__(self, epoch: int, loss: Union[float, Dict[str, float]], training_accuracy=None, testing_accuracy=None, timestamp=time.time(), prediction=None):
         self.epoch = epoch
+        if type(loss) == float:
+            self.loss = loss
+        else:
+            self.loss = {
+                key:self._get_tensor_float(value)
+                for key, value in loss.items()
+            }
         self.loss = self._get_tensor_float(loss)
         self.training_accuracy = self._get_tensor_float(training_accuracy)
         self.testing_accuracy = self._get_tensor_float(testing_accuracy)

@@ -6,21 +6,19 @@ import torch.nn.functional as F
 class SimpleConditionalDiscriminator(BasicConvModel):
     def __init__(self, image_shape=(1, 28, 28), classes=10):
         super().__init__(image_shape)
-        self.out = nn.Sequential(
-          nn.Linear(256, 128),
-          nn.LeakyReLU(),
-          nn.Linear(128, 64),
-          nn.LeakyReLU(),
-          nn.Dropout(p=0.01),
-          nn.Linear(64, classes),
-        )
         self.out_labels = nn.Sequential(
           nn.Linear(256, 128),
           nn.LeakyReLU(),
           nn.Linear(128, 64),
           nn.LeakyReLU(),
-          nn.Dropout(p=0.01),
-          nn.Linear(64, 1),
+          nn.Linear(64, classes),
+        )
+        self.is_real_labels = nn.Sequential(
+          nn.Linear(256, 128),
+          nn.LeakyReLU(),
+          nn.Linear(128, 64),
+          nn.LeakyReLU(),
+          nn.Linear(64, 2),
         )
 
     def forward(self, x):
@@ -28,6 +26,6 @@ class SimpleConditionalDiscriminator(BasicConvModel):
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1)
         x = F.dropout(x, p=0.1)
-        y = self.out_labels(x)
-        x = self.out(x)
-        return y, x
+        is_real_labels = self.is_real_labels(x)
+        out_labels = self.out_labels(x)
+        return is_real_labels, out_labels

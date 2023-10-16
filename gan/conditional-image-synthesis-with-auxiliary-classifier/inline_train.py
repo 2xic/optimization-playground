@@ -8,8 +8,6 @@ from generator import Generator
 from discriminator import Discriminator
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
-from pytorch_lightning import Trainer
 import torchvision
 from torchvision.datasets import MNIST
 from torchvision import transforms
@@ -95,7 +93,7 @@ def train(generator, discriminator, device):
     train_loader = DataLoader(
         train_ds, batch_size=32, shuffle=True)
     
-    forward_loss = forward if True else forward_nnl
+    forward_loss = forward
 
     for current_epoch in range(25):
         for batch, (x_real, y_real) in enumerate(train_loader):

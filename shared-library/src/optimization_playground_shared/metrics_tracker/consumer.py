@@ -10,6 +10,7 @@ import dataclasses
 import glob
 from.plot import plot_xy
 import base64
+from ..plot.Plot import Plot, Figure
 
 root_data_directory = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -145,9 +146,40 @@ def load_run_id(project_name, run_id):
     if len(data) == 0:
         return None
     data = sorted(data, key=lambda x: x["epoch"])
-    loss_plot = plot_xy(
-        list(filter(lambda x: x is not None, list(map(lambda x: x["loss"], data))))
-    )
+    loss_plot = []
+    if all(list(map(lambda x: type(x["loss"]) == dict, data))):
+        plots = {}
+        for i in data:
+            for key, value in i["loss"].items():
+                if key in plots:
+                    plots[key].append(value)
+                else:
+                    plots[key] = [value]
+        all_plots = [
+            plots,
+        ]
+        for key, value in plots.items():
+            all_plots.append({key: value})
+        for current_plot in all_plots:
+            plot = Plot()
+            path = plot.plot_figures(
+                figures=[
+                    Figure(
+                        plots=current_plot,
+                        title="Loss",
+                        x_axes_text="Epochs",
+                        y_axes_text="Loss",
+                    ),
+                ],
+                name='training.png'
+            )
+            with open(path, "rb") as file:
+                encoded_data = base64.b64encode(file.read()).decode("ascii")
+                loss_plot.append( f"<img src='data:image/png;base64,{encoded_data}'/>")
+    elif  all(list(map(lambda x: type(x["loss"]) in [float, int], data))):
+        loss_plot.append(plot_xy(
+            list(filter(lambda x: x is not None, list(map(lambda x: x["loss"], data))))
+        ))
     accuracy = ""
     if not all(list(map(lambda x: x["training_accuracy"] is None, data))):
         accuracy_plot = plot_xy(
@@ -156,9 +188,10 @@ def load_run_id(project_name, run_id):
         accuracy =  "<h2>Accuracy</h2>" + accuracy_plot
         
     predictions = list(map(lambda x: get_prediction_format(x), data))[-5:]
+    if len(loss_plot):
+        loss_plot = ["<h2>Loss</h2>"] + loss_plot
     return "<br>".join([
-        "<h2>Loss</h2>",
-        loss_plot,
+        "<br>".join(loss_plot),
         accuracy,
         "<h1>Metrics</h1>",
         "<br>".join(predictions),

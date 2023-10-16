@@ -105,7 +105,9 @@ class Plot:
         self._create_output_folder(name)
         plt.savefig(name)
         self._clear()
-        
+
+        return name
+
     def plot_scatter(self, figure: Scatter, name: str):
         for legend, value in figure.plots.items():
             plt.scatter(value.X, value.y, label=legend)

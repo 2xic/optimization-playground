@@ -2,6 +2,7 @@ import base64
 from io import BytesIO
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
+
 """
 TODO: I think it should just be shared with the plot figure we have and 
 that it outputs to bytes
