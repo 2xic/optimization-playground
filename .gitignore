@@ -30,3 +30,4 @@ get_lambda_instances.py
 .vast_*
 upload_vast*
 .cache
+.*

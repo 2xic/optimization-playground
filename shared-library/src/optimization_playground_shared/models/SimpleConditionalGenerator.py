@@ -11,26 +11,17 @@ class SimpleConditionalGenerator(nn.Module):
         self.z_input = nn.Linear(z, first_layer_out_size)
         self.class_input = nn.Sequential(*[
             nn.Linear(10, 128),
-            nn.Sigmoid(),
+            nn.Tanh(),
             nn.Linear(128, first_layer_out_size),
         ])
         self.out = nn.Sequential(
-            nn.Sigmoid(),
-            nn.Linear(first_layer_out_size * 2, 128),
-            nn.Sigmoid(),
-            nn.Dropout(p=0.01),
-            nn.Linear(128, 256),
-            nn.Sigmoid(),
-            nn.Linear(256, 512),
-            nn.Sigmoid(),
-            nn.Linear(512, 1024),
-            nn.Sigmoid(),
-            nn.Linear(1024, 512),
-            nn.Sigmoid(),
-            nn.Linear(512, 728),
-            nn.Sigmoid(),
+            nn.Tanh(),
+            nn.Linear(first_layer_out_size * 2, 256),
+            nn.Tanh(),
+            nn.Linear(256, 728),
+            nn.Tanh(),
             nn.Linear(728, 28 * 28),
-            nn.Sigmoid(),
+            nn.Tanh(),
         )
 
     def forward(self, x, classes):
