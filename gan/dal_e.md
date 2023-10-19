@@ -25,7 +25,17 @@ The method involves having a dataset (`X`, `y`) of `X` images with `y` captions.
 - The prior is `P(Z_i | y)` where `Z_i` is the CLIP image embedding
 - The decoder `P(X | Z_i, y)`, here the `y` caption is optional.
 
+# [Improving Image Generation with Better Captions](https://cdn.openai.com/papers/dall-e-3.pdf)
+[DALL·E 3 is now available in ChatGPT Plus and Enterprise](https://openai.com/blog/dall-e-3-is-now-available-in-chatgpt-plus-and-enterprise)
+- Bad image descriptions = Bad image generation
+  - The word bad is used in a broad sense, but in this context mostly around the fact that it does not capture the full details of the description
+- Train a model to rephrase sentences and use that to generate more data .... Then train on the new data :D 
+  - Looking at figure 3 this is actually quite good at least for the provided data
+- They use CLIP to condition on the captions, cleaver!
+
+
 ----
+
 # [Beating OpenAI CLIP with 100x less data and compute](https://www.unum.cloud/blog/2023-02-20-efficient-multimodality)
 Model is also open source [https://github.com/FreddeFrallan/Multilingual-CLIP](https://github.com/FreddeFrallan/Multilingual-CLIP)
 

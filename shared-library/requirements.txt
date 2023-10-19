@@ -2,3 +2,4 @@ python-dotenv
 matplotlib
 scikit-learn
 gymnasium[box2d]
+accelerate
