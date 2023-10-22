@@ -13,6 +13,3 @@ Some project they mention that seem cool
 
 ## University of Bergen thesis idea's
 [Available Master's thesis topics in machine learning](https://www.uib.no/en/rg/ml/128703/available-masters-thesis-topics-machine-learning)
-
-## Other ideas
-- [Language model distillation](https://oven.rippling-ats.com/job/535740/runtime-engineer-zig-or-c-c)
