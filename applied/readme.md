@@ -13,3 +13,10 @@ Some project they mention that seem cool
 
 ## University of Bergen thesis idea's
 [Available Master's thesis topics in machine learning](https://www.uib.no/en/rg/ml/128703/available-masters-thesis-topics-machine-learning)
+
+## Other
+- [Image to code](https://huggingface.co/docs/transformers/main/tasks/image_captioning#train)
+  - Train model to generate source code for an image
+- Revert an embedding (text or image)
+  - Similar to [this](https://arxiv.org/pdf/2310.06816.pdf) 
+

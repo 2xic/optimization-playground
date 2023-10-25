@@ -457,3 +457,16 @@ It is just a wrapper around `nltk`.
   - If it fails, have `n` searches where you give it the feedback (exceptions etc) so it can retry
 
 [Twitter thread](https://twitter.com/ericzelikman/status/1701405044610851230)
+
+### [Eureka: Human-Level Reward Design via Coding Large Language Models](https://arxiv.org/abs/2310.12931)
+[Tweet thread](https://twitter.com/DrJimFan/status/1715401002957013076)
+
+Uses LLMs to do reward engineering. Quite cool. It uses "reward reflection" to generate new reward functions.
+
+My immediate reaction by looking over the paper is that I'm unsure if this somehow could be part of the training dataset or not. The changes applied by the model 
+- Just searching on github for some of the changes does not reveal anything [obvious](https://github.com/search?q=0.5+*+rotation_reward+%2B+0.3+*+distance_reward+language%3APython&type=code) and [here](https://www.google.com/search?q=%220.5+*+rotation_reward%22+site%3Agithub.com&client=firefox-b-d&sca_esv=576194101&biw=1233&bih=886&ei=sx04ZfKrFviqxc8PqYes0As&ved=0ahUKEwiy0ciZuI-CAxV4VfEDHakDC7oQ4dUDCA8&uact=5&oq=%220.5+*+rotation_reward%22+site%3Agithub.com&gs_lp=Egxnd3Mtd2l6LXNlcnAiJyIwLjUgKiByb3RhdGlvbl9yZXdhcmQiIHNpdGU6Z2l0aHViLmNvbUj9BVDXBFjXBHABeACQAQCYAVegAVeqAQExuAEDyAEA-AEB4gMEGAEgQYgGAQ&sclient=gws-wiz-serp)
+
+
+### [GPT-4 vision is susceptible to optical illusions](https://twitter.com/fabianstelzer/status/1717131235644875024)
+There is some back and forth in the discussion, but seems like it is susceptible to optical illusions.
+

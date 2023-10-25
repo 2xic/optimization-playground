@@ -80,3 +80,7 @@ Referenced papers
     -  
 
 
+### [Text Embeddings Reveal (Almost) As Much As Text](https://arxiv.org/pdf/2310.06816.pdf)
+- Assumes black-box access to the model
+- Tested with text that are 32-tokens in length
+- Iterative process where the model is able to find embeddings that correlate to the original text

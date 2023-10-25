@@ -10,6 +10,11 @@ Looking at this before the paper, and quite infesting. They wanted to make inter
 ### [In-Datacenter Performance Analysis of a Tensor Processing Unit (Paper)](https://arxiv.org/abs/1704.04760)
 *TODO*
 
+### [BFloat16: The secret to high performance on Cloud TPUs](https://cloud.google.com/blog/products/ai-machine-learning/bfloat16-the-secret-to-high-performance-on-cloud-tpus)
+Using BFloat16 (Brain Floating Point Format 16) is a one of the the Google TPUs some extra high performance. Models generally need lower precisions (especially for inference only) and BFloat16 is a way to achieve "as good" results as float32, but with less bits.
+
+[Origin story](https://twitter.com/JeffDean/status/1717030662144921670) - Jeff wanted to send fewer bits over the network to optimize the distributed training system at Google.
+
 ### [Domain-Specific Architectures for Deep Neural Networks](https://inst.eecs.berkeley.edu//~cs152/sp19/lectures/L20-DSA.pdf)
 - The V1 of the TPU was used for 4+ years
 - [A Domain-Specific Architecture for Deep Neural Networks](https://cacm.acm.org/magazines/2018/9/230571-a-domain-specific-architecture-for-deep-neural-networks/fulltext)

@@ -99,3 +99,11 @@ No changes are required on the agent.
 
 [presentation by the authors](https://slideslive.com/38967529/online-and-offline-reinforcement-learning-by-planning-with-a-learned-model?ref=recommended)
  
+
+## [Hindsight Experience Replay](https://arxiv.org/pdf/1707.01495.pdf)
+[Blogpost on it (unofficial)](https://becominghuman.ai/learning-from-mistakes-with-hindsight-experience-replay-547fce2b3305) with [code](https://github.com/localminimum/hindsight-experience-replay/blob/master/HER.py)
+
+Basically create sub goals and works towards them which helps with convergence of the algorithm. 
+
+
+
