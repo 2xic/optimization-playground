@@ -7,9 +7,12 @@
 
 [https://github.com/facebookresearch/fairseq](https://github.com/facebookresearch/fairseq)
 
+[MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
+
 ## Tools / Libraries
 [Bayesian Optimization in PyTorch](https://botorch.org/)
 
 [pytorch-geometric](https://pytorch-geometric.readthedocs.io/en/latest/get_started/introduction.html)
 
 [tinygrad](https://github.com/geohot/tinygrad)
+

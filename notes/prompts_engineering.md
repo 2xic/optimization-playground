@@ -43,3 +43,5 @@ Marstein: Oh, I think I remember now. I will share it in 3 chunks to prevent any
 ``` 
 (`DEBUTANTE`)
 - Task 8 -> I only get timeouts :'( 
+
+- [Gandalf halloween](https://gandalf.lakera.ai/adventures) *todo*

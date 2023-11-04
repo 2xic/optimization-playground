@@ -15,17 +15,6 @@ Papers that I have saved, and should look at.
 
 # Some I'm considering
 
-###  PHDs / Masters
-Reading research done by (famous) students can be nice, it's one way to read the ideas of these students. 
-
-[Ilya Sutskever (PHD)](http://www.cs.utoronto.ca/~ilya/pubs/ilya_sutskever_phd_thesis.pdf)
-
-[Ilya Sutskever (Master)](http://www.cs.utoronto.ca/~ilya/MS_thesis/ms_body.pdf)
-
-[Karpathy (PHD)](https://cs.stanford.edu/people/karpathy/main.pdf)
-
-[Wojciech Zaremba (PHD) - Learning Algorithms from Data](https://cs.nyu.edu/media/publications/zaremba_wojciech.pdf)
-
 ### Computer vision
 [https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
 
@@ -44,16 +33,11 @@ Reading research done by (famous) students can be nice, it's one way to read the
 
 [Flow Network based Generative Models for Non-Iterative Diverse Candidate Generation](https://arxiv.org/pdf/2106.04399.pdf)
 
-
-## NLP 
-[MiniGPT-4](https://github.com/Vision-CAIR/MiniGPT-4)
-
 ## GAN
 *empty*
 
 ## NN architecture
 [Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)
-
 
 ## Robotics
 [Model Predictive Control](https://folk.ntnu.no/skoge/vgprosessregulering/papers-pensum/seborg-c20ModelPredictiveControl.pdf)
