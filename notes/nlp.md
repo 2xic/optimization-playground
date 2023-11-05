@@ -84,3 +84,13 @@ Referenced papers
 - Assumes black-box access to the model
 - Tested with text that are 32-tokens in length
 - Iterative process where the model is able to find embeddings that correlate to the original text
+
+### [Grok](https://x.ai/)
+- LLM that has a better sense of humor than most other LLMs (not that I'm been able to test it yet)
+- It also has "real-time" knowledge of what is happening based on data from the X platform (is the model just using some apis internally ? )
+- The model looks some what promising on the dataset
+
+What is more interesting is the engineering section
+- They use JAX, Rust and Kubernetes for the training and inference stack. They also expand on that in the [careers](https://x.ai/career/) page
+- They also use triton
+- 
