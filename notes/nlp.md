@@ -93,4 +93,12 @@ Referenced papers
 What is more interesting is the engineering section
 - They use JAX, Rust and Kubernetes for the training and inference stack. They also expand on that in the [careers](https://x.ai/career/) page
 - They also use triton
+  
+
+### [Pretraining Data Mixtures Enable Narrow Model Selection Capabilities in Transformer Models](https://arxiv.org/pdf/2311.00871.pdf)
+- They find limited evidence that LLMs are able to generalized being the training dataset (this isn't really any news?)
+- They do however do well on tasks defined within the training data
 - 
+
+
+

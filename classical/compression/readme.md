@@ -47,3 +47,8 @@ The page has many code snippets for various compression algorithms.
   - Arithmetic Coder Block
 - Haven't I seen this before ? 
 
+## Other resources
+-  [Zip Files: History, Explanation and Implementation](https://www.hanshq.net/zip.html) was a fun read.
+-  
+
+
