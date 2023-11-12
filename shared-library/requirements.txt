@@ -3,3 +3,4 @@ matplotlib
 scikit-learn
 gymnasium[box2d]
 accelerate
+nvidia-ml-py3
