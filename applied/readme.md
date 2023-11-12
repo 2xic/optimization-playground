@@ -20,3 +20,5 @@ Some project they mention that seem cool
 - Revert an embedding (text or image)
   - Similar to [this](https://arxiv.org/pdf/2310.06816.pdf) 
 - Sim2Real experiment
+- Use RL to optimize some SQL query / Something else
+- 
