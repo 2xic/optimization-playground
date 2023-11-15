@@ -60,6 +60,7 @@ def get_output_shape(shape_in, layers):
 class BasicConvModel(nn.Module):
     def __init__(self, input_shape=(1, 28, 28), num_classes=10):
         super().__init__()
+        self.m = nn.BatchNorm2d(input_shape[0])
         self.conv1 = nn.Conv2d(input_shape[0], 12, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(12, 16, 5)
@@ -81,6 +82,7 @@ class BasicConvModel(nn.Module):
         )
 
     def forward(self, x):
+        x = self.m(x)
         x = self.pool(F.relu(self.conv1(x)))
         x = self.pool(F.relu(self.conv2(x)))
         x = torch.flatten(x, 1)

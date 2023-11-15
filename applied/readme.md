@@ -21,4 +21,4 @@ Some project they mention that seem cool
   - Similar to [this](https://arxiv.org/pdf/2310.06816.pdf) 
 - Sim2Real experiment
 - Use RL to optimize some SQL query / Something else
-- 
+- Training a simple driving simulator (https://arxiv.org/pdf/1608.01230.pdf) with same dataset as the speed challenge 

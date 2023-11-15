@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 class TrainingLoop:
     def __init__(self, model, optimizer, loss=nn.NLLLoss()):
@@ -40,6 +41,8 @@ class TrainingLoop:
                 )
                 loss.backward()
                 self.optimizer.step()
+                if isinstance(dataloader, tqdm):
+                    dataloader.set_description(f"Loss: {loss.item()}, Accuracy: {accuracy}")
             total_loss += loss             
             accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += X.shape[0]
