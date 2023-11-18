@@ -26,6 +26,12 @@ class Image:
     image: Any
     title: Optional[str] = None
 
+    def __init__(self, image, title=None):
+        if torch.is_tensor(image):
+            self.image = image.detach().cpu().numpy()
+        else:
+            self.image = image
+        self.title = title
 
 @dataclass
 class ScatterEntry:

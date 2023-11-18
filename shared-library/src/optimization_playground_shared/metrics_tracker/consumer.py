@@ -286,6 +286,9 @@ def load_run_id(project_name, run_id):
         accuracy =  "<h2>Accuracy</h2>" + accuracy_plot
         
     predictions = list(map(lambda x: get_prediction_format(x), data))[-5:]
+    # Reverse so you can see the latest results first 
+    predictions = predictions[::-1]
+
     if len(loss_plot):
         loss_plot = ["<h2>Loss</h2>"] + loss_plot
     return "<br>".join([

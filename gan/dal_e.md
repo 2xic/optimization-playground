@@ -33,8 +33,9 @@ The method involves having a dataset (`X`, `y`) of `X` images with `y` captions.
   - Looking at figure 3 this is actually quite good at least for the provided data
 - They use CLIP to condition on the captions, cleaver!
 
-
 ----
+
+[Consistency Decoder](https://github.com/openai/consistencydecoder) with provided link to weights (url hardcoded in the init script)
 
 # [Beating OpenAI CLIP with 100x less data and compute](https://www.unum.cloud/blog/2023-02-20-efficient-multimodality)
 Model is also open source [https://github.com/FreddeFrallan/Multilingual-CLIP](https://github.com/FreddeFrallan/Multilingual-CLIP)

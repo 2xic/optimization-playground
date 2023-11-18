@@ -10,6 +10,8 @@ from typing import List
 
 load_dotenv()
 
+assert "HOST" in os.environ, "Missing host keyword"
+
 class Tracker:
     def __init__(self, project_name) -> None:
         self.name = project_name
@@ -61,4 +63,3 @@ if __name__ == "__main__":
             epoch=epoch,
             loss=torch.rand(1).item()
         ))
-

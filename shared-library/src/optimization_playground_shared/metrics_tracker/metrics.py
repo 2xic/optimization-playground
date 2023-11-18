@@ -42,6 +42,8 @@ class Metrics:
         self.epoch = epoch
         if type(loss) == float:
             self.loss = loss
+        elif torch.is_tensor(loss):
+            self.loss = loss.item()
         else:
             self.loss = {
                 key:self._get_tensor_float(value)

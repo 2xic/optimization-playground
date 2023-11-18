@@ -12,6 +12,7 @@ Papers that I have saved, and should look at.
 - [https://github.com/lucidrains](https://github.com/lucidrains)
 - [https://nn.labml.ai/index.html](https://nn.labml.ai/index.html)
 - [https://openai.com/blog/learning-day](https://openai.com/blog/learning-day)
+- [https://mlcollective.org/dlct/](https://mlcollective.org/dlct/)
 
 # Some I'm considering
 

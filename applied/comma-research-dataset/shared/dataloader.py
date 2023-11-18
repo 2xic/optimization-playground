@@ -7,11 +7,12 @@ import numpy as np
 import cv2
 
 class CarDriveDataset(Dataset):
-    def __init__(self, train=True, fraction_of_dataset=1) -> None:
+    def __init__(self, train=True, fraction_of_dataset=1, transformers=None) -> None:
         super().__init__()
 
         self.fraction_of_dataset = fraction_of_dataset
         self.X, self.y = self.load_dataset(train)
+        self.transformers = transformers
 
     def load_dataset(self, train):
         speed = None
@@ -27,7 +28,7 @@ class CarDriveDataset(Dataset):
             X.append(lookup_files[f"frame_{i + 1}.png"])
             y.append(float(speed[i]))
 
-        split_index = int(len(X) * 0.8)
+        split_index = int(len(X) * 0.95)
         if train:
             return X[:split_index], y[:split_index]
         else:
@@ -43,7 +44,10 @@ class CarDriveDataset(Dataset):
         x = torchvision.io.read_image(x)
         y = y
 
-        return x, torch.tensor(y)
+        if self.transformers is not None:
+            x = self.transformers(x)
+
+        return x, torch.tensor([y]).float()
 
 class CarDriveDatasetWithDeltaFrame(CarDriveDataset):
     def __init__(self, train=True, fraction_of_dataset=1) -> None:
@@ -61,14 +65,32 @@ class CarDriveDatasetWithDeltaFrame(CarDriveDataset):
             cv2.imread(self.X[idx]),
             cv2.imread(self.X[idx + 1])
         )
+        y = self.y[idx] - self.y[idx + 1]
 
-        y = self.y[idx]
-        y -= self.y[idx + 1]
-
-        return x.float(), torch.tensor(y).float()
+        return x.float(), torch.tensor([y]).float()
     
     def get_optical_flow(self, a, b):
-        # pip install opencv-python
+        a_gray = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
+        b_gray = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)
+        # https://docs.opencv.org/3.4/dc/d6b/group__video__track.html
+        flow = cv2.calcOpticalFlowFarneback(
+            a_gray, 
+            b_gray, 
+            None, 
+            pyr_scale = 0.5, 
+            levels = 8, 
+            winsize = 11, 
+            iterations = 16, 
+            poly_n = 5, 
+            poly_sigma = 1.1, 
+            flags = 0
+        )
+        img = np.zeros_like(a)
+        img[:,:, :2] = flow
+
+        return torch.from_numpy(img).permute(2, 0, 1)
+
+    def get_background_subtraction(self, a, b):
         background_subtraction = cv2.createBackgroundSubtractorMOG2()
         mask = background_subtraction.apply(a)
         mask = background_subtraction.apply(b)
