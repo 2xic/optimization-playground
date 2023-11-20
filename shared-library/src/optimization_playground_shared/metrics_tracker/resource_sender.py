@@ -1,4 +1,6 @@
 import nvidia_smi
+import threading
+import random
 
 def get_gpu_resource_usage():
     nvidia_smi.nvmlInit()
@@ -11,9 +13,9 @@ def get_gpu_resource_usage():
 
 def get_cpu_resource_usage():
     # Todo : use psutil or something
-    pass
+    return random.randint(3, 95)
 
 def get_ram_resource_usage():
     # Todo : use psutil or something
     pass
-
+    

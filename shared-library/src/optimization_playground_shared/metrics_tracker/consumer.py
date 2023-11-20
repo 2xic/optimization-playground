@@ -13,6 +13,7 @@ import base64
 from ..plot.Plot import Plot, Figure
 from typing import Dict
 import difflib
+from .resource_tracker import ResourceTracker
 
 root_data_directory = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -23,6 +24,8 @@ global_metadata = os.path.join(
     ".data",
     "metadata.json"
 )
+
+resource_tracker = ResourceTracker()
 
 class SimpleDatabase:
     def __init__(self, project_name, id) -> None:
@@ -311,6 +314,47 @@ def run(project_name, run_id):
     if results is None:
         return f"Unknown run id {run_id}"
     return results
+
+@app.route('/resource_usage', methods=['GET'])
+def resource_usage():
+    # resource_tracker
+    plot = Plot()
+    path = plot.plot_figures(
+        figures=[
+            Figure(
+                plots={
+                    "percentage":resource_tracker.cpu,
+                },
+                title="Cpu usage",
+            ),
+            Figure(
+                plots={
+                    "percentage":resource_tracker.ram,
+                },
+                title="ram usage",
+            ),
+            Figure(
+                plots={
+                    "percentage":resource_tracker.gpu,
+                },
+                title="gpu usage",
+            ),
+        ],
+        name='.training.png'
+    )
+    with open(path, "rb") as file:
+        encoded_data = base64.b64encode(file.read()).decode("ascii")
+        return f"<img src='data:image/png;base64,{encoded_data}'/>"
+
+@app.route('/resource_usage', methods=['POST'])
+def update_resource_usage():
+    global resource_tracker
+    content = request.json
+    for key, value in content.items():
+        resource_tracker.add_usage(key, value)
+    return jsonify({
+        "success": True,
+    })
 
 def get_prediction_format(entry):
     value = [

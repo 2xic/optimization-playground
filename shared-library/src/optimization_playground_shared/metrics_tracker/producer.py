@@ -7,6 +7,9 @@ from .metrics import Metrics
 import dataclasses
 import glob
 from typing import List
+from .resource_sender import get_cpu_resource_usage
+import threading
+import time
 
 load_dotenv()
 
@@ -16,6 +19,17 @@ class Tracker:
     def __init__(self, project_name) -> None:
         self.name = project_name
         self.run_id = uuid.uuid4()
+        # sending resource updates :O
+        t1 = threading.Thread(target=self.start_background_thread)
+        t1.start()
+        # we send feedback -> feedback is good
+
+    def start_background_thread(self):
+        while True:
+            print(requests.post(os.environ["HOST"] + "/resource_usage", json={
+                "cpu": get_cpu_resource_usage()
+            }))
+            time.sleep(30)
 
     def send_code_state(self, folders: List[str]):
         files = {}
@@ -63,3 +77,4 @@ if __name__ == "__main__":
             epoch=epoch,
             loss=torch.rand(1).item()
         ))
+        time.sleep(3)
