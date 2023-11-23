@@ -1,5 +1,8 @@
-[Decoupled Neural Interfaces using Synthetic Gradients](https://arxiv.org/pdf/1608.05343.pdf)
+### [Decoupled Neural Interfaces using Synthetic Gradients](https://arxiv.org/pdf/1608.05343.pdf)
 
+![example](./example.png)
+
+## Paper notes
 - Forward and backwards propagation requirers networks to be locked while updating weights
   - To break this constraint they use a model to simulate backpropagation based on local information
     -  i.e model error gradients 
@@ -26,6 +29,4 @@
       - But then .... what is the point ?
     - 
     - 
-
-
 
