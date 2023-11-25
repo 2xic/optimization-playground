@@ -49,26 +49,83 @@ class CarDriveDataset(Dataset):
 
         return x, torch.tensor([y]).float()
 
+methods = ["optical_flow", "background_subtraction", "plain"]
+
 class CarDriveDatasetWithDeltaFrame(CarDriveDataset):
-    def __init__(self, train=True, fraction_of_dataset=1) -> None:
+    def __init__(self, train=True, fraction_of_dataset=1, method="optical_flow") -> None:
         super().__init__(train, fraction_of_dataset)
+        self.method = method
+        self.cache = True # Note that running it without a cache slows things down a lot
+        self.train = train
+        assert self.method in methods
 
     def __len__(self):
         return super().__len__() - 1
 
     def __getitem__(self, idx):
-        # delta frame
-        #x = torchvision.io.read_image(self.X[idx])
-        #x -= torchvision.io.read_image(self.X[idx + 1])
+        x = self.load_cache(idx, self.method)
 
-        x = self.get_optical_flow(
-            cv2.imread(self.X[idx]),
-            cv2.imread(self.X[idx + 1])
-        )
+        if x is None:
+            if self.method == "optical_flow":
+                x = self.get_optical_flow(
+                    cv2.imread(self.X[idx]),
+                    cv2.imread(self.X[idx + 1])
+                )
+            elif self.method == "background_subtraction":
+                x = self.get_background_subtraction(
+                    cv2.imread(self.X[idx]),
+                    cv2.imread(self.X[idx + 1])
+                )
+            elif self.method == "plain":
+                x = cv2.imread(self.X[idx])
+                x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
+                x = np.asarray(x)
+                x = torch.from_numpy(x).permute(2, 0, 1) 
+                assert x.shape[0] == 3/ x.max()
+            else:
+                method = self.method
+                raise Exception(f"Unknown method {method}")
+
+        # delta of the speed, maybe it is so low number that the model gets confused ? 
+        self.save_cache(idx, self.method, x)
+        if torch.max(x) > 1:
+            x = x / 255.0
         y = self.y[idx] - self.y[idx + 1]
 
+        # make sure things are normalized
+        assert torch.max(x) <= 1, torch.max(x)
+        assert torch.min(x) <= 0
+
         return x.float(), torch.tensor([y]).float()
-    
+
+    def load_cache(self, idx, method):
+        if method != "plain":
+            cache_path = self.get_cache_path(idx, method)
+            if os.path.isfile(cache_path):
+                #return ##torchvision.io.read_image(cache_path)
+                try:
+                    return torch.load(cache_path)
+                except Exception as e:
+                    # fallback to None - sometimes the data is bad for some reason :( 
+                    pass
+        return None
+
+    def save_cache(self, idx, method, image):
+        if method != "plain":
+            if self.cache:
+                cache_path = self.get_cache_path(idx, method)
+                try:
+                    #torchvision.utils.save_image(image, cache_path)
+                    torch.save(image, cache_path)
+                except Exception as e:
+                    # fallback to None - sometimes the data is bad for some reason :( 
+                    pass
+
+    def get_cache_path(self, idx, method):
+        os.makedirs(".cache", exist_ok=True)
+        training = "training" if self.train else "test"
+        return f".cache/{idx}_{method}_{training}.png"
+
     def get_optical_flow(self, a, b):
         a_gray = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
         b_gray = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY)
@@ -103,6 +160,9 @@ class CarDriveDatasetWithDeltaFrame(CarDriveDataset):
         return torch.from_numpy(img).permute(2, 0, 1)
 
 if __name__ == "__main__":
-    X, y = CarDriveDatasetWithDeltaFrame()[0]
-    print((X, X.shape, y))
-    torchvision.utils.save_image(X, 'dataset/example.png')
+    for i in methods:
+        X, y = CarDriveDatasetWithDeltaFrame(
+            method=i
+        )[0]
+        print((X, X.shape, y))
+        torchvision.utils.save_image(X, f"dataset/example_{i}.png")

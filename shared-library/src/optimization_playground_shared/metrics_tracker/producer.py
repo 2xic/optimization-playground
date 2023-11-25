@@ -7,7 +7,7 @@ from .metrics import Metrics
 import dataclasses
 import glob
 from typing import List
-from .resource_sender import get_cpu_resource_usage
+from .resource_sender import get_cpu_resource_usage, get_ram_resource_usage, get_gpu_resource_usage
 import threading
 import time
 
@@ -26,10 +26,15 @@ class Tracker:
 
     def start_background_thread(self):
         while True:
-            print(requests.post(os.environ["HOST"] + "/resource_usage", json={
-                "cpu": get_cpu_resource_usage()
-            }))
-            time.sleep(30)
+            try:
+                requests.post(os.environ["HOST"] + "/resource_usage", json={
+                    "cpu": get_cpu_resource_usage(),
+                    "ram": get_ram_resource_usage(),
+                    "gpu": get_gpu_resource_usage(),
+                })
+                time.sleep(30)
+            except Exception as e:
+                print("Exception in background thread", e)
 
     def send_code_state(self, folders: List[str]):
         files = {}

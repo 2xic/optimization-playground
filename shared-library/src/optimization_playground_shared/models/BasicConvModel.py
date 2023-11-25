@@ -49,12 +49,14 @@ def get_output_shape(shape_in, layers):
             continue
         elif isinstance(i, nn.ReLU):
             continue
+        elif isinstance(i, nn.ELU):
+            continue
         elif isinstance(i, nn.LeakyReLU):
             continue
         elif isinstance(i, nn.BatchNorm2d):
             continue
         else:
-            raise Exception("Hm, unknown layer")
+            raise Exception(f"Hm, unknown layer {i}")
     return shape
 
 class BasicConvModel(nn.Module):

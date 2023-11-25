@@ -16,9 +16,10 @@ from optimization_playground_shared.models.BasicConvModel import get_output_shap
 import matplotlib.style as mplstyle
 import torch.nn.functional as F
 import time
+from optimization_playground_shared.plot.Plot import Plot, Figure
+
 mplstyle.use('fast')
 
-metrics_tracker = Tracker("speed_challenge")
 
 class BasicConvModel(nn.Module):
     def __init__(self, input_shape=(1, 28, 28)):
@@ -34,71 +35,121 @@ class BasicConvModel(nn.Module):
         self.fc1 = nn.Linear(16 * self.output_shape[0] * self.output_shape[1], 256)
         self.out = nn.Sequential(
             self.fc1,
-            nn.Dropout(p=0.1),
-            nn.ELU(),
+            nn.Dropout(p=0.2),
+            nn.Tanh(),
             nn.Linear(256, 128),
-            nn.ELU(),
+            nn.Tanh(),
             nn.Linear(128, 64),
-            nn.ELU(),
-            nn.Linear(64, 1)
+            nn.Tanh(),
+            nn.Linear(64, 1),
+     #       nn.Tanh(),
         )
 
     def forward(self, x):
         x = self.m(x)
-        x = self.pool(F.elu(self.conv1(x)))
-        x = self.pool(F.elu(self.conv2(x)))
+        x = self.pool(F.tanh(self.conv1(x)))
+        x = self.pool(F.tanh(self.conv2(x)))
         x = torch.flatten(x, 1)
         x = self.out(x)
         return x
 
-dataset = CarDriveDatasetWithDeltaFrame(
-    fraction_of_dataset=1
-)
-model = BasicConvModel(input_shape=(3, 480, 640))
-optimizer = optim.Adam(
-    model.parameters(),
-    weight_decay=0.01,
-)
-iterator = TrainingLoop(model, optimizer, loss=torch.nn.MSELoss())
 
-loader = DataLoader(dataset, batch_size=256, shuffle=True)
-
-for epoch in range(10):
-    start = time.time()
-    (sum_loss, accuracy) = iterator.train(tqdm(loader, desc="Training"))
-    print("Training time", time.time() - start)
-
-    test_dataset = CarDriveDatasetWithDeltaFrame(
-        train=False
-    )
-    test_loader = DataLoader(test_dataset, batch_size=64)
-
+def get_predicted_plots(
+    model,
+    dataloader,    
+    device
+):
     # Maybe the model just overfits after n epochs ? 
     predicted_y = [0]
     true_y = [0]
     start = time.time()
-    for (X, y) in test_loader:
-        for i in sum(model(X.to(iterator.device)).tolist(), []):
-            predicted_y.append( i + predicted_y[-1]) 
-        for i in sum(y.tolist(), []):
-            true_y.append( i + true_y[-1])
-        
-    print("Model time", time.time() - start)
-    start = time.time()
-    plt.plot(predicted_y, label="Predicted")
-    plt.plot(true_y, label="Truth")
-    plt.legend(loc="upper left")
-    plt.savefig(f'predictions.png')
-    plt.clf()
-    print("Plot time", time.time() - start)
+    with torch.no_grad():
+        for (X, y) in dataloader:
+            for i in sum(model(X.to(device)).tolist(), []):
+                predicted_y.append( i + predicted_y[-1]) 
+            for i in sum(y.tolist(), []):
+                true_y.append( i + true_y[-1])
+    return predicted_y, true_y
 
-    metrics_tracker.log(
-        Metrics(
-            epoch=epoch,
-            loss=sum_loss,
-            training_accuracy=accuracy, # accuracy in this sense is a bit inaccurate though
-            prediction=Prediction.image_prediction(
-                'predictions.png'
-            )
+def train():
+    num_workers = 4
+
+    for method in ["optical_flow", "plain", "background_subtraction"]:
+        metrics_tracker = Tracker(f"speed_challenge_{method}")
+        dataset = CarDriveDatasetWithDeltaFrame(
+            # reduce the amount of data we train to speed up the testing
+            fraction_of_dataset=1,
+            method=method,
         )
-    )
+        model = BasicConvModel(input_shape=(3, 480, 640))
+        optimizer = optim.Adam(
+            model.parameters(),
+            weight_decay=0.01,
+        )
+        iterator = TrainingLoop(model, optimizer, loss=torch.nn.MSELoss())
+        # More workers = more speed
+        loader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=num_workers)
+
+        test_dataset = CarDriveDatasetWithDeltaFrame(
+            train=False
+        )
+        test_loader = DataLoader(test_dataset, batch_size=64, num_workers=num_workers)
+        train_loader_no_shuffle = DataLoader(dataset, batch_size=64, num_workers=num_workers)
+
+        for epoch in range(1_00):
+            start = time.time()
+            (sum_loss, accuracy) = iterator.train(tqdm(loader, desc="Training"))
+            print("Training time", time.time() - start)
+
+            start = time.time()
+            predicted_y, true_y = get_predicted_plots(
+                model,
+                test_loader,
+                iterator.device
+            )
+            train_predicted_y, train_true_y = get_predicted_plots(
+                model,
+                train_loader_no_shuffle,
+                iterator.device
+            )
+                
+            print("Model time", time.time() - start)
+
+            plot = Plot()
+            plot.plot_figures(
+                figures=[
+                    Figure(
+                        plots={
+                            "predicted": predicted_y,
+                            "truth": true_y,
+                        },
+                        title="Test dataset",
+                        x_axes_text="Timestamp",
+                        y_axes_text="Speed",
+                    ),
+                    Figure(
+                        plots={
+                            "predicted": train_predicted_y,
+                            "truth": train_true_y,
+                        },
+                        title="Train dataset",
+                        x_axes_text="Timestamp",
+                        y_axes_text="Speed",
+                    ),
+                ],
+                name='predictions.png'
+            )
+            
+            metrics_tracker.log(
+                Metrics(
+                    epoch=epoch,
+                    loss=sum_loss,
+                    training_accuracy=accuracy, # accuracy in this sense is a bit inaccurate though
+                    prediction=Prediction.image_prediction(
+                        'predictions.png'
+                    )
+                )
+            )
+
+if __name__ == "__main__":
+    train()

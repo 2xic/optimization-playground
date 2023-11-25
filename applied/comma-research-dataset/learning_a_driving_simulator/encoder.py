@@ -14,9 +14,7 @@ from .vae import SimpleVaeModel
 from torch import optim
 from tqdm import tqdm
 from shared.dataloader import CarDriveDataset
-from torchvision.transforms import v2
 from torch.utils.data import DataLoader
-from torchvision.utils import save_image
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 from optimization_playground_shared.metrics_tracker.metrics import Prediction
 from optimization_playground_shared.plot.Plot import Plot, Image
@@ -28,15 +26,19 @@ class Vae:
         self.vae = SimpleVaeModel(
             # 3, 80, 160 is same as the authors used as size
             input_shape=(3, 80, 160),
-            conv_shape=[
-                16,
-                32,
-                64,
-                128
-            ],
-            z_size=2048,
+            z_size=1024,
         ).to(DEVICE)
         self.optimizer = optim.Adam(self.vae.parameters())
+
+    # I thought that maybe removing the randomness would help, but it makes things less smooth
+    """
+    def encode(self, observation):
+        observation = observation.to(DEVICE)
+        (mean, log_var) = self.vae.encode(observation)
+        var = torch.exp(0.5 * log_var)
+        z = mean + var 
+        return z
+    """
 
     def encode(self, observation):
         observation = observation.to(DEVICE)
@@ -53,6 +55,7 @@ class Vae:
     def _forward_and_backward(self, observation):
         out = self.encode(observation)
         out = self.decode(out)
+        assert out.shape == observation.shape, out.shape
         return out
 
     def loss(self, observation):
@@ -60,10 +63,8 @@ class Vae:
 
         observation = observation.to(DEVICE)
         out = self.encode(observation)
-        # TODO: fix the shape -> The vae model should output the same shape as the input image
-        out = self.decode(out)[:, :, :observation.shape[2], :observation.shape[3]]
-
-        loss = torch.nn.MSELoss(reduction='sum')(out, observation)
+        out = self.decode(out)
+        loss = torch.nn.functional.mse_loss(out, observation)
         loss.backward()
 
         self.optimizer.step()
@@ -71,6 +72,7 @@ class Vae:
         return loss, out
 
 def train():
+    from torchvision.transforms import v2
     dataset = CarDriveDataset(
         fraction_of_dataset=1,
         transformers=v2.Compose([
@@ -78,14 +80,14 @@ def train():
         ])
     )
     model = Vae()
-    loader = DataLoader(dataset, batch_size=128, shuffle=True)
+    loader = DataLoader(dataset, batch_size=64, shuffle=True, num_workers=8)
     metrics_tracker = Tracker("learning_a_driving_simulator_encoder")
 
-    for epoch in range(1_00):
+    for epoch in range(1_000):
         sum_loss = 0
         progress = tqdm(loader)
         for _, (X, _) in enumerate(progress):
-            X = X.float() / 255
+            X = X.float() / torch.max(X)
             (loss, out) = model.loss(X)
             progress.set_description(f'Loss {loss.item()}')
             sum_loss += loss
@@ -114,4 +116,5 @@ def train():
 
 if __name__ == "__main__":
     model = Vae()
+#    print(model._forward_and_backward(torch.zeros((1, 3, 80, 160))))
     train()

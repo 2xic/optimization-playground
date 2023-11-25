@@ -29,18 +29,16 @@ class Z(nn.Module):
 
 
 class SimpleVaeModel(nn.Module):
-    def __init__(self, input_shape=(1, 28, 28), z_size=128, conv_shape=None):
+    def __init__(self, input_shape=(1, 28, 28), z_size=128):
         super().__init__()
         self.z_size = z_size
         self.channels = input_shape[0]
-        if conv_shape is None:
-            self.conv_shape = [
-                32,
-                64,
-                128,
-            ]
-        else:
-            self.conv_shape = conv_shape
+        self.conv_shape = [
+            16,
+            32,
+            64,
+            128
+        ]
         self.encoder = self.get_encoder(input_shape)
         self.decoder = self.get_decoder()
 
@@ -66,8 +64,8 @@ class SimpleVaeModel(nn.Module):
                 nn.ConvTranspose2d(
                     conv_shape,
                     reversed[index + 1],
-                    kernel_size=(6, 9),
-                    stride=2,
+                    kernel_size=(6, 3),
+                    stride=(2, 3),
                     padding=1,
                     output_padding=1
                 )
@@ -76,20 +74,20 @@ class SimpleVaeModel(nn.Module):
                 nn.BatchNorm2d(reversed[index + 1])
             )
             decoders.append(
-                nn.LeakyReLU(),
+                nn.ELU(),
             )
         output = nn.Sequential(
             nn.ConvTranspose2d(
                 reversed[-1],
                 reversed[-1],
-                kernel_size=(9, 9),
-                stride=(2, 3),
-                padding=(1, 2),
-                output_padding=(1, 2)
+                kernel_size=(9, 3),
+                stride=(2, 4),
+                padding=(1, 1),
+                output_padding=(1, 3)
             ),
             nn.Conv2d(reversed[-1],
                 out_channels=self.channels,
-                kernel_size=(3, 1), 
+                kernel_size=(3, 7), 
                 stride=(1, 1),
                 padding=1,
             ),
@@ -116,7 +114,7 @@ class SimpleVaeModel(nn.Module):
                 nn.BatchNorm2d(i)
             )
             encoders.append(
-                nn.LeakyReLU(),
+                nn.ELU(),
             )
             last_channel = i
         output_shape = ((
@@ -126,11 +124,17 @@ class SimpleVaeModel(nn.Module):
         hidden_dim = 256
         fc1 = nn.Linear(
             self.conv_shape[-1] * output_shape[0] * output_shape[1],
+            hidden_dim * 2
+        )
+        fc2 = nn.Linear(
+            hidden_dim * 2,
             hidden_dim
         )
         return torch.nn.Sequential(*encoders+[
             torch.nn.Flatten(1),
             fc1,
-            nn.LeakyReLU(),
+            nn.ELU(),
+            fc2,
+            nn.ELU(),
             Z(hidden_dim, self.z_size)
         ])

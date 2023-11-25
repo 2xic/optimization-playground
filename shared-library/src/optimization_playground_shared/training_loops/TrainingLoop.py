@@ -42,9 +42,14 @@ class TrainingLoop:
                 loss.backward()
                 self.optimizer.step()
                 if isinstance(dataloader, tqdm):
-                    dataloader.set_description(f"Loss: {loss.item()}, Accuracy: {accuracy}")
-            total_loss += loss             
-            accuracy += (torch.argmax(y_pred, 1) == y).sum()
+                    dataloader.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
+            total_loss += loss
+            # TODO: Maybe instead add a custom accuracy metric field
+            if y_pred.shape[-1] == 1:
+                # check if it is within the error margin
+                accuracy += ((y_pred - y).abs() < 0.001).sum()
+            else:
+                accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += X.shape[0]
         accuracy = (accuracy / length) * 100 
         self.epoch += 1
