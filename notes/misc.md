@@ -10,3 +10,6 @@
    - Input is two two weather states and predicts the 
 -  Trained for 4 weeks with 32 Google TPU v4
 
+## [Deep Reinforcement Fuzzing](https://arxiv.org/abs/1801.04589)
+Uses Q-learning as a way to do fuzzing. There isn't much more to say, but the idea is quite cool as generally fuzzing algorithms use something like evolutionary algorithms.
+

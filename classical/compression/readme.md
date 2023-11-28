@@ -49,6 +49,6 @@ The page has many code snippets for various compression algorithms.
 
 ## Other resources
 -  [Zip Files: History, Explanation and Implementation](https://www.hanshq.net/zip.html) was a fun read.
--  
+-  [Data compression](https://en.wikipedia.org/wiki/Data_compression) on Wikipedia is quite alright
 
 

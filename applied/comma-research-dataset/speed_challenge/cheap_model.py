@@ -81,6 +81,8 @@ def train():
             fraction_of_dataset=1,
             method=method,
         )
+        # TODO: try resnet
+        #model = torch.hub.load('pytorch/vision:v0.10.0', 'resnet18', pretrained=True)
         model = BasicConvModel(input_shape=(3, 480, 640))
         optimizer = optim.Adam(
             model.parameters(),

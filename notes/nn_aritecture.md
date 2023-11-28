@@ -16,3 +16,8 @@ Just scaling up the dataset gives quite the improvement also :)
 ## [Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift](http://proceedings.mlr.press/v37/ioffe15.pdf)
 Using batch normalization makes it easier to train neural networks without thinking about the learning rate. Why ? Because the distribution between layers will be more normalized. Since the input passes through all layers during training this makes the distribution much less noisy. 
 
+## [Scaling Scaling Laws with Board Games](https://arxiv.org/abs/2104.03113)
+[Found on twitter](https://twitter.com/ibab_ml/status/1669579636563656705)
+
+The most interesting results from this paper imo is the fact that you cna tradeoff the search time of the search and the training time. For each additional 10x of train-time compute, 15x of test-time compute (search time) can be removed.
+

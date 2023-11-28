@@ -32,7 +32,7 @@ def get_dataloader_validation(batch_size=64, overfit=False, subset=None, shuffle
     if subset is not None:
         validation_end_offset = int(subset * 0.1)
         validation_ds = torch.utils.data.Subset(train_ds, list(range(0, validation_end_offset)))
-        validation_ds = torch.utils.data.Subset(train_ds, list(range(validation_end_offset, subset)))
+        train_ds = torch.utils.data.Subset(train_ds, list(range(validation_end_offset, subset)))
 
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, test_ds))
