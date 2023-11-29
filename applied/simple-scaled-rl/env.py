@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import multiprocessing
 from pyboy.logger import log_level
+from typing import List 
 log_level("DISABLE")
 
 """
@@ -10,9 +11,10 @@ Goal of the class is to collect state-action pairs simply
 """
 
 class GameResults:
-    def __init__(self, state_action_pairs, score):
+    def __init__(self, state_action_pairs, score, model_id):
         self.state_action_pairs = state_action_pairs
         self.score = score
+        self.model_id = model_id
 
     def get_state_action_pairs(self):
         returns = []
@@ -37,13 +39,13 @@ class GamePool:
         self.num_processes = multiprocessing.cpu_count()
         self.debug = debug
 
-    def run(self, model):
+    def run(self, model) -> List[GameResults]:
         output = []
         try:
             with multiprocessing.Pool(self.num_processes) as p:
                 args_list = [
-                    (model, model_id)
-                    for model_id in range(self.size)
+                    (model, 0, run_id) if type(model) != list else (model[run_id % len(model)], run_id % len(model), run_id)
+                    for run_id in range(self.size)
                 ]
                 results = p.map(self._run_game, args_list)
                 output += results
@@ -57,7 +59,7 @@ class GamePool:
         return output
 
     def _run_game(self, args):
-        (model, model_id) = args
+        (model, model_id, run_id) = args
         if self.debug:
             print(f"Staring {model_id}")
         py_boy = PyBoy('bins/Tetris.gb', window_type="headless", game_wrapper=True)
@@ -104,8 +106,8 @@ class GamePool:
             (torch_prev_state, torch_game_area, action, tetris.score)
         )
         if self.debug:
-            print(f"Run id: {model_id}, score: {tetris.score}")
-        return GameResults(state_action_pairs, tetris.score)
+            print(f"Run id: {run_id}, score: {tetris.score}")
+        return GameResults(state_action_pairs, tetris.score, model_id)
 
 if __name__ == "__main__":
     results = GamePool(n=15).run()
