@@ -1,6 +1,6 @@
 from optimization_playground_shared.dataloaders.CorrupedMnist import get_dataloader
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
-from optimization_playground_shared.models.TrainingLoop import TrainingLoop
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 import torch.optim as optim
 import matplotlib.pyplot as plt
 
