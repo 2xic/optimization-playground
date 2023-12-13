@@ -30,3 +30,7 @@
     - 
     - 
 
+### Similar papers
+- [Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)
+  - They use a RNN for learning to meta learn the backward propagation
+

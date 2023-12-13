@@ -81,3 +81,22 @@ The conclusion is that you need a certain amount of fresh/real data to not have 
 
 ### [DALL·E 3 system card](https://cdn.openai.com/papers/DALL_E_3_System_Card.pdf)
 Not that useful of an paper (technically speaking and that is just my opinion), but might be interesting for people who want to see some information on the evolution of the model.
+
+### [MagicAnimate: Temporally Consistent Human Image Animation using Diffusion Model](https://arxiv.org/pdf/2311.16498.pdf)
+- [Twitter results are quite good](https://twitter.com/julien_c/status/1731991225559920688)
+- [Website also has good results](https://showlab.github.io/magicanimate/)
+- Oh wait I can think of a way to do this (the secret to all ML is how to do e2e ground truth)
+  - Run pose estimation on reference video
+  - Reference image you already have
+  - THen just learn to sync them up :) 
+- They have done some modification to handle the temporal consistency
+
+Quite nice execution here
+
+### [DeepCache: Accelerating Diffusion Models for Free][https://arxiv.org/pdf/2312.00858.pdf]
+- TODO: This paper looks cool - take a look at it 
+
+### [Unsupervised Keypoints from Pretrained Diffusion Models](https://ubc-vision.github.io/StableKeypoints/)
+- TODO
+
+

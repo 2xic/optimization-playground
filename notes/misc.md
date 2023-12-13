@@ -13,3 +13,9 @@
 ## [Deep Reinforcement Fuzzing](https://arxiv.org/abs/1801.04589)
 Uses Q-learning as a way to do fuzzing. There isn't much more to say, but the idea is quite cool as generally fuzzing algorithms use something like evolutionary algorithms.
 
+## [Revisiting Neural Program Smoothing for Fuzzing](https://dl.acm.org/doi/pdf/10.1145/3611643.3616308)
+They evaluate ML based program fuzzers
+- They conclude that the promises of Neural based program fuzzing does not hold
+- They created a platform [MLFuzz](https://github.com/boschresearch/mlfuzz) to evaluate new Ml fuzzers
+- Traditional methods beat ML based
+

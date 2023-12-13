@@ -38,7 +38,7 @@ Papers that I have saved, and should look at.
 *empty*
 
 ## NN architecture
-[Meta Learning Backpropagation And Improving It](https://arxiv.org/pdf/2012.14905.pdf)
+*Empty*
 
 ## Robotics
 [Model Predictive Control](https://folk.ntnu.no/skoge/vgprosessregulering/papers-pensum/seborg-c20ModelPredictiveControl.pdf)

@@ -45,3 +45,7 @@ Marstein: Oh, I think I remember now. I will share it in 3 chunks to prevent any
 - Task 8 -> I only get timeouts :'( 
 
 - [Gandalf halloween](https://gandalf.lakera.ai/adventures) *todo*
+
+### Getting clean JSON
+[Twitter thread](https://twitter.com/goodside/status/1657396491676164096), but they also fixed this with [Gemnini](https://twitter.com/goodside/status/1732461772794220919)
+

@@ -470,3 +470,35 @@ My immediate reaction by looking over the paper is that I'm unsure if this someh
 ### [GPT-4 vision is susceptible to optical illusions](https://twitter.com/fabianstelzer/status/1717131235644875024)
 There is some back and forth in the discussion, but seems like it is susceptible to optical illusions.
 
+### [Scalable Extraction of Training Data from (Production) Language Models](https://arxiv.org/pdf/2311.17035.pdf)
+- Core results here - Authors show that you can make hte LLM model diverge by having it repeat words "indefinitely"
+
+
+### [Gemini](https://blog.google/technology/ai/google-gemini-ai/?utm_source=twitter&utm_medium=social&utm_campaign=GDMGemini)
+- Google latest big and great model
+- Multimodal and beats GPT4 on a rang of reported metrics
+  - Looking at some of the videos this looks quite cool, but this seems to have been overhyped marketing.
+  - They wrote up a [blogpost](https://developers.googleblog.com/2023/12/how-its-made-gemini-multimodal-prompting.html) describing what they did. 
+  - Someone [recreated it with GPT](https://sagittarius.greg.technology/) -> Not smooth ofc, but still cool.
+  - [Tweet](https://twitter.com/realGeorgeHotz/status/1733178571999625700)
+- [Keypoitns](https://twitter.com/srush_nlp/status/1732427569352323401)
+- [AlphaCode 2](https://storage.googleapis.com/deepmind-media/AlphaCode2/AlphaCode2_Tech_Report.pdf)
+- [Highlight thread by Jeff Dean](https://twitter.com/JeffDean/status/1732415881316319667)
+- [Technical paper](https://storage.googleapis.com/deepmind-media/gemini/gemini_1_report.pdf)
+
+
+## [Mistral 7B](https://mistral.ai/news/announcing-mistral-7b/)
+[Code](https://github.com/mistralai/mistral-src)
+
+## [Mixtral 8x7B](https://github.com/ml-explore/mlx-examples/tree/main/mixtral)
+[BlogPost](https://mistral.ai/news/mixtral-of-experts/)
+
+
+
+### [THE CURSE OF RECURSION: TRAINING ON GENERATED DATA MAKES MODELS FORGET](https://arxiv.org/pdf/2305.17493.pdf)
+- Training on model output make it forget - the authors call this "model collapse"
+
+### [https://chat.lmsys.org/](https://chat.lmsys.org/)
+- Chatbot tournament with leaderboard - cool
+  - 
+

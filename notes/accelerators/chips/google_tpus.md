@@ -33,3 +33,6 @@ Mostly hardware stuff where I don't know that much atm.
 - Uses CISC over RISC
 - 
 
+## [Google TPU v5p](https://cloud.google.com/blog/products/ai-machine-learning/introducing-cloud-tpu-v5p-and-ai-hypercomputer)
+- [Jeff Dean Thread](https://twitter.com/JeffDean/status/1732503666333294846)
+
