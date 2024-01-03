@@ -5,7 +5,6 @@
 
 ## Minimax variants
 
-
 ### [alpha-beta pruning](https://github.com/2xic-archive/Minimax-with-pruning)
 [Implemented](https://github.com/2xic-archive/Minimax-with-pruning)
 

@@ -10,8 +10,8 @@ from gan_model import GanModel
 import matplotlib.pyplot as plt
 import parameters
 import random
-from losses.GanBceLoss import GanBceLoss
-from losses.StandardLoss import StandardLoss
+# from losses.GanBceLoss import GanBceLoss
+# from losses.StandardLoss import StandardLoss
 from losses.GanBceLabelLoss import GanBceLabelLoss
 
 generator_loss = []

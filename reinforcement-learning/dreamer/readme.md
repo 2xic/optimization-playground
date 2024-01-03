@@ -2,6 +2,8 @@
 
 Initial thought was that it reminded me of MuZero, but it is not actually that similar. Kinda a combination of VAE and MuZero.
 
+See training run results [here](#Training-run-of-v1)
+
 ## Notes
 Some key points
 - Model is trained jointly with a component for representation, transition, image, reward, discounter. There is also a recurrent model. 

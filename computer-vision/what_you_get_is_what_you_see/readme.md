@@ -4,7 +4,7 @@ Various things could be done to fix various problems with this implementation, f
 
 
 ## Output 
-After a few epcohs the model starts to give resaonble outputs :')
+After a few epochs the model starts to give reasonable outputs :')
 
 *Update* the model seems to overfit, and does not do well on test dataset :'(
 

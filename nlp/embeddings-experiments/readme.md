@@ -1,6 +1,5 @@
 Testing various embeddings for documents.
 
-
 -> Here are some models and methods listed https://lilianweng.github.io/posts/2017-10-15-word-embedding/
 -> Docs embedding https://radix.ai/blog/2021/3/a-guide-to-building-document-embeddings-part-1/
 -> Did you know that Tinder actually uses the same idea, but just for images instead of text ? [TinVec](https://www.slideshare.net/SessionsEvents/dr-steve-liu-chief-scientist-tinder-at-mlconf-sf-2017)
@@ -26,8 +25,11 @@ python3 train_cbow.py
 ### Transformer
 [Paper](https://cdn.openai.com/papers/Text_and_Code_Embeddings_by_Contrastive_Pre_Training.pdf) from OpenAi using transformer encoder to get embeddings. 
 
-### cross encoder
+### Cross encoder
 https://www.sbert.net/examples/applications/cross-encoder/README.html
 
 Cool idea, based on my simple tests examples it seemed a lot more stable and better than embedding + `cos` to get a similarly score.
+
+### [Distributed Representations of Sentences and Documents](https://arxiv.org/pdf/1405.4053.pdf)
+Works similarly to the word2vec idea, but introduces paragraph id part of the training.
 

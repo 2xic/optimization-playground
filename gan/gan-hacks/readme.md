@@ -1,3 +1,5 @@
+<img src="./imgs/img_90.png" width="100%" >
+
 Not an hack, but looking at various discussions for how to train stable GANS.
 
 Note that this Gan is of the simpler type, but will add more advanced architecture to test soon, and maybe compare them under certain conditions.

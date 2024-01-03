@@ -499,6 +499,8 @@ There is some back and forth in the discussion, but seems like it is susceptible
 - Training on model output make it forget - the authors call this "model collapse"
 
 ### [https://chat.lmsys.org/](https://chat.lmsys.org/)
-- Chatbot tournament with leaderboard - cool
-  - 
+Chatbot tournament with leaderboard - cool
+
+### [Offering a tip gives longer responses](https://twitter.com/voooooogel/status/1730726744314069190)
+Offer ChatGPT a tip and oyu will get a longer response.
 

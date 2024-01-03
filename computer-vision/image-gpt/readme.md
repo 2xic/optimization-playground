@@ -1,8 +1,10 @@
 ### [Generative Pretraining from Pixels](https://cdn.openai.com/papers/Generative_Pretraining_from_Pixels_V2.pdf)
 
-## Fixed version 
+## Example output
 
 ![output](./plot/sample.png)
+
+## Loss of the training
 
 ![Loss](./plot/loss.png)
 
@@ -18,7 +20,7 @@ Currently does not give the best results even if the accuracy and loss curves ar
 - ^ I still don't see the results I was expecting so might be a bug with the implementation.
 
 ## Thanks to
-- https://github.com/teddykoker/image-gpt/ which helped me spot issues with the previously used  gpt implementation
+- https://github.com/teddykoker/image-gpt/ which helped me spot issues with the previously used gpt implementation
 
 ## Reflections
 - The issue with training was bug with the model.

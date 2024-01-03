@@ -4,9 +4,7 @@ from generator import Generator
 from discriminator import Discriminator
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
 from dataset import train_loader
-from pytorch_lightning import LightningModule, Trainer
 import torchvision
 
 class GanModel:

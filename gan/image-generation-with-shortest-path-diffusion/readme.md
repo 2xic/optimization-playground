@@ -1,5 +1,7 @@
 # [Image generation with shortest path diffusion](https://arxiv.org/pdf/2306.00501.pdf)
 
+**(this is not a full implementation - not even a partial implementation)**
+
 ## Paper notes
 
 Diffusion models learns to progressively reverse a corrupted image. There has been some discussion around what the best way to corrupt an image is and this paper looks at how well corruption using a "minimized path taken" (Fisher metric is proposed).
