@@ -504,3 +504,13 @@ Chatbot tournament with leaderboard - cool
 ### [Offering a tip gives longer responses](https://twitter.com/voooooogel/status/1730726744314069190)
 Offer ChatGPT a tip and oyu will get a longer response.
 
+
+### [LLaMA with block expansion]()
+[Paper](https://huggingface.co/papers/2401.02415)
+
+[Github](https://github.com/TencentARC/LLaMA-Pro)
+
+[Tweet](https://twitter.com/shxf0072/status/1743152815961493870)
+
+TLDR: Freeze the old model and add a new block = You can train model without forgetting
+
