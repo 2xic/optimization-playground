@@ -7,14 +7,21 @@ from model import Model
 import numpy as np
 import random
 from tinygrad import Tensor
+import numpy as np
 
 class Node:
-    def __init__(self, state, parent=None) -> None:
+    def __init__(self, state, reward, parent=None) -> None:
         self.state = state
         self.children: Dict[Node] = {}
         self.parent = parent
         self.visited_count = 0
         self.height = 0 if parent is None else parent.height + 1
+        self.reward = reward
+
+    @property
+    def q_value(self):
+        # TODO: I think this should just be an lstm
+        return self.reward
 
     @property
     def sibling_visited_score(self):
@@ -32,7 +39,9 @@ class MonteCarloSearchTree:
 
     @staticmethod
     def from_state(state, model: Model, config: Config):
-        return MonteCarloSearchTree(Node(model.encode_state(Tensor(state))), model, config)
+        encoded_state = model.encode_state(Tensor(state))
+        reward = model.get_state_reward(encoded_state)
+        return MonteCarloSearchTree(Node(encoded_state, reward), model, config)
     
     def expand(self):
         for _ in range(self.config.max_iterations):
@@ -48,25 +57,28 @@ class MonteCarloSearchTree:
                         node.state,
                         index
                     )
+                    reward = self.model.get_state_reward(next_state)
                     node.children[index] = Node(
                         next_state,
+                        reward,
                         node
                     )
                     node = node.children[index]
 
-
     def get_action(self):
         action_score = {}
         for action, node in self.root.children.items():
-            q_s_a = 0 # TODO
-            p_s_a = self.get_p() * (
+            node: Node = node
+            q_s_a = node.q_value
+            p_s_a = self.get_p() * np.sqrt(
                 node.sibling_visited_score
             ) / (
                 1 + node.visited_count
             )
             score = q_s_a + p_s_a * (
                 self.config.c_1 + np.log(
-
+                    (node.sibling_visited_score + self.config.c_2 + 1) / 
+                    (self.config.c_2)
                 )
             )
             action_score[action] = score
@@ -80,3 +92,6 @@ class MonteCarloSearchTree:
             # TODO: Should use the model 
             raise Exception("Unimplemented")
 
+    # just a debug utility
+    def plot(self):
+        pass
