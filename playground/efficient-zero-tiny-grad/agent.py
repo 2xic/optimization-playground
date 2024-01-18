@@ -1,20 +1,23 @@
 from config import Config
 from model import Model
 from mcts import MonteCarloSearchTree
-from tinygrad import nn, Tensor, dtype
+from tinygrad import nn, Tensor
 from replay_buffer import ReplayBuffer, Predictions
+from debug import Debug
+import json
 
 class Agent:
     def __init__(self, config: Config, env) -> None:
         self.config = config
         self.model = Model(self.config)
-        self.opt = nn.optim.Adam(nn.state.get_parameters(self.model))
+        parameters = nn.state.get_parameters(self.model)
+       # print(parameters)
+        self.opt = nn.optim.Adam(parameters, lr=3e-4)
         # TODO: Replay buffer
         self.env = env
-        
         self.replay_buffer = ReplayBuffer()
 
-    def play(self):
+    def play(self, debugger: Debug):
         self.env.reset()
         terminated = False
         sum_reward = 0
@@ -28,8 +31,7 @@ class Agent:
             )
             self.mcts.expand()
 
-            action = self.mcts.get_action()
-
+            action = self.mcts.get_action(self.mcts.root)
             (
                 _,
                 reward,
@@ -43,6 +45,10 @@ class Agent:
                 environment_reward=reward,
                 next_state=self.env.state.copy(),
             ))
+            debugger.store_predictions(
+                self.model.get_state_reward(self.model.encode_state(Tensor(self.env.state))),
+                self.model.encode_state(Tensor(self.env.state)),
+            )
             sum_reward += reward
         return sum_reward
         
@@ -50,6 +56,11 @@ class Agent:
     def loss(self):
         self.opt.zero_grad()
         loss = 0
+
+        # Ratios
+        protection_loss_ratio = 0.4
+        prediction_reward_ratio = 1
+
         for i in self.replay_buffer.entries:
             state = Tensor(i.state)
             # The predicted next state 
@@ -73,16 +84,13 @@ class Agent:
             encoded_next_state = self.model.encode_state(Tensor(i.next_state))
             projector_loss_real = encoded_next_state.sequential(self.model.projector_network).sigmoid()
 
-            projection_loss = (prediction - projector_loss_real).reshape((-1)).sum(axis=0).float()
+            projection_loss = (prediction - projector_loss_real).reshape((-1)).sum(axis=0).float() ** 2
 
-            error = reward_loss + projection_loss
+            error = reward_loss * prediction_reward_ratio + \
+                    projection_loss * protection_loss_ratio
             error.backward()
             
             loss += error.item()
             
         self.opt.step()
         return loss
-
-    def get_action(self, state):
-        # TODO: mcts should use the NN 
-        return self.mcts.get_action(state)

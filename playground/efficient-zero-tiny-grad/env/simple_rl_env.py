@@ -11,16 +11,17 @@ class SimpleRlEnv:
         self.state[self.index] = 1
 
     def step(self, action):
-        self.index += 1
+        relative_index = self.index % 2
         observation, reward, terminated, truncated, info = (
             self.state,
-            int(action == self.index),
+            int(action == relative_index),
             (self.index >= self.level_length), 
             False,
             False
         )
-        self.state[self.index % 2] = 1
-        self.state[(self.index + 1) % 2] = 1
+        self.index += 1
+        self.state[relative_index] = 1
+        self.state[(relative_index + 1) % 2] = 0
 
         return (
             observation,

@@ -15,7 +15,7 @@ class Predictions:
 class ReplayBuffer:
     def __init__(self) -> None:
         self.entries: List[Predictions] = []
-        self.max_entries = 1_000
+        self.max_entries = 1_00
 
     def add_to_entries(self, prediction: Predictions):
         self.entries.append(prediction)

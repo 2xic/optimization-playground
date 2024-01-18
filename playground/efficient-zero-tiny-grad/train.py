@@ -19,7 +19,9 @@ agent = Agent(config, env)
 debug = Debug()
 
 for _ in range(100):
-    sum_reward = agent.play()
+    sum_reward = agent.play(
+        debugger=debug,
+    )
     loss = agent.loss()
 
     debug.add(
