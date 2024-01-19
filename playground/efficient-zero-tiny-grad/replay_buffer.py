@@ -11,6 +11,8 @@ class Predictions:
     # Value out
     environment_reward: float
     next_state: Tensor
+    # policy 
+    state_distribution: Tensor
 
 class ReplayBuffer:
     def __init__(self) -> None:

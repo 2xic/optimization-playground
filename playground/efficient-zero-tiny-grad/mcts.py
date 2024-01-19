@@ -66,10 +66,15 @@ class Node:
         for i in nodes:
             visited.append(i.visited_count)
         return visited
- 
+    
+    @property
+    def visited_probabilities(self):
+        values = list(map(lambda x: x.visited_count, self.children.values()))
+        return Tensor(values).softmax()
+    
 class MonteCarloSearchTree:
-    def __init__(self, node, model: Model, config: Config) -> None:
-        self.root = node
+    def __init__(self, node: Node, model: Model, config: Config) -> None:
+        self.root: Node = node
         self.config = config
         self.model = model
         self.root.id = 0

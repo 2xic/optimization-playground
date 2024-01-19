@@ -1,18 +1,16 @@
 from config import Config
-from model import Model
+from torch_model import Model
 from mcts import MonteCarloSearchTree
 from tinygrad import nn, Tensor
 from replay_buffer import ReplayBuffer, Predictions
 from debug import Debug
-import json
 
 class Agent:
     def __init__(self, config: Config, env) -> None:
         self.config = config
-        self.model = Model(self.config)
-        parameters = nn.state.get_parameters(self.model)
-       # print(parameters)
-        self.opt = nn.optim.Adam(parameters, lr=3e-4)
+        self.model = Model(self.config)        
+        self.opt = self.model.get_optimizer()
+        
         # TODO: Replay buffer
         self.env = env
         self.replay_buffer = ReplayBuffer()
@@ -44,6 +42,7 @@ class Agent:
                 action=action,
                 environment_reward=reward,
                 next_state=self.env.state.copy(),
+                state_distribution=self.mcts.root.visited_probabilities
             ))
             debugger.store_predictions(
                 self.model.get_state_reward(self.model.encode_state(Tensor(self.env.state))),
@@ -59,19 +58,35 @@ class Agent:
 
         # Ratios
         protection_loss_ratio = 0.4
+        policy_loss_ratio = 0.5
         prediction_reward_ratio = 1
+
+        error = 0
 
         for i in self.replay_buffer.entries:
             state = Tensor(i.state)
             # The predicted next state 
+            encoded_state = self.model.encode_state(state)
             next_state = self.model.get_next_state(
-                self.model.encode_state(state),
+                encoded_state,
                 int(i.action)
             )
             reward = self.model.get_state_reward(
                 next_state
             )
             env_reward = Tensor(i.environment_reward)
+
+            # Policy loss
+            # predicted mcts vs 
+            predicted_policy = self.model.get_policy_predictions(
+                encoded_state
+            )
+            # todo: cross entropy ? 
+            predicted_policy_loss = ((
+                i.state_distribution.float()
+                - 
+                predicted_policy.float()
+            ) ** 2).sum(axis=0)
 
             # Reward loss
             last_state_projector = next_state.sequential(self.model.projector_network).sigmoid()
@@ -86,11 +101,14 @@ class Agent:
 
             projection_loss = (prediction - projector_loss_real).reshape((-1)).sum(axis=0).float() ** 2
 
-            error = reward_loss * prediction_reward_ratio + \
-                    projection_loss * protection_loss_ratio
-            error.backward()
-            
-            loss += error.item()
-            
+            small_error = reward_loss * prediction_reward_ratio + \
+                    projection_loss * protection_loss_ratio + \
+                    predicted_policy_loss * policy_loss_ratio
+            small_error.backward()
+
+            error += small_error.item()
+            #error.backward()
+        # print(error)
         self.opt.step()
+        loss = error
         return loss

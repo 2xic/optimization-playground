@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class Config:
     # general
@@ -13,3 +14,4 @@ class Config:
     c_2: float
     max_depth: int
     max_iterations: int
+
