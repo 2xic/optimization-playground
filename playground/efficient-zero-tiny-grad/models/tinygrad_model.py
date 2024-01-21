@@ -3,9 +3,11 @@ tiny model for testing
 """
 from typing import List, Callable
 from tinygrad import Tensor, nn
+from torch import Tensor as TorchTensor
 from config import Config
+from .model import ModelMethods
 
-class Model:
+class Model(ModelMethods):
   def __init__(self, config: Config):
     # TODO: Should take in action space as 
     self.representation: List[Callable[[Tensor], Tensor]] = [
@@ -44,13 +46,16 @@ class Model:
 
     self.config = config
 
-  def get_policy_predictions(self, x: Tensor):
+  def get_policy_predictions(self, x: TorchTensor):
+    x = self._convert_torch_tensor(x)
     return x.sequential(self.policy_predictions)
 
-  def get_state_reward(self, x: Tensor):
+  def get_state_reward(self, x: TorchTensor):
+    x = self._convert_torch_tensor(x)
     return x.sequential(self.reward_actions)
 
-  def get_next_state(self, state:Tensor, action: int) -> Tensor: 
+  def get_next_state(self, state:TorchTensor, action: int) -> Tensor: 
+    state = self._convert_torch_tensor(state)
     action_tensor = Tensor.zeros((1, self.config.num_actions))
     action_tensor[0][action] = 1
     state_reshaped = state.reshape((1, -1))
@@ -60,9 +65,19 @@ class Model:
     ).float()
     return combined.sequential(self.transition_model)
 
-  def encode_state(self, x:Tensor) -> Tensor: 
+  def encode_state(self, x:TorchTensor) -> Tensor: 
     return x.sequential(self.representation)
 
   def get_optimizer(self):
     parameters = nn.state.get_parameters(self.model)
-    return nn.optim.Adam(parameters, lr=0.001)
+    return nn.optim.Adam(parameters, lr=self.config.lr)    
+
+  def _convert_torch_tensor(self, x: TorchTensor) -> Tensor:
+    return Tensor(x.numpy())
+
+  def get_state_projection(self, x):
+      return x.sequential(self.projector_network)
+
+  def get_state_prediction(self, x):
+      prediction = x.sequential(self.projector_network)
+      return prediction.sequential(self.model.predictor)

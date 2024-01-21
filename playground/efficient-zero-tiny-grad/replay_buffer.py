@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from tinygrad import Tensor
+from torch import Tensor
 import random
 from typing import List
 

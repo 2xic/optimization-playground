@@ -1,4 +1,4 @@
-from tinygrad import Tensor
+from torch import Tensor
 
 class Debug:
     def __init__(self) -> None:
@@ -18,8 +18,8 @@ class Debug:
         encoded_state_predicted: Tensor,
     ):
         self.predicted_state = {
-            "reward_predictions": reward_predictions.numpy(),
-            "encoded_state_predicted": encoded_state_predicted.numpy(),
+            "reward_predictions": reward_predictions.detach().numpy(),
+            "encoded_state_predicted": encoded_state_predicted.detach().numpy(),
         }
 
     def print(self):

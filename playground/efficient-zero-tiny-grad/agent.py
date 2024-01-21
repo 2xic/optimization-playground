@@ -1,9 +1,10 @@
 from config import Config
-from torch_model import Model
+from models.torch_model import Model # TODO: Should use tinygrad actually
 from mcts import MonteCarloSearchTree
-from tinygrad import nn, Tensor
+from torch import Tensor
 from replay_buffer import ReplayBuffer, Predictions
 from debug import Debug
+import torch
 
 class Agent:
     def __init__(self, config: Config, env) -> None:
@@ -37,6 +38,8 @@ class Agent:
                 _,
                 _
             ) = self.env.step(action)
+            print(old_state, action, reward)
+            
             self.replay_buffer.add_to_entries(Predictions(
                 state=old_state,
                 action=action,
@@ -57,7 +60,7 @@ class Agent:
         loss = 0
 
         # Ratios
-        protection_loss_ratio = 0.4
+        protection_loss_ratio = 0 # 0.3
         policy_loss_ratio = 0.5
         prediction_reward_ratio = 1
 
@@ -86,29 +89,37 @@ class Agent:
                 i.state_distribution.float()
                 - 
                 predicted_policy.float()
-            ) ** 2).sum(axis=0)
+            ) ).sum(axis=-1)** 2
 
             # Reward loss
-            last_state_projector = next_state.sequential(self.model.projector_network).sigmoid()
-            prediction = last_state_projector.sequential(self.model.predictor).sigmoid()
             reward_loss = ((reward.reshape(-1) - env_reward) ** 2).sum(axis=0)
 
             # Self consistency loss
             # TODO: I don't think this is the best way to do this
             # Note that is is meant to be similar to https://arxiv.org/pdf/2011.10566.pdf
-            encoded_next_state = self.model.encode_state(Tensor(i.next_state))
-            projector_loss_real = encoded_next_state.sequential(self.model.projector_network).sigmoid()
+            prediction = self.model.get_state_prediction(next_state)
 
-            projection_loss = (prediction - projector_loss_real).reshape((-1)).sum(axis=0).float() ** 2
+            encoded_next_state = self.model.encode_state(Tensor(i.next_state))
+            projector_loss_real = self.model.get_state_projection(encoded_next_state)
+
+            projection_loss = 0# (prediction - projector_loss_real).reshape((-1)).sum(axis=0).float() ** 2
 
             small_error = reward_loss * prediction_reward_ratio + \
-                    projection_loss * protection_loss_ratio + \
-                    predicted_policy_loss * policy_loss_ratio
-            small_error.backward()
-
-            error += small_error.item()
-            #error.backward()
-        # print(error)
+                    predicted_policy_loss * policy_loss_ratio #+ \
+                    #projection_loss * protection_loss_ratio 
+            # TODO: 
+            #print([
+            #    reward_loss,
+            #    projection_loss,
+            #    predicted_policy_loss,
+            #])
+            if torch.isfinite(small_error).item():
+                #print(f"small_error === {small_error}")
+                #print(f"\t{reward_loss}")
+                #print(f"\t{projection_loss}")
+                #print(f"\t{predicted_policy_loss}")
+                small_error.backward()
+                error += small_error.item()
         self.opt.step()
         loss = error
         return loss

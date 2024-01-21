@@ -3,10 +3,10 @@ The implementation of the monte carlo search tree
 """
 from typing import Dict, List
 from config import Config
-from model import Model
 import numpy as np
 import random
-from tinygrad import Tensor
+from torch import Tensor
+from models.model import ModelMethods
 import numpy as np
 import graphviz
 
@@ -70,10 +70,10 @@ class Node:
     @property
     def visited_probabilities(self):
         values = list(map(lambda x: x.visited_count, self.children.values()))
-        return Tensor(values).softmax()
+        return Tensor(values).softmax(dim=-1)
     
 class MonteCarloSearchTree:
-    def __init__(self, node: Node, model: Model, config: Config) -> None:
+    def __init__(self, node: Node, model: ModelMethods, config: Config) -> None:
         self.root: Node = node
         self.config = config
         self.model = model
@@ -81,7 +81,7 @@ class MonteCarloSearchTree:
         self.current_node_id = self.root.id + 1
 
     @staticmethod
-    def from_state(state, model: Model, config: Config):
+    def from_state(state, model: ModelMethods, config: Config):
         encoded_state = model.encode_state(Tensor(state))
         reward = model.get_state_reward(encoded_state)
         return MonteCarloSearchTree(Node(encoded_state, reward), model, config)
@@ -135,17 +135,23 @@ class MonteCarloSearchTree:
                 reward,
                 parent_node
             )
-            parent_node.children[action].p = self.get_p()
+            parent_node.children[action].p = self.get_p(
+                parent_node.state,
+                action
+            )
             parent_node.children[action].id = self.current_node_id
             self.current_node_id += 1
         return parent_node
 
-    def get_p(self):
+    def get_p(self, state, action):
         if self.config.is_training:
             return np.random.rand()
         else:
             # TODO: Should use the model 
-            raise Exception("Unimplemented")
+            #raise Exception("Unimplemented")
+            return self.model.get_policy_predictions(
+                state
+            )[0][action].item()
 
     # just a debug utility
     def plot(self):
@@ -157,7 +163,7 @@ class MonteCarloSearchTree:
             node = nodes.pop(0)
             explore_value = node.explored_score(self.config)
             dot.node(str(node.id), f"height={node.height} id ={id}, visited_count: {node.visited_count}\n\nq(s, a) = {node.q_value}\nvisited_relative: {node.visited_relative}\nAdjusted {explore_value}\n_last_calculated_score: {node._last_calculated_score}", shape="square")
-            for (action, i) in node.children.items():
+            for (_, i) in node.children.items():
                 dot.edge(str(node.id), str(i.id))
                 nodes.append(i)
         dot.render("plot_mcts", cleanup=True)
