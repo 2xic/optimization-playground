@@ -5,6 +5,8 @@ from torch import Tensor
 from replay_buffer import ReplayBuffer, Predictions
 from debug import Debug
 import torch
+from loss_debug import LossDebug
+import torch.nn as nn
 
 class Agent:
     def __init__(self, config: Config, env) -> None:
@@ -15,6 +17,7 @@ class Agent:
         # TODO: Replay buffer
         self.env = env
         self.replay_buffer = ReplayBuffer()
+        self.loss_debug = LossDebug()
 
     def play(self, debugger: Debug):
         self.env.reset()
@@ -39,6 +42,7 @@ class Agent:
                 _
             ) = self.env.step(action)
             print(old_state, action, reward)
+            assert reward in [0, 1]
             
             self.replay_buffer.add_to_entries(Predictions(
                 state=old_state,
@@ -65,6 +69,8 @@ class Agent:
         prediction_reward_ratio = 1
 
         error = 0
+        sum_reward_loss = 0
+        sum_predicted_policy_loss = 0
 
         for i in self.replay_buffer.entries:
             state = Tensor(i.state)
@@ -77,7 +83,7 @@ class Agent:
             reward = self.model.get_state_reward(
                 next_state
             )
-            env_reward = Tensor(i.environment_reward)
+            environment_reward = Tensor([i.environment_reward])
 
             # Policy loss
             # predicted mcts vs 
@@ -85,14 +91,20 @@ class Agent:
                 encoded_state
             )
             # todo: cross entropy ? 
-            predicted_policy_loss = ((
-                i.state_distribution.float()
-                - 
-                predicted_policy.float()
-            ) ).sum(axis=-1)** 2
+            predicted_policy_loss = nn.CrossEntropyLoss()(
+                predicted_policy.reshape((1, -1)).float(),
+                i.state_distribution.reshape((1, -1)).float(),
+            )
+            #((
+            #    i.state_distribution.float()
+            #    - 
+            #    predicted_policy.float()
+            #) ).sum(axis=-1)** 2
 
             # Reward loss
-            reward_loss = ((reward.reshape(-1) - env_reward) ** 2).sum(axis=0)
+            assert environment_reward.item() in [0, 1], environment_reward.item()
+            assert reward.item() < 1 and reward.item() > -1
+            reward_loss = ((reward.reshape(-1) - environment_reward) ** 2).sum(axis=0)
 
             # Self consistency loss
             # TODO: I don't think this is the best way to do this
@@ -113,6 +125,9 @@ class Agent:
             #    projection_loss,
             #    predicted_policy_loss,
             #])
+            sum_reward_loss += reward_loss.item()
+            sum_predicted_policy_loss += predicted_policy_loss.item()
+
             if torch.isfinite(small_error).item():
                 #print(f"small_error === {small_error}")
                 #print(f"\t{reward_loss}")
@@ -120,6 +135,10 @@ class Agent:
                 #print(f"\t{predicted_policy_loss}")
                 small_error.backward()
                 error += small_error.item()
+        self.loss_debug.add(
+            reward=sum_reward_loss,
+            policy=sum_predicted_policy_loss,
+        )
         self.opt.step()
         loss = error
         return loss

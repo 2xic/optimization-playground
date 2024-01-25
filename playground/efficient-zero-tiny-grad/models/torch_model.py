@@ -14,25 +14,25 @@ class BaseModel(nn.Module):
     # TODO: Should take in action space as 
     self.representation = nn.Sequential(*(
       nn.Linear(config.state_size, 8),
-      nn.ReLU(),
+      nn.ELU(),
       nn.Linear(8, 16),
-      nn.ReLU(),
+      nn.ELU(),
       nn.Linear(16, config.state_representation_size),
-      nn.Sigmoid(),      
+      nn.ELU(),      
     ))
     self.transition_model = nn.Sequential(*[
       nn.Linear(config.state_representation_size + config.num_actions, 16),
-      nn.ReLU(),
+      nn.ELU(),
       nn.Linear(16, 16),
-      nn.ReLU(),
+      nn.ELU(),
       nn.Linear(16, config.state_representation_size),
       nn.Sigmoid(),
     ])
     self.reward_actions = nn.Sequential(*[
       nn.Linear(config.state_representation_size, 16),
-      nn.ReLU(),
+      nn.ELU(),
       nn.Linear(16, 1),
-      nn.Sigmoid(),
+      nn.Tanh(),
     ])
     self.projector_network = nn.Sequential(*[
       nn.Linear(config.state_representation_size, config.projection_network_output_size),
@@ -46,7 +46,7 @@ class BaseModel(nn.Module):
 
     self.policy_predictions = nn.Sequential(*[
       nn.Linear(config.state_representation_size, config.num_actions),
-      nn.Sigmoid(),
+      nn.Softmax(dim=1),
     ])
 
 class Model(ModelMethods):

@@ -2,6 +2,8 @@ from env.simple_rl_env import SimpleRlEnv
 from config import Config
 from agent import Agent
 from debug import Debug
+from random_agent import RandomAgent
+from optimization_playground_shared.plot.Plot import Plot, Figure
 
 config = Config(
     is_training=True,
@@ -17,11 +19,18 @@ config = Config(
     c_1=1.25, 
     c_2=19652,
 )
-env = SimpleRlEnv()
-agent = Agent(config, env)
+max_epochs = 1_00
+
+agent = Agent(config, SimpleRlEnv())
+random_agent = RandomAgent(config, SimpleRlEnv())
 debug = Debug()
 
-for epoch in range(1_000):
+# Results
+random_agent_scores = []
+agent_scores = []
+sum_loss_over_time = []
+
+for epoch in range(max_epochs):
     # After a certain amount of epochs let's switch to using the models policy
     if epoch > 10:
         config.is_training = False
@@ -29,6 +38,7 @@ for epoch in range(1_000):
     sum_reward = agent.play(
         debugger=debug,
     )
+    sum_reward_random_agent = random_agent.play()
     loss = agent.loss()
 
     debug.add(
@@ -36,3 +46,48 @@ for epoch in range(1_000):
         sum_reward
     )
     debug.print()
+    
+    get_prev_element = lambda arr : (0 if len(arr) == 0 else arr[-1])
+    agent_scores.append(sum_reward + get_prev_element(agent_scores))
+    random_agent_scores.append(sum_reward_random_agent + get_prev_element(random_agent_scores))
+    sum_loss_over_time.append(loss)
+
+plot = Plot()
+plot.plot_figures(
+    figures=[
+        Figure(
+            plots={
+                "sum_loss_over_time": sum_loss_over_time,
+            },
+            title="Agent vs random agent",
+            x_axes_text="Timestamp",
+            y_axes_text="Sum reward",
+        ),
+        Figure(
+            plots={
+                "loss_policy": agent.loss_debug.loss_policy,
+                "loss_reward": agent.loss_debug.loss_reward,
+            },
+            title="Loss",
+            x_axes_text="Timestamp",
+            y_axes_text="Sum reward",
+        ),
+    ],
+    name='loss.png'
+)
+
+plot = Plot()
+plot.plot_figures(
+    figures=[
+        Figure(
+            plots={
+                "random_agent": random_agent_scores,
+                "agent": agent_scores,
+            },
+            title="Agent vs random agent",
+            x_axes_text="Timestamp",
+            y_axes_text="Sum reward",
+        ),
+    ],
+    name='evaluation.png'
+)
