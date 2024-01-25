@@ -95,11 +95,8 @@ class Agent:
                 predicted_policy.reshape((1, -1)).float(),
                 i.state_distribution.reshape((1, -1)).float(),
             )
-            #((
-            #    i.state_distribution.float()
-            #    - 
-            #    predicted_policy.float()
-            #) ).sum(axis=-1)** 2
+            assert torch.allclose(torch.sum(predicted_policy.reshape((1, -1)).float()), torch.tensor([1]).float())
+            assert torch.allclose(torch.sum(i.state_distribution.reshape((1, -1)).float()), torch.tensor([1]).float())
 
             # Reward loss
             assert environment_reward.item() in [0, 1], environment_reward.item()

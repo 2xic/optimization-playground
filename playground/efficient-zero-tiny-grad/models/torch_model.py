@@ -45,7 +45,11 @@ class BaseModel(nn.Module):
     ])
 
     self.policy_predictions = nn.Sequential(*[
-      nn.Linear(config.state_representation_size, config.num_actions),
+      nn.Linear(config.state_representation_size, 16),
+      nn.ELU(),
+      nn.Linear(16, 32),
+      nn.ELU(),
+      nn.Linear(32, config.num_actions),
       nn.Softmax(dim=1),
     ])
 
