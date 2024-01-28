@@ -9,6 +9,7 @@ from torch import Tensor
 from models.model import ModelMethods
 import numpy as np
 import graphviz
+import torch
 
 class Node:
     def __init__(self, state, reward, parent=None) -> None:
@@ -70,7 +71,9 @@ class Node:
     @property
     def visited_probabilities(self):
         values = list(map(lambda x: x.visited_count, self.children.values()))
-        return Tensor(values).softmax(dim=-1)
+        values = Tensor(values).softmax(dim=-1)
+        assert torch.allclose(torch.sum(values), torch.tensor([1.0])), values
+        return values 
     
 class MonteCarloSearchTree:
     def __init__(self, node: Node, model: ModelMethods, config: Config) -> None:

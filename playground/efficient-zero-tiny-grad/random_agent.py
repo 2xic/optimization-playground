@@ -11,7 +11,7 @@ class RandomAgent:
         terminated = False
         sum_reward = 0
         while not terminated:
-            action = random.randint(0, self.action_space)
+            action = random.randint(0, self.action_space - 1)
             (
                 _,
                 reward,

@@ -6,6 +6,7 @@ class Debug:
         self.loss = []
         self.epoch = 0
         self.predicted_state = {}
+        self.action_distribution = {}
 
     def add(self, sum_loss, sum_reward):
         self.loss.append(sum_loss)
@@ -16,10 +17,16 @@ class Debug:
         self,
         reward_predictions: Tensor,
         encoded_state_predicted: Tensor,
+        action: int,
     ):
+        if action not in self.action_distribution:
+            self.action_distribution[action] = 0
+        self.action_distribution[action] += 1
+        # Debug
         self.predicted_state = {
             "reward_predictions": reward_predictions.detach().numpy(),
             "encoded_state_predicted": encoded_state_predicted.detach().numpy(),
+            "action_predictions": self.action_distribution,
         }
 
     def print(self):
