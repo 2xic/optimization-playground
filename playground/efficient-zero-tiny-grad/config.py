@@ -6,6 +6,7 @@ class Config:
     is_training: bool
     num_actions: int
     state_size: int
+    replay_buffer_size: int
     # model config
     state_representation_size: int
     projection_network_output_size: int

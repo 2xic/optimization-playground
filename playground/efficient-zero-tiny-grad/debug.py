@@ -24,8 +24,8 @@ class Debug:
         self.action_distribution[action] += 1
         # Debug
         self.predicted_state = {
-            "reward_predictions": reward_predictions.detach().numpy(),
-            "encoded_state_predicted": encoded_state_predicted.detach().numpy(),
+            "reward_predictions": reward_predictions.cpu().detach().numpy(),
+            "encoded_state_predicted": encoded_state_predicted.cpu().detach().numpy(),
             "action_predictions": self.action_distribution,
         }
 

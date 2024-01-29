@@ -55,28 +55,38 @@ class BaseModel(nn.Module):
 
 class Model(ModelMethods):
   def __init__(self, config: Config):
-    self.model = BaseModel(config)
     self.config = config
+    self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    self.model = BaseModel(config).to(self.device)
 
   def get_policy_predictions(self, x: torch.Tensor):
+    x = x.to(self.device)
     if len(x.shape) == 1:
       x = x.reshape((1, -1))
+    assert len(x.shape) == 2
     return self.model.policy_predictions(x)
 
   def get_state_reward(self, x: torch.Tensor):
+    x = x.to(self.device)
+    assert len(x.shape) == 2
     return self.model.reward_actions(x)
 
   def get_next_state(self, state:torch.Tensor, action: int) -> torch.Tensor: 
-    action_tensor = torch.zeros((1, self.config.num_actions))
+    state = state.to(self.device)
+    action_tensor = torch.zeros((1, self.config.num_actions), device=self.device)
     action_tensor[0][action] = 1
     state_reshaped = state.reshape((1, -1))
     combined = torch.cat(
         (state_reshaped, action_tensor),
-        dim=1
+        dim=1,
+     #   device=self.device,
     ).float()
+    assert len(combined.shape) == 2
     return self.model.transition_model(combined)
 
   def encode_state(self, x:torch.Tensor) -> torch.Tensor: 
+    x = x.to(self.device)
+    assert len(x.shape) == 2
     return self.model.representation(x)
 
   def get_optimizer(self):
@@ -84,9 +94,13 @@ class Model(ModelMethods):
     return optim.Adam(self.model.parameters(), lr=self.config.lr)    
 
   def get_state_projection(self, x):
+      assert len(x.shape) == 2
+      x = x.to(self.device)
       return self.model.projector_network(x)
 
   def get_state_prediction(self, x):
+      assert len(x.shape) == 2
+      x = x.to(self.device)
       prediction = self.model.projector_network(x)
       return self.model.predictor(prediction)
 

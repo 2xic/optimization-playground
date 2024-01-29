@@ -85,7 +85,7 @@ class MonteCarloSearchTree:
 
     @staticmethod
     def from_state(state, model: ModelMethods, config: Config):
-        encoded_state = model.encode_state(Tensor(state))
+        encoded_state = model.encode_state(Tensor(state).reshape((1, -1)))
         reward = model.get_state_reward(encoded_state)
         return MonteCarloSearchTree(Node(encoded_state, reward), model, config)
     

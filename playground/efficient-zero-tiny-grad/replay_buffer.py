@@ -15,9 +15,9 @@ class Predictions:
     state_distribution: Tensor
 
 class ReplayBuffer:
-    def __init__(self) -> None:
+    def __init__(self, max_entries: int) -> None:
         self.entries: List[Predictions] = []
-        self.max_entries = 1_00
+        self.max_entries = max_entries
 
     def add_to_entries(self, prediction: Predictions):
         self.entries.append(prediction)
