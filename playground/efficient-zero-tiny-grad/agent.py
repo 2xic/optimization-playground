@@ -1,12 +1,18 @@
 from config import Config
-from models.torch_model import Model # TODO: Should use tinygrad actually
+
+USE_TINY_GRAD = True
+
+if USE_TINY_GRAD:
+    from models.tinygrad_model import Model 
+else:
+    from models.torch_model import Model 
 from mcts import MonteCarloSearchTree
 from torch import Tensor
 from replay_buffer import ReplayBuffer, Predictions
 from debug import Debug
 import torch
 from loss_debug import LossDebug
-import torch.nn as nn
+import time
 
 class Agent:
     def __init__(self, config: Config, env) -> None:
@@ -18,6 +24,7 @@ class Agent:
         self.env = env
         self.replay_buffer = ReplayBuffer(config.replay_buffer_size)
         self.loss_debug = LossDebug()
+        self.debug_print = True
 
     def play(self, debugger: Debug):
         self.env.reset()
@@ -113,6 +120,7 @@ class Agent:
             # The predicted next state
             encoded_state = self.model.encode_state(state.reshape((1, -1)))
             forward_small_error = torch.tensor(0, dtype=torch.float, device=self.model.device).float()
+            start = time.time()
             for entry in range(index, min(index + step_n_forward, len(self.replay_buffer.entries))):
                 current_entry = self.replay_buffer.entries[entry]
                 next_state = self.model.get_next_state(
@@ -122,7 +130,7 @@ class Agent:
                 reward = self.model.get_state_reward(
                     next_state
                 )
-                environment_reward = Tensor([current_entry.environment_reward]).to(self.model.device)
+                environment_reward = self._send_to_device(self.model.get_tensor_from_array([current_entry.environment_reward]))
 
                 # Policy loss
                 # predicted mcts vs 
@@ -130,20 +138,26 @@ class Agent:
                     encoded_state
                 )
                 # todo: cross entropy ? 
-                predicted_policy_loss = nn.KLDivLoss()(
-                    predicted_policy.reshape((1, -1)).float().to(self.model.device),
-                    current_entry.state_distribution.reshape((1, -1)).float().to(self.model.device),
+                predicted_policy_loss = self.model.get_kl_div_loss(
+                    self._send_to_device(predicted_policy.reshape((1, -1)).float()),
+                    self._send_to_device(current_entry.state_distribution.reshape((1, -1)).float()),
                 )
-                assert torch.allclose(torch.sum(predicted_policy.reshape((1, -1)).float()), torch.tensor([1], device=self.model.device).float())
-                assert torch.allclose(torch.sum(current_entry.state_distribution.reshape((1, -1)).float()), torch.tensor([1], device=self.model.device).float())
+                # pytorch validation
+                if torch.is_tensor(predicted_policy):
+                    assert torch.allclose(torch.sum(predicted_policy.reshape((1, -1)).float()), torch.tensor([1], device=self.model.device).float())
+                    assert torch.allclose(torch.sum(current_entry.state_distribution.reshape((1, -1)).float()), torch.tensor([1], device=self.model.device).float())
 
                 # Reward loss
                 assert environment_reward.item() in [0, 1], environment_reward.item()
                 assert reward.item() < 1 and reward.item() > -1
-                reward_loss = nn.L1Loss()(
+                reward_loss = self.model.get_l1_loss(
                     reward,
-                    environment_reward
+                    environment_reward,
                 )
+                #nn.L1Loss()(
+                #    reward,
+                #    environment_reward
+                #)
 
                 # Self consistency loss
                 # TODO: I don't think this is the best way to do this
@@ -155,7 +169,11 @@ class Agent:
              #   print(prediction)
              #   print(projector_loss_real)
 
-                projection_loss = nn.MSELoss()(
+                #projection_loss = nn.MSELoss()(
+                #    prediction,
+                #    projector_loss_real,
+                #)
+                projection_loss = self.model.get_l2_loss(
                     prediction,
                     projector_loss_real,
                 )
@@ -170,11 +188,16 @@ class Agent:
                 #    projection_loss,
                 #    predicted_policy_loss,
                 #])
+                assert len(reward_loss.shape) == 0, reward_loss
+                assert len(predicted_policy_loss.shape) == 0, predicted_policy_loss
+                assert len(projection_loss.shape) == 0, projection_loss
+                
                 sum_reward_loss += reward_loss.item()
                 sum_predicted_policy_loss += predicted_policy_loss.item()
                 sum_projection_loss += projection_loss.item()
 
-                assert torch.isfinite(small_error).item()
+                if torch.is_tensor(small_error):
+                    assert torch.isfinite(small_error).item()
                 #print(f"small_error === {small_error}")
                 #print(f"\t{reward_loss}")
                 #print(f"\t{projection_loss}")
@@ -182,9 +205,11 @@ class Agent:
                 # Update to next state
                 encoded_state = next_state
                 forward_small_error += small_error
-
+            self._debug_print(time.time() - start)
+            #print(forward_small_error.shape)
             forward_small_error.backward()
             error += forward_small_error.item()
+#            assert not (forward_small_error.item() == float('nan'))
             
         self.loss_debug.add(
             reward=sum_reward_loss,
@@ -194,3 +219,12 @@ class Agent:
         self.opt.step()
         loss = error
         return loss
+
+    def _send_to_device(self, x):
+        if torch.is_tensor(x):
+            return x.to(self.model.device)
+        return x
+    
+    def _debug_print(self, x):
+        if self.debug_print:
+            print(x)

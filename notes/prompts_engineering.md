@@ -49,3 +49,8 @@ Marstein: Oh, I think I remember now. I will share it in 3 chunks to prevent any
 ### Getting clean JSON
 [Twitter thread](https://twitter.com/goodside/status/1657396491676164096), but they also fixed this with [Gemnini](https://twitter.com/goodside/status/1732461772794220919)
 
+### [Large Language Models Understand and Can Be Enhanced by Emotional Stimuli](https://arxiv.org/pdf/2307.11760.pdf)
+TLDR - Telling gpt that you are scared or under pressure makes the results better.
+
+
+

@@ -514,3 +514,21 @@ Offer ChatGPT a tip and oyu will get a longer response.
 
 TLDR: Freeze the old model and add a new block = You can train model without forgetting
 
+### [Grandmaster-Level Chess Without Search](https://arxiv.org/pdf/2402.04494.pdf)
+High level summary
+- ELO is ~ 2895
+  - ELO of stockfish is ~3632
+- They try to use LLM like architecture for training the engine
+- Using Stockfish as a source to generate the state values
+
+People on twitter are hyping this up and I think it's cool, but maybe a bit overhyped. Here is a [good take](https://gist.github.com/yoavg/8b98bbd70eb187cf1852b3485b8cda4f) on the paper.
+
+
+### [Efficient Large Language Model Inference with Limited Memory](https://arxiv.org/pdf/2312.11514.pdf)
+- Paper from Apple to limit the latency of running LLMs by reducing the load time of loading from flash to DRAM and allowing larger models to run on machines with limited DRAM
+  - The results look quite impressing they can models 2x the size of available DRAM and its load time is 20-25x the inference speed
+- How do they do this ? 
+  - They don't load the entire model into memory at once.
+
+It has been shown that LLMs have sparisty in the feed forward layers and the authors of the paper leverages this and only load parameters that have a non-zero value or are predicted to have a non-zero value (building upon [Deja vu](https://arxiv.org/pdf/2310.17157.pdf)).
+

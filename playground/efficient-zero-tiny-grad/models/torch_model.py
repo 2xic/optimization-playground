@@ -106,3 +106,20 @@ class Model(ModelMethods):
 
   def get_policy(self, x):
     pass
+
+  def get_tensor_from_array(self, x):
+    return torch.tensor(x)
+
+  def get_kl_div_loss(self, x, y):
+    predicted_policy_loss = nn.KLDivLoss()(
+        x,
+        y,
+    )
+    return predicted_policy_loss
+
+  def get_l1_loss(self, x, y):
+    return nn.L1Loss()(x, y)
+ 
+  def get_l2_loss(self, x, y):
+    return nn.MSELoss()(x, y)
+ 

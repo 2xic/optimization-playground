@@ -6,9 +6,12 @@ from tinygrad import Tensor, nn
 from torch import Tensor as TorchTensor
 from config import Config
 from .model import ModelMethods
+import torch
 
 class Model(ModelMethods):
   def __init__(self, config: Config):
+    # Not even sure how the cuda stuff works in tinygrad yet
+    self.device = torch.device('cpu')
     # TODO: Should take in action space as 
     self.representation: List[Callable[[Tensor], Tensor]] = [
       nn.Linear(config.state_size, 8),
@@ -66,18 +69,42 @@ class Model(ModelMethods):
     return combined.sequential(self.transition_model)
 
   def encode_state(self, x:TorchTensor) -> Tensor: 
+    x = self._convert_torch_tensor(x)
     return x.sequential(self.representation)
 
   def get_optimizer(self):
-    parameters = nn.state.get_parameters(self.model)
+    parameters = nn.state.get_parameters(self )
     return nn.optim.Adam(parameters, lr=self.config.lr)    
 
   def _convert_torch_tensor(self, x: TorchTensor) -> Tensor:
-    return Tensor(x.numpy())
+    if torch.is_tensor(x):
+      return Tensor(x.numpy())
+    return x
 
   def get_state_projection(self, x):
       return x.sequential(self.projector_network)
 
   def get_state_prediction(self, x):
       prediction = x.sequential(self.projector_network)
-      return prediction.sequential(self.model.predictor)
+      return prediction.sequential(self.predictor)
+
+  def get_tensor_from_array(self, x):
+    if torch.is_tensor(x):
+      x = x.numpy()
+    return Tensor(x)
+
+  def get_kl_div_loss(self, x, y):
+    x = self._convert_torch_tensor(x)
+    y = self._convert_torch_tensor(y)
+    return (y * (y.log() - x)).mean()# .reshape(1)
+
+  def get_l1_loss(self, x, y):
+    x = self._convert_torch_tensor(x)
+    y = self._convert_torch_tensor(y)
+    return (x - y).mean()# .reshape(1)
+
+  def get_l2_loss(self, x, y):
+    x = self._convert_torch_tensor(x)
+    y = self._convert_torch_tensor(y)
+    return ((x - y) ** 2).mean()# .reshape(1)
+ 
