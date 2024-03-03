@@ -532,3 +532,20 @@ People on twitter are hyping this up and I think it's cool, but maybe a bit over
 
 It has been shown that LLMs have sparisty in the feed forward layers and the authors of the paper leverages this and only load parameters that have a non-zero value or are predicted to have a non-zero value (building upon [Deja vu](https://arxiv.org/pdf/2310.17157.pdf)).
 
+### [StarCoder 2 and The Stack v2: The Next Generation](https://arxiv.org/pdf/2402.19173.pdf)
+- They have a huge section on the dataset creation which is somewhat interesting
+- The evaluation seems to give good results against larger models
+- Model aritecture changes (see section 6)
+  - Using Rotary Positional Encodings instead of  learned positional embeddings
+  - Using Grouped Query Attention instead of Multi-Query Attention
+
+### [Griffin: Mixing Gated Linear Recurrences with Local Attention for Efficient Language Models](https://arxiv.org/pdf/2402.19427.pdf)
+RNNs are hard to train and scale. Hawk is trying to solve this by offering a RNN with gated linear recurrence. They also build with this which gave some promising results (matching preformance with Llama-2 with less tokens).
+
+### [Beyond Language Models: Byte Models are Digital World Simulators](https://arxiv.org/pdf/2402.19155.pdf)
+Training a model on bytes in and bytes out instead of traditional text tokens, it seems to work well! Nice thing is that it then can understand cross domains, cool.
+
+### [The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits](https://arxiv.org/pdf/2402.17764.pdf)
+They make all parameter in the LLM be {-1, 0, 1}. This increases throughput and is also 
+
+
