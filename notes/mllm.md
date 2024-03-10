@@ -44,3 +44,7 @@ Use the text from the image as a way to inject instructions into the model.
 Not that useful of an paper (technically speaking and that is just my opinion), but might be interesting for people who want to see some information on the evolution of the model.
 
 [Used to trick people that use GPT for reviewing CVs lol](https://twitter.com/d_feldman/status/1713019158474920321)
+
+### [Design2Code: How Far Are We From Automating Front-End Engineering?](https://arxiv.org/pdf/2403.03163.pdf)
+- They constructed a more diverse the dataset versus 
+- The results still seem very basic though (Figure 7)

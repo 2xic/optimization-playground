@@ -19,3 +19,13 @@ They evaluate ML based program fuzzers
 - They created a platform [MLFuzz](https://github.com/boschresearch/mlfuzz) to evaluate new Ml fuzzers
 - Traditional methods beat ML based
 
+### [Deep Networks Always Grok and Here is Why](https://arxiv.org/pdf/2402.15555.pdf)
+- Studying grooking empirically
+- Observations point at grooking is not limited to certain tasks or architectures
+- 
+
+### [Wukong: Towards a Scaling Law for Large-Scale Recommendation](https://arxiv.org/pdf/2403.02545.pdf)
+- They build a model architecture that allegedly is better at scaling for recommendations tasks
+- They make some reusable block which is scalable
+- Seems to scale a lot better than other models with same parameters count
+

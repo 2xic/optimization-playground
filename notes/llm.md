@@ -548,4 +548,30 @@ Training a model on bytes in and bytes out instead of traditional text tokens, i
 ### [The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits](https://arxiv.org/pdf/2402.17764.pdf)
 They make all parameter in the LLM be {-1, 0, 1}. This increases throughput and is also 
 
+### [Needle In A Haystack evaluation](https://opencompass.readthedocs.io/en/latest/advanced_guides/needleinahaystack_eval.html)
+First read about it in regards to the Claude 3. Basically insert some random text between a lot of other text and ask the LLM about it and see if it is able to recall it.
 
+### [Claude 3](https://www.anthropic.com/news/claude-3-family)
+[Model cards](https://www-cdn.anthropic.com/de8ba9b01c9ab7cbabf5c33b80b7bbc618857627/Model_Card_Claude_3.pdf)
+
+- Very promising benchmark results even for the smaller models.
+- One video I watched on [this](https://www.youtube.com/watch?v=m_xoN8KlP3w) that also seemed to like it
+- https://twitter.com/alexalbert__/status/1764722513014329620 which shows one of the examples from the model cards paper where the model does some meta-analysis
+- [@moyix](https://twitter.com/moyix/status/1766234722873610446) tests if Claude is able to write a fuzzer which is cool. After some help Claude did succeed at the task. It also seemed able to [find](https://twitter.com/tobycmurray/status/1766339818945126851) bugs.
+- [@moyix](https://twitter.com/moyix/status/1765967602982027550) Fuzzing GIFs with Claude.
+
+### [Yi: Open Foundation Models by 01.AI](https://arxiv.org/pdf/2403.04652.pdf)
+- Based on the LLaMa transformer, but with some modifications to the attention mechanism, activation functions and embeddings type.
+- Looking at the attached benchmarks results the model seems to lack coding skills and Math, but good at at various chinese language benchmarks and reading comprehension. 
+- 
+
+### [GaLore: Memory-Efficient LLM Training by Gradient Low-Rank Projection](https://arxiv.org/pdf/2403.03507.pdf)
+- References [LoRA] which I hadn't heard about before  but in essence you split up the training work by having a trainable parameter between two matrices to account for the full weight matrices. There is a blog post [here](https://magazine.sebastianraschka.com/p/practical-tips-for-finetuning-llms).
+- Problem with LoRA as pointed out in this GaLore paper is that the trained weight matrices will explore a limited parameter space.
+- [Tweet thread](https://twitter.com/BlackHC/status/1765699206084223103)
+ 
+
+### [Stabilizing Transformer Training by Preventing Attention Entropy Collapse](https://proceedings.mlr.press/v202/zhai23a/zhai23a.pdf)
+- The paper show that there are instability problems with training transformers models
+- They also show a simple re-parameterization trick of the weights to address the entropy collapse problem. It's layed out in section 3.2, but in essence it's a learnable parameter divided by the norm of the weight matrix times the weight matrix.  
+- 
