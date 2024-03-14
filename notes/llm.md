@@ -575,3 +575,40 @@ First read about it in regards to the Claude 3. Basically insert some random tex
 - The paper show that there are instability problems with training transformers models
 - They also show a simple re-parameterization trick of the weights to address the entropy collapse problem. It's layed out in section 3.2, but in essence it's a learnable parameter divided by the norm of the weight matrix times the weight matrix.  
 - 
+
+### [⚔️ Chess LLM Arena (preview)](https://huggingface.co/spaces/mlabonne/chessllm)
+Two LLms playing against each other, kinda fun.
+
+## [Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context](https://arxiv.org/pdf/2403.05530.pdf)
+- Mixture of experts models builds upon Gemini 1.0
+- Does okay on text in haystack, but not as good as Claude
+  - They do something similar for audio and video 
+
+### [Groq](https://wow.groq.com/why-groq/)
+[Zellic](https://twitter.com/zellic_io/status/1767297364673626434) posted a thread that sparked my interest. Groq has made some custom [Tensor processor](https://wow.groq.com/groq-tensor-streaming-processor-architecture-is-radically-different/), normal processor ofc. optimize for the general case which can miss some worst case scenarios. They execute instructions in locksteps which is interesting as it allows the compiler to handle the data transfer. This won't work on new processor as they have fancy optimizations that would prevent this mechanism (caching and branch predictions).
+One interesting thing Zellic bring up - machine learning compilers know ahead of time much better the memory latency then traditional programs because of the computation graph.
+
+[Think Fast: A Tensor Streaming Processor (TSP) for Accelerating Deep Learning Workloads](https://wow.groq.com/wp-content/uploads/2020/06/ISCA-TSP.pdf)
+
+[A Software-defined Tensor Streaming Multiprocessor for Large-scale Machine Learning](https://wow.groq.com/wp-content/uploads/2023/05/GroqISCAPaper2022_ASoftwareDefinedTensorStreamingMultiprocessorForLargeScaleMachineLearning-1.pdf)
+
+### [Llama 3 training setup](https://twitter.com/soumithchintala/status/1767579981419315400)
+- Network: Trains on RoCEv2
+- Storage: NFS/FUSE based on Tectonic/Hammerspace
+- Using PyTorch from main :D
+- NVIDIA Collective Communications Library (NCCL) with some patches
+
+[Building Meta’s GenAI Infrastructure](https://engineering.fb.com/2024/03/12/data-center-engineering/building-metas-genai-infrastructure/) is a related post that they have on their blog. They use Pytorch, [Grand Teton](https://engineering.fb.com/2022/10/18/open-source/ocp-summit-2022-grand-teton/) and [OpenRack](https://www.opencompute.org/wiki/Open_Rack/SpecsAndDesigns).
+
+### [Stealing Part of a Production Language Model](https://arxiv.org/pdf/2403.06634.pdf)
+[Website](https://not-just-memorization.github.io/partial-model-stealing.html)
+
+Feels a bit overhyped - they can't steal a full model, but you can get some knowledge of the model by querying it correctly. They sdo some [SVD](https://en.wikipedia.org/wiki/Singular_value_decomposition) magic.
+
+### [Gemma: Open Models Based on Gemini Research and Technology](https://arxiv.org/pdf/2403.08295.pdf)
+[Github](https://github.com/google/gemma_pytorch)
+Open source model from Google,does very well on benchmarks.
+
+
+
+

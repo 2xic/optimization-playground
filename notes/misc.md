@@ -29,3 +29,10 @@ They evaluate ML based program fuzzers
 - They make some reusable block which is scalable
 - Seems to scale a lot better than other models with same parameters count
 
+## [Personalized Audiobook Recommendations at Spotify Through Graph Neural Networks](https://arxiv.org/pdf/2403.05185.pdf)
+They made some data observations which was kinda intresting
+1. Audiobook streams are mostly dominated by power users and popular titles
+2. "Podcasts user tastes and content information are informative for inferring users’ audiobook consumption patterns."
+3. Accounting for podcast interactions with audiobooks is essential for better understanding user preferences.
+- They use Graph based neural networks and seem to combine both the podcast and audiboook data part of the model. The system generates daily user and audio-book features. 
+

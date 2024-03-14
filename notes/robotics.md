@@ -14,4 +14,14 @@ Things that are randomized
 [Project page](https://binghao-huang.github.io/dynamic_handover/)
 - System trained in simulation (IsaacGym physical simulator) and then sim2real is applied
 - Neural network used as a goal estimator to be abel to remove some of the gaps between the simulation and the real world
-- 
+
+### [Twisting Lids Off with Two Hands](https://arxiv.org/pdf/2403.02338.pdf)
+- They don't use raw image pixels as inputs, but instead use the Segment Anything mode and XMem to track the segment mask through the remaining
+- They also use RL ofc. I find the reward function a bit complicated and not as clean as I hoped.
+  - They apply Domain Randomization also
+  - Sim2Real
+
+### [Universal Manipulation Interface](https://umi-gripper.github.io/)
+Very cool they open sourced both the software and the hardware they used. Sounds like they use slam and they also have a [diffusion model](https://github.com/real-stanford/universal_manipulation_interface/blob/e02f7a960fef9b529c0af10d6452072cfd53819f/diffusion_policy/model/vision/timm_obs_encoder.py#L17) for the policy. The videos make it seem impressive. 
+
+

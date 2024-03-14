@@ -105,5 +105,8 @@ No changes are required on the agent.
 
 Basically create sub goals and works towards them which helps with convergence of the algorithm. 
 
-
+## [Stop Regressing: Training Value Functions via Classification for Scalable Deep RL](https://arxiv.org/pdf/2403.03950.pdf)
+- From the introduction "We demonstrate that value functions trained with categorical cross-entropy significantly
+improves performance and scalability in a variety of domains."
+- They have results to back this up also!
 

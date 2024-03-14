@@ -94,9 +94,17 @@ Not that useful of an paper (technically speaking and that is just my opinion), 
 Quite nice execution here
 
 ### [DeepCache: Accelerating Diffusion Models for Free][https://arxiv.org/pdf/2312.00858.pdf]
-- TODO: This paper looks cool - take a look at it 
+[Code](https://github.com/horseee/DeepCache)
+- See figure 3 for the general idea
+  - "we eliminate redundant computations by strategically caching slowly evolving features"
+- They draw inspiration from the skip connections of U-net.
+
 
 ### [Unsupervised Keypoints from Pretrained Diffusion Models](https://ubc-vision.github.io/StableKeypoints/)
-- TODO
+[Paper](https://arxiv.org/pdf/2312.00065.pdf)
+This is a cool idea, not sure I fully get it, but they seems to pass in text embeddings and make sure the attention map is. They open sourced their [code](https://github.com/ubc-vision/StableKeypoints?tab=readme-ov-file) 
+
+### [What do we learn from inverting CLIP models?](https://arxiv.org/pdf/2403.02580.pdf)
+They invert the clip model with class inversion similar to DeepDream. KInda interesting seeing some of the output generated images given that some of them are not very appropriate.
 
 
