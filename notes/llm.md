@@ -610,5 +610,26 @@ Feels a bit overhyped - they can't steal a full model, but you can get some know
 Open source model from Google,does very well on benchmarks.
 
 
+### [Chronos: Learning the Language of Time Series](https://arxiv.org/pdf/2403.07815.pdf)
+- Using T5 family of model on time series data.
+  - SOTA on several benchmarks
+- The input time series is scaled and quantized to match the vocab
+- Objective function cross entropy
+- They extend [Mixup](/self-supervised-learning/MixMatch/readme.md) to the time series domain
 
+### [MM1: Methods, Analysis & Insights from Multimodal LLM Pre-training](https://arxiv.org/pdf/2403.09611.pdf)
+Investegates how to build good Multimodals
+- "Encoder lesson: Image resolution has the highest impact, followed by model size and training data composition. "
+- "VL Connector Lesson: Number of visual tokens and image resolution matters most, while the type of VL connector has little effect.
+- "Data lesson 1: interleaved data is instrumental for few-shot and text-only performance, while captioning data lifts zero-shot performance."
+- "Data lesson 2: text-only data helps with few-shot and text-only per-
+formance."
+- "Data lesson 3: Careful mixture of image and text data can yield op-
+timal multimodal performance and retain strong text performance."
+- "Data lesson 4: Synthetic data helps with few-shot learning." 
 
+### [Grok](https://twitter.com/danielhanchen/status/1769550950270910630)
+[X.ai official blogpost]()
+- [Twitter thread](https://twitter.com/danielhanchen/status/1769550950270910630)
+- [TWITTER THEAD 2](https://twitter.com/itsandrewgao/status/1769447551374156097)
+- 

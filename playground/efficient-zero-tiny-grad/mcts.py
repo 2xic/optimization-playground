@@ -138,10 +138,12 @@ class MonteCarloSearchTree:
                 reward,
                 parent_node
             )
-            parent_node.children[action].p = self.get_p(
+            p_value = self.get_p(
                 parent_node.state,
                 action
             )
+            # Then we set it
+            parent_node.children[action].p = p_value
             parent_node.children[action].id = self.current_node_id
             self.current_node_id += 1
         return parent_node
@@ -150,11 +152,14 @@ class MonteCarloSearchTree:
         if self.config.is_training:
             return np.random.rand()
         else:
-            # TODO: Should use the model 
-            #raise Exception("Unimplemented")
-            return self.model.get_policy_predictions(
+            # print("oo", state.device)
+            policy_model = self.model.get_policy_predictions(
                 state
-            )[0][action].item()
+            )
+            # print(policy_model.device)
+            # print("action")
+            # print(policy_model[0][action].item())
+            return policy_model[0][action].item()
 
     # just a debug utility
     def plot(self):

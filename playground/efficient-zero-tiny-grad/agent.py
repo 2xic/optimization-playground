@@ -1,11 +1,4 @@
 from config import Config
-
-USE_TINY_GRAD = True
-
-if USE_TINY_GRAD:
-    from models.tinygrad_model import Model 
-else:
-    from models.torch_model import Model 
 from mcts import MonteCarloSearchTree
 from torch import Tensor
 from replay_buffer import ReplayBuffer, Predictions
@@ -13,9 +6,10 @@ from debug import Debug
 import torch
 from loss_debug import LossDebug
 import time
+from optimization_playground_shared.utils.Timer import Timer
 
 class Agent:
-    def __init__(self, config: Config, env) -> None:
+    def __init__(self, config: Config, env, Model) -> None:
         self.config = config
         self.model = Model(self.config)        
         self.opt = self.model.get_optimizer()
@@ -33,37 +27,40 @@ class Agent:
         while not terminated:
             # Play one epoch 
             old_state = self.env.state.copy()
-            self.mcts = MonteCarloSearchTree.from_state(
-                self.env.state,
-                self.model,
-                self.config,
-            )
-            self.mcts.expand()
-
-            action = self.mcts.get_action(self.mcts.root)
-            (
-                _,
-                reward,
-                terminated,
-                _,
-                _
-            ) = self.env.step(action)
+            with Timer("mcts"):
+                self.mcts = MonteCarloSearchTree.from_state(
+                    self.env.state,
+                    self.model,
+                    self.config,
+                )
+                self.mcts.expand()
+            action = None
+            with Timer("get_action"):
+                action = self.mcts.get_action(self.mcts.root)
+                (
+                    _,
+                    reward,
+                    terminated,
+                    _,
+                    _
+                ) = self.env.step(action)
             #print("state|action|reward|on-policy")
             #print(old_state, action, reward, self.config.is_training)
             assert reward in [0, 1]
             
-            self.replay_buffer.add_to_entries(Predictions(
-                state=old_state,
-                action=action,
-                environment_reward=reward,
-                next_state=self.env.state.copy(),
-                state_distribution=torch.tensor(self.mcts.root.visited_probabilities, device=self.model.device)
-            ))
-            debugger.store_predictions(
-                self.model.get_state_reward(self.model.encode_state(Tensor(self.env.state).reshape((1, -1)))),
-                self.model.encode_state(Tensor(self.env.state).reshape((1, -1))),
-                action,
-            )
+            with Timer("add_entries"):
+                self.replay_buffer.add_to_entries(Predictions(
+                    state=old_state,
+                    action=action,
+                    environment_reward=reward,
+                    next_state=self.env.state.copy(),
+                    state_distribution=torch.tensor(self.mcts.root.visited_probabilities, device=self.model.device)
+                ))
+                debugger.store_predictions(
+                    self.model.get_state_reward(self.model.encode_state(Tensor(self.env.state).reshape((1, -1)))),
+                    self.model.encode_state(Tensor(self.env.state).reshape((1, -1))),
+                    action,
+                )
             sum_reward += reward
         return sum_reward
     

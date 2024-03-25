@@ -3,6 +3,7 @@ from env.simple_rl_env import SimpleRlEnv
 from config import Config
 from agent import Agent
 from mcts import MonteCarloSearchTree
+from models.torch_model import Model as TorchModel
 
 class TestEnvironments(unittest.TestCase):
     def test_upper(self):
@@ -19,9 +20,13 @@ class ModelForward(unittest.TestCase):
             is_training=True,
             num_actions=2,
             state_size=2,
+            max_iterations=3_00,
+            max_depth=5,
+            replay_buffer_size=100,
+            # model config
+            projection_network_output_size=16,
             state_representation_size=4,
-            max_iterations=10,
-            max_depth=0,
+            lr=13e-4,
             # numbers appendix 3
             c_1=1.25, 
             c_2=19652,
@@ -30,7 +35,7 @@ class ModelForward(unittest.TestCase):
     def test_simple_env_roll_forward(self):
         self.config.max_depth = 0
         env = SimpleRlEnv()
-        agent = Agent(self.config, env)
+        agent = Agent(self.config, env, TorchModel)
         mcts = MonteCarloSearchTree.from_state(
             env.state,
             agent.model,
@@ -44,7 +49,7 @@ class ModelForward(unittest.TestCase):
         self.config.max_iterations = 5_00
         self.config.max_depth = 1
         env = SimpleRlEnv()
-        agent = Agent(self.config, env)
+        agent = Agent(self.config, env, TorchModel)
         mcts = MonteCarloSearchTree.from_state(
             env.state,
             agent.model,

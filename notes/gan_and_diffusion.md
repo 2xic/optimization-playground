@@ -108,3 +108,10 @@ This is a cool idea, not sure I fully get it, but they seems to pass in text emb
 They invert the clip model with class inversion similar to DeepDream. KInda interesting seeing some of the output generated images given that some of them are not very appropriate.
 
 
+### [Video Editing via Factorized Diffusion Distillation](https://arxiv.org/pdf/2403.09334.pdf)
+[Website](https://fdd-video-edit.github.io/) with soem cool examples.
+
+- **The model does not rely on any supervised video editing data.**
+- They separately trained the model with an image editing adapter and a video generation adapter. They are both attached to the same text to image model. See Figure 2 of the paper.
+- "Factorized Diffusion Distillation" = fancy words for a form of transfer learning into the video generation model. 
+

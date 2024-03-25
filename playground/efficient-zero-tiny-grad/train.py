@@ -6,6 +6,23 @@ from random_agent import RandomAgent
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from average_over_time import EvaluationOverTime
 import torch
+from models.tinygrad_model import Model  as TinygradModel, function_time
+from models.torch_model import Model as TorchModel
+import argparse
+import time
+from optimization_playground_shared.utils.Timer import Timer
+from optimization_playground_shared.utils.GlobalTimeSpentInFunction import GlobalTimeSpentInFunction
+
+backends = {
+    "tinygrad": TinygradModel,
+    "torch": TorchModel,
+}
+
+parser = argparse.ArgumentParser(
+                    prog='efficent zero',
+                    description='Test with torch or tinygrad')
+parser.add_argument('backend', choices=['tinygrad', 'torch'])
+args = parser.parse_args()
 
 def train_one():
     config = Config(
@@ -25,7 +42,7 @@ def train_one():
     )
     max_epochs = 1_00
 
-    agent = Agent(config, SimpleRlEnv())
+    agent = Agent(config, SimpleRlEnv(), backends[args.backend])
     random_agent = RandomAgent(config, SimpleRlEnv())
     debug = Debug()
 
@@ -38,23 +55,27 @@ def train_one():
     agent_reward_over_time = []
     random_agent_reward_over_time = []
 
+    start = time.time()
+
     for epoch in range(max_epochs):
         # After a certain amount of epochs let's switch to using the models policy
         # if epoch > 10:
         #config.is_training = random.randint(0, 1) == 0
         config.is_training = epoch % 2 == 1
 
-        _ = agent.play(
-            debugger=debug,
-        )
+        with Timer("model_play"):
+            _ = agent.play(
+                debugger=debug,
+            )
         sum_reward = 0
         with torch.no_grad():
             sum_reward = agent.test()
         sum_reward_random_agent = random_agent.play()
         # Should likely iterate over this n times instead of always fetching new data
         loss = None
-        for _ in range(3):
-            loss = agent.loss()
+        with Timer("loss"):
+            for _ in range(3):
+                loss = agent.loss()
 
         debug.add(
             loss,
@@ -70,6 +91,24 @@ def train_one():
         # Reward over time
         agent_reward_over_time.append(sum_reward)
         random_agent_reward_over_time.append(sum_reward_random_agent)
+
+        avg_time = (time.time() - start) / (epoch + 1)
+
+        print("{}: Average time {} epoch".format(args.backend, avg_time))
+#        print(GlobalTimeSpentInFunction().timers)
+        if avg_time > 10:
+            print("")
+            print("=============")
+            for key, value in sorted(GlobalTimeSpentInFunction().timers.items(), key=lambda x: x[1]):
+                print(f"{key}:\t{value}")
+            print("====")
+            combined = 0
+            for key, value in sorted(function_time.items(), key=lambda x: x[1]):
+                print(f"{key}:\t{value}")
+                combined += value
+            print(combined)
+            print("Took to long")
+            exit(1)
 
     plot = Plot()
     plot.plot_figures(
@@ -130,7 +169,9 @@ if __name__ == "__main__":
     eval_random_agent_reward_over_time = EvaluationOverTime()
 
     for _ in range(3):
-        (random_agent_scores, agent_scores, optimal_reward, agent_reward_over_time, random_agent_reward_over_time) = train_one()
+        (random_agent_scores, agent_scores, optimal_reward, agent_reward_over_time, random_agent_reward_over_time) = train_one(
+
+        )
         eval_agent.add(agent_scores)
         eval_random_agent.add(random_agent_scores)
 
