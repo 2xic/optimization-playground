@@ -18,7 +18,7 @@ class Agent:
         self.env = env
         self.replay_buffer = ReplayBuffer(config.replay_buffer_size)
         self.loss_debug = LossDebug()
-        self.debug_print = True
+        self.debug_print = False
 
     def play(self, debugger: Debug):
         self.env.reset()
@@ -54,7 +54,7 @@ class Agent:
                     action=action,
                     environment_reward=reward,
                     next_state=self.env.state.copy(),
-                    state_distribution=torch.tensor(self.mcts.root.visited_probabilities, device=self.model.device)
+                    state_distribution=torch.tensor(self.mcts.root.visited_probabilities.numpy(), device=self.model.device)
                 ))
                 debugger.store_predictions(
                     self.model.get_state_reward(self.model.encode_state(Tensor(self.env.state).reshape((1, -1)))),
@@ -202,7 +202,8 @@ class Agent:
                 # Update to next state
                 encoded_state = next_state
                 forward_small_error += small_error
-            self._debug_print(time.time() - start)
+            assert time.time() - start < 0.05, "too long rotation"
+            # self._debug_print(time.time() - start)
             #print(forward_small_error.shape)
             forward_small_error.backward()
             error += forward_small_error.item()

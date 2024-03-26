@@ -548,6 +548,8 @@ Training a model on bytes in and bytes out instead of traditional text tokens, i
 ### [The Era of 1-bit LLMs: All Large Language Models are in 1.58 Bits](https://arxiv.org/pdf/2402.17764.pdf)
 They make all parameter in the LLM be {-1, 0, 1}. This increases throughput and is also 
 
+[François Fleuret](https://fleuret.org/cgi-bin/gitweb/gitweb.cgi?p=pytorch.git;a=blob;f=bit_mlp.py) implemented it, but [results](https://twitter.com/francoisfleuret/status/1772703235020636318) less tha ideal.
+
 ### [Needle In A Haystack evaluation](https://opencompass.readthedocs.io/en/latest/advanced_guides/needleinahaystack_eval.html)
 First read about it in regards to the Claude 3. Basically insert some random text between a lot of other text and ask the LLM about it and see if it is able to recall it.
 
@@ -631,5 +633,9 @@ timal multimodal performance and retain strong text performance."
 ### [Grok](https://twitter.com/danielhanchen/status/1769550950270910630)
 [X.ai official blogpost]()
 - [Twitter thread](https://twitter.com/danielhanchen/status/1769550950270910630)
-- [TWITTER THEAD 2](https://twitter.com/itsandrewgao/status/1769447551374156097)
-- 
+  - [Attention is scaled by 30/tanh(x/30)](https://github.com/xai-org/grok-1/blob/7050ed204b8206bb8645c7b7bbef7252f79561b0/model.py#L864)
+  - 4 layer norms instead of 2 used by llama
+  - Vocab size is 131072. Gemma 256000.
+- [Twitter thread 2](https://twitter.com/itsandrewgao/status/1769447551374156097)
+  - Looks deeper into the code, thread is okay.
+  - 

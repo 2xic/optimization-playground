@@ -84,9 +84,10 @@ def train_one():
         debug.print()
         
         get_prev_element = lambda arr : (0 if len(arr) == 0 else arr[-1])
-        agent_scores.append(sum_reward + get_prev_element(agent_scores))
+        agent_scores.append(get_prev_element(agent_scores) + sum_reward)
         optimal_reward.append(get_prev_element(optimal_reward) + 11)
-        random_agent_scores.append(sum_reward_random_agent + get_prev_element(random_agent_scores))
+        random_agent_scores.append(get_prev_element(random_agent_scores) + sum_reward_random_agent)
+
         sum_loss_over_time.append(loss)
         # Reward over time
         agent_reward_over_time.append(sum_reward)
@@ -135,21 +136,6 @@ def train_one():
         name='loss.png'
     )
 
-    #plot = Plot()
-    #plot.plot_figures(
-    #    figures=[
-    #        Figure(
-    #            plots={
-    #                "random_agent": random_agent_scores,
-    #                "agent": agent_scores,
-    #            },
-    #            title="Agent vs random agent",
-    #            x_axes_text="Timestamp",
-    #            y_axes_text="Sum reward",
-    #        ),
-    #    ],
-    #    name='evaluation.png'
-    #)
     return (
         random_agent_scores,
         agent_scores,
@@ -169,9 +155,7 @@ if __name__ == "__main__":
     eval_random_agent_reward_over_time = EvaluationOverTime()
 
     for _ in range(3):
-        (random_agent_scores, agent_scores, optimal_reward, agent_reward_over_time, random_agent_reward_over_time) = train_one(
-
-        )
+        (random_agent_scores, agent_scores, optimal_reward, agent_reward_over_time, random_agent_reward_over_time) = train_one()
         eval_agent.add(agent_scores)
         eval_random_agent.add(random_agent_scores)
 

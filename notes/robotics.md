@@ -24,4 +24,7 @@ Things that are randomized
 ### [Universal Manipulation Interface](https://umi-gripper.github.io/)
 Very cool they open sourced both the software and the hardware they used. Sounds like they use slam and they also have a [diffusion model](https://github.com/real-stanford/universal_manipulation_interface/blob/e02f7a960fef9b529c0af10d6452072cfd53819f/diffusion_policy/model/vision/timm_obs_encoder.py#L17) for the policy. The videos make it seem impressive. 
 
+Very similar to this paper - [Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware](https://tonyzhaozh.github.io/aloha/aloha.pdf)
+https://tonyzhaozh.github.io/aloha/. However the execution here is a lot better.
+
 

@@ -87,7 +87,7 @@ TLDR: They create a self-competition environment by having the model compete aga
 
 [blog](https://www.deepmind.com/blog/muzeros-first-step-from-research-into-the-real-world)
 
-## [ Ilya Sutskever - Opening Remarks: Confronting the Possibility of AGI ](https://www.youtube.com/watch?v=OPZxs6IXH00)
+## [Ilya Sutskever - Opening Remarks: Confronting the Possibility of AGI](https://www.youtube.com/watch?v=OPZxs6IXH00)
 Ideas mentioned that stuck with me from this presentation 
 - "RL is creative". For instance with AlphaGo doing ["move 37"](https://www.johnmenick.com/writing/move-37-alpha-go-deep-mind.html). 
 - RL is likely the reason for the hallucination also.

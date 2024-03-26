@@ -43,7 +43,4 @@ Papers that I have saved, and should look at.
 ## Robotics
 [Model Predictive Control](https://folk.ntnu.no/skoge/vgprosessregulering/papers-pensum/seborg-c20ModelPredictiveControl.pdf)
 
-[Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware](https://tonyzhaozh.github.io/aloha/aloha.pdf)
-https://tonyzhaozh.github.io/aloha/
-
 
