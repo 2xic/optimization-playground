@@ -5,4 +5,8 @@ Found this article somewhat funny. They create a mini OCR farm from iPhones usin
 Apple has launched a "next word" predictor that uses a GPT2 like model and used in various note apps.
 The model they uses are ofc. much smaller than other models because of speed.
 
-
+## [Applied Machine Learning at Facebook: A Datacenter Infrastructure Perspective](https://abelay.github.io/6828seminar/papers/hazelwood:ml.pdf)
+- "ML-as-a-Service Inside Facebook"
+- [Machine racks](https://engineering.fb.com/2018/03/20/ml-applications/the-next-step-in-facebook-s-ai-hardware-infrastructure/)
+  - They have one fro training and one type for inference
+  - 

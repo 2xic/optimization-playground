@@ -574,9 +574,11 @@ First read about it in regards to the Claude 3. Basically insert some random tex
  
 
 ### [Stabilizing Transformer Training by Preventing Attention Entropy Collapse](https://proceedings.mlr.press/v202/zhai23a/zhai23a.pdf)
+[Source code](https://github.com/apple/ml-sigma-reparam)
+
 - The paper show that there are instability problems with training transformers models
 - They also show a simple re-parameterization trick of the weights to address the entropy collapse problem. It's layed out in section 3.2, but in essence it's a learnable parameter divided by the norm of the weight matrix times the weight matrix.  
-- 
+
 
 ### [⚔️ Chess LLM Arena (preview)](https://huggingface.co/spaces/mlabonne/chessllm)
 Two LLms playing against each other, kinda fun.
