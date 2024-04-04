@@ -1,5 +1,6 @@
-## FixMatch
+## [FixMatch](https://arxiv.org/abs/2001.07685)
 
-[paper](https://arxiv.org/abs/2001.07685)
+![plot](./results.png)
 
-![plot](train_accuracy.png)
+### Summary
+The core idea from the paper is by having consistency between strong and weak augmentation the model should also be able to learn the classes.

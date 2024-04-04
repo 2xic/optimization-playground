@@ -1,9 +1,18 @@
 from collections import defaultdict
-from typing import DefaultDict
 from torch.utils.data import Dataset
 import torchvision
 import random
 
+class RawCifar10Dataloader(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        X, y = self.dataset[idx]
+        return torchvision.transforms.ToTensor()(X), y,
 
 class Cifar10Dataloader(Dataset):
     def __init__(self, test=False):

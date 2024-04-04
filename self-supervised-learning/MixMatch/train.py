@@ -1,13 +1,16 @@
 from model import Net
-from Dataloader import Cifar10Dataloader
-from torch.utils.data import DataLoader
-import random
 import torch
 from sharpen import sharpen
 from mixup import MixUp
 from augmentations import augmentations
 from hyperparameters import T, lambda_value
 import torch
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
+from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
+from optimization_playground_shared.plot.Plot import Plot, Figure
+from Dataloader import Cifar10Dataloader, RawCifar10Dataloader
+from torch.utils.data import DataLoader
+
 """
 1. Run augmentation on a batch
     - Add a test util to the optimization library maybe
@@ -23,27 +26,56 @@ import torch
 """
 
 model = Net()
-device = 'cpu' # 'cuda:0'
-optimizer = torch.optim.Adam(model.parameters())
+device =  'cuda:0' if torch.cuda.is_available() else 'cpu' 
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+
+model.to(device)
+step_size = 4
 batch_size = 64
-dataloader = DataLoader(
-    Cifar10Dataloader(),
+
+# Reference model with no mixup
+reference_model = Net()
+reference_optimizer = torch.optim.Adam(reference_model.parameters())
+reference_loop = TrainingLoop(reference_model, reference_optimizer, loss=torch.nn.CrossEntropyLoss())
+
+# Only 1000 labels
+_, test_loader = get_dataloader(
+    batch_size=batch_size
+)
+custom_cifar = Cifar10Dataloader()
+train_dataloader = DataLoader(
+    custom_cifar,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=0,
+)
+train_raw = DataLoader(
+    RawCifar10Dataloader(custom_cifar.dataset),
     batch_size=batch_size,
     shuffle=True,
     num_workers=0,
 )
 
-model.to(device)
-step_size = 4
+training_loss_mixmatch = []
+training_loss_reference = []
+
+training_accuracy_mixmatch = []
+training_accuracy_reference = []
+
+test_accuracy_mixmatch = []
+test_accuracy_reference = []
 
 for epoch in range(1_00):
-    for index, (x, y, unlabeled) in enumerate(dataloader):
+    print(f"Epoch {epoch}")
+    loss_training = 0
+    mixmatch_accuracy = 0
+    samples = 0
+    for index, (x, y, unlabeled) in enumerate(train_dataloader):
         x = x.to(device)
         y = y.to(device)
         unlabeled = unlabeled.to(device)
 
         x_augmentation = augmentations(x).float()
-        #X_label += list(zip(x_augmentation, y))
         """
         TODO: This could be more tensor effective
         """
@@ -63,23 +95,84 @@ for epoch in range(1_00):
 
         x_predicted = model(u_mixed)
         loss_unlabeled = torch.nn.MSELoss()(x_predicted, uy_mixed)
+        if torch.isnan(loss_unlabeled):
+            print("loss_unlabeled is nan")
+            continue
 
-        optimizer.zero_grad()
+        optimizer.zero_grad(
+            set_to_none=True
+        )
         loss = loss_labeled + loss_unlabeled * lambda_value
+        assert not torch.isnan(loss_labeled), "loss_labeled is nan"
+        assert not torch.isnan(loss_unlabeled), "loss_unlabeled is nan"
+        assert not torch.isnan(lambda_value), "lambda_value is nan"
+        assert not torch.isnan(loss)
         loss.backward()
 
-        if index % 10 == 0:
-            with torch.no_grad():
-                predicted_y = torch.argmax(model(x), dim=1)
-                y_max = torch.argmax(y, dim=1)
-                equal =  predicted_y == y_max
-                #print(predicted_y.shape)
-                #print(y_max.shape)
-                #print(predicted_y)
-                #print(y_max)
-                #print(equal)
-                accuracy = ((equal.sum()) / batch_size).item()
-                with open("train_accuracy.txt", "a") as file:
-                    file.write(f"{accuracy}\n")
-                print(epoch, index, loss.item(), accuracy)
+        loss_training += loss.item()
+        assert x.shape[0] == y.shape[0]
+        mixmatch_accuracy += (torch.argmax(model(x), dim=1) == torch.argmax(y, dim=1)).sum().item()
+        samples += y.shape[0]
+        assert mixmatch_accuracy <= samples, f"{mixmatch_accuracy} vs {samples}"
+            
         optimizer.step()
+    
+    # one epoch
+    print(loss_training)
+    #accuracy = reference_loop.train(test_loader)
+    training_loss, training_accuracy = reference_loop.train(train_raw)
+    test_accuracy = reference_loop.eval(test_loader)
+    training_accuracy_mixmatch.append(
+        (mixmatch_accuracy / samples) * 100
+    )
+    assert training_accuracy_mixmatch[0] <= 100, f"{samples} vs {mixmatch_accuracy}"
+    training_accuracy_reference.append(
+        training_accuracy
+    )
+    test_accuracy_reference.append(
+        test_accuracy
+    )
+    training_loss_reference.append(
+        training_loss
+    )
+    training_loss_mixmatch.append(
+        loss_training
+    )
+    test_accuracy_mixmatch.append(
+        TrainingLoop(model, None, None).eval(test_loader)
+    )
+
+    plot = Plot()
+    plot.plot_figures(
+        figures=[
+            Figure(
+                plots={
+                    "Training loss with MixMatch": training_loss_mixmatch,
+                    "Training loss without MixMatch": training_loss_reference,
+                },
+                title="Loss",
+                x_axes_text="Epochs",
+                y_axes_text="Loss",
+            ),
+            Figure(
+                plots={
+                    "Training accuracy with MixMatch": training_accuracy_mixmatch,
+                    "Training accuracy without MixMatch": training_accuracy_reference,
+                },
+                title="Training accuracy",
+                x_axes_text="Epoch",
+                y_axes_text="Accuracy",
+            ),
+            Figure(
+                plots={
+                    "Test accuracy with MixMatch": test_accuracy_mixmatch,
+                    "Test accuracy without MixMatch": test_accuracy_reference,
+                },
+                title="Test accuracy",
+                x_axes_text="Epoch",
+                y_axes_text="Accuracy",
+            )
+        ],
+        name='results.png'
+    )
+

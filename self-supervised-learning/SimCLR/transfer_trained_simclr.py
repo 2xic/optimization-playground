@@ -1,6 +1,3 @@
-import pytorch_lightning as pl
-from dataloader import Cifar10Dataloader
-from torch.utils.data import DataLoader
 from model import SimClrTorch, Net
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 import torch
@@ -76,5 +73,4 @@ def test_model(model: SimClrTorch, device):
 
     accuracy = loop.eval(test_loader)
     reference_accuracy = reference_loop.eval(test_loader)
-#    print(accuracy, reference_accuracy)
     return accuracy.cpu().item(), reference_accuracy.cpu().item(), epoch_simclr_loss, epoch_reference_loss

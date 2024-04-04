@@ -5,6 +5,17 @@ import torchvision
 import random
 import torch
 
+class RawCifar10Dataloader(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        X, y = self.dataset[idx]
+        return torchvision.transforms.ToTensor()(X), y,
+
 class Cifar10Dataloader(Dataset):
     def __init__(self, test=False):
         self.dataset = torchvision.datasets.CIFAR10(root='./data',

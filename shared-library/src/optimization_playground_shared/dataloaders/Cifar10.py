@@ -68,11 +68,16 @@ def _call_if_func(func, dataset):
         return func(dataset)
     return func
 
-def get_dataloader(batch_size=64, shuffle=False, num_workers=0, sampler=None, generated_labels=None, transforms=None):
+def get_dataloader(batch_size=64, shuffle=False, num_workers=0, sampler=None, generated_labels=None, transforms=None, subset=None):
     train_ds = Cifar10Dataloader(test=False, transforms=transforms, generated_labels=generated_labels)
-    train_loader = DataLoader(train_ds, pin_memory=True, num_workers=num_workers, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
-
     test_ds = Cifar10Dataloader(test=True, transforms=transforms,)
+
+    if subset is not None:
+        validation_end_offset = int(subset * 0.1)
+        test_ds = torch.utils.data.Subset(train_ds, list(range(0, validation_end_offset)))
+        train_ds = torch.utils.data.Subset(train_ds, list(range(validation_end_offset, subset)))
+
+    train_loader = DataLoader(train_ds, pin_memory=True, num_workers=num_workers, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, train_ds))
     test_loader = DataLoader(test_ds, pin_memory=True, num_workers=num_workers, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, test_ds))
 
     return (

@@ -1,10 +1,6 @@
-from torch import optim, nn
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchmetrics.functional import pairwise_cosine_similarity
-import time
 
 # just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
 class Net(nn.Module):

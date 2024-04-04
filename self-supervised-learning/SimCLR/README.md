@@ -1,11 +1,12 @@
-# SimCLR
-Speedrunning paper and testing PyTorch Lightning.
+# [SimCLR](https://arxiv.org/abs/2002.05709)
 
-I think I have implemented most things correctly, but not able to get the training to converge currently.
+Run the following to generate the plot and train the model 
 
-[paper](https://arxiv.org/abs/2002.05709)
+```bash
+python3 train_simclr_pytorch.py
+```
 
-[PyTorch Lightning](https://www.pytorchlightning.ai/)
+![results](./results.png)
 
 ## Reflection
 - The loss was wrong and caused issue. This was not caught by the tests. Not good.  

@@ -1,12 +1,10 @@
 from torch import optim, nn
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchmetrics.functional import pairwise_cosine_similarity
 import time
 from fixmatch import FixMatch
-from Parameters import loss_reduction, output_reduction, warm_epoch, supervised_size_ratio
+from Parameters import loss_reduction, output_reduction, supervised_size_ratio
 
 
 # just using the example model from https://pytorch.org/tutorials/beginner/blitz/cifar10_tutorial.html
@@ -30,9 +28,8 @@ class Net(nn.Module):
         x = F.relu(self.fc3(x))
         return x
 
-class SimpleModel(pl.LightningModule):
+class SimpleModel:
     def __init__(self, model):
-        super().__init__()
         self.model = model
         self.fix_match_loss = FixMatch()
         self.unlabeled_loss_weight = 1
@@ -48,12 +45,8 @@ class SimpleModel(pl.LightningModule):
         batch_size = x.shape[0]
         predictions = self.get_class_predictions(x)
         accuracy = (batch_size - torch.count_nonzero(predictions - y)) / float(batch_size)
-        self.log("test_accuracy", accuracy)
-
-        if self.batch % 10 == 0:
-            with open("test_accuracy.txt", "a") as file:
-                file.write(f"{accuracy}\n")
         self.batch += 1
+        return accuracy
 
     def get_class_predictions(self, X):
         z = self.forward(X)
@@ -90,13 +83,14 @@ class FixMatchModel(SimpleModel):
         supervised = torch.nn.CrossEntropyLoss(reduction=loss_reduction)(output_reduction(y_pred), y)
 
         batch_size = x.shape[0]
+        y_pred_class = torch.argmax(y_pred.clone().detach(), dim=1)
+        accuracy = (batch_size - torch.count_nonzero(y_pred_class - y)) / float(batch_size)
         
-        accuracy = (batch_size - torch.count_nonzero(torch.argmax(y_pred.clone().detach(), dim=1) - y)) / float(batch_size)
-        if self.batch % 10 == 0:
-            with open("train_accuracy.txt", "a") as file:
-                file.write(f"{accuracy}\n")
         self.batch += 1
 
         unsupervised = self.fix_match_loss.loss(self, unlabeled)
 
-        return supervised * self.labeled_loss_weight + unsupervised * self.unlabeled_loss_weight
+        return supervised * self.labeled_loss_weight + unsupervised * self.unlabeled_loss_weight, accuracy
+
+    def __call__(self, x):
+        return self.model(x)

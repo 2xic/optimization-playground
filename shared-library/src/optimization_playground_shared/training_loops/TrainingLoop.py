@@ -34,8 +34,14 @@ class TrainingLoop:
             y = y.to(device)
             y_pred = self.model(X)
 
-            loss = self.loss(y_pred, y)
+            if not self.loss is None:
+                loss = self.loss(y_pred, y)
+                total_loss += loss
+            else:
+                total_loss = None
+
             if train:
+                assert self.loss is not None
                 self.optimizer.zero_grad(
                   set_to_none=True
                 )
@@ -43,7 +49,7 @@ class TrainingLoop:
                 self.optimizer.step()
                 if isinstance(dataloader, tqdm):
                     dataloader.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
-            total_loss += loss
+            
             # TODO: Maybe instead add a custom accuracy metric field
             if y_pred.shape[-1] == 1:
                 # check if it is within the error margin

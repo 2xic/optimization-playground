@@ -632,7 +632,7 @@ formance."
 timal multimodal performance and retain strong text performance."
 - "Data lesson 4: Synthetic data helps with few-shot learning." 
 
-### [Grok](https://twitter.com/danielhanchen/status/1769550950270910630)
+### [Grok (X.ai language model)](https://twitter.com/danielhanchen/status/1769550950270910630)
 [X.ai official blogpost]()
 - [Twitter thread](https://twitter.com/danielhanchen/status/1769550950270910630)
   - [Attention is scaled by 30/tanh(x/30)](https://github.com/xai-org/grok-1/blob/7050ed204b8206bb8645c7b7bbef7252f79561b0/model.py#L864)
@@ -640,4 +640,11 @@ timal multimodal performance and retain strong text performance."
   - Vocab size is 131072. Gemma 256000.
 - [Twitter thread 2](https://twitter.com/itsandrewgao/status/1769447551374156097)
   - Looks deeper into the code, thread is okay.
-  - 
+
+### [Quiet-STaR: Language Models Can Teach Themselves to Think Before Speaking](https://arxiv.org/pdf/2403.09629.pdf)
+- "we train an LM to generate reasoning that helps it infer future text from a large internet text corpus"
+- See figure 1.
+- Feels somewhat similar to [Flux](https://flux.paradigm.xyz/), but just encoded inside the model and then with some mixing.
+- 
+
+
