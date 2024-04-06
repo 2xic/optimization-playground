@@ -5,13 +5,34 @@ import torch
 from optimization_utils.envs.SimpleEnv import SimpleEnv
 from optimization_utils.tree.MonteCarloTreeSearch import MonteCarloTreeSearch
 from optimization_utils.tree.MuzeroSimpleEnvState import MuzeroSimpleEnvState
-from optimization_utils.tree.SimpleEnvState import SimpleEnvState
 from optimization_utils.tree.MuzeroMonteCarloNode import MuzeroMonteCarloNode
 from parameters import ROLLOUT_STEPS_K
 from optimization_utils.exploration.EpsilonGreedy import EpsilonGreedy
 from optimization_utils.diagnostics.Diagnostics import Diagnostics
 import torch
 import numpy as np
+from optimization_playground_shared.plot.Plot import Plot, Figure
+import random
+
+class RandomAgent:
+    def __init__(self, env):
+        self.action_space = 2
+        self.env = env
+
+    def play(self):
+        self.env.reset()
+        terminated = False
+        sum_reward = 0
+        while not terminated:
+            action = random.randint(0, self.action_space - 1)
+            (
+                _,
+                reward,
+                terminated,
+                _
+            ) = self.env.step(action)
+            sum_reward += reward
+        return sum_reward
 
 
 def learn(replay_buffer: ReplayBuffer, model: Model, diagnostics: Diagnostics, optimizer: torch.optim.Adam):
@@ -166,6 +187,12 @@ timer.tick()
 
 diagnostics = Diagnostics()
 
+muzero_rewards = []
+optimal_reward = []
+random_agent_epochs = []
+
+sum_append = lambda x, y: (x[-1] if len(x) > 0 else 0) + y 
+
 while not timer.is_done():
     reward, actions = play(replay_buffer, exploration,
                            model, diagnostics, timer.epoch)
@@ -177,5 +204,27 @@ while not timer.is_done():
             "epsilon": exploration.epsilon,
             "last_game_sum_reward": reward,
         })
+    
+    random_agent = RandomAgent(SimpleEnv())
+
+    random_agent_epochs.append(sum_append(random_agent_epochs, random_agent.play().item()))
+    muzero_rewards.append(sum_append(muzero_rewards, reward.item()))
+    optimal_reward.append(sum_append(optimal_reward, 10))
 
     timer.tick()
+    plot = Plot()
+    plot.plot_figures(
+        figures=[
+            Figure(
+                plots={
+                    "random agent": random_agent_epochs,
+                    "optimal": optimal_reward,
+                    "muzero": muzero_rewards,
+                },
+                title="Agent vs random agent",
+                x_axes_text="Timestamp",
+                y_axes_text="Sum reward over time",
+            ),
+        ],
+        name='evaluation.png'
+    )

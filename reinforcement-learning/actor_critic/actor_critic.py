@@ -8,16 +8,17 @@ from optimization_playground_shared.rl.actor_critic import ActorCritic, ValueCri
 from optimization_playground_shared.plot.Plot import Plot, Figure
 import random
 
-device = torch.device('cpu')
+device = torch.device('cuda:0')
 env = gym.make('CartPole-v1')
 env.reset(seed=42)
 
+sum_append = lambda x, y: (x[-1] if len(x) > 0 else 0) + y 
 
 EPOCHS = 3_000
 
 def random_agents():
     scores = []
-    for epochs in range(EPOCHS):
+    for _ in range(EPOCHS):
         _, _ = env.reset()
         sum_reward = 0
         for _ in range(EPOCHS):
@@ -26,9 +27,7 @@ def random_agents():
             sum_reward += reward
             if done:
                 break
-        if epochs % 100 == 0:
-            scores.append(sum_reward)
-            print(epochs)
+        scores.append(sum_append(scores, sum_reward))
     return scores
 
 def train():
@@ -36,6 +35,9 @@ def train():
         state_size=4,
         action_size=2
     )
+    agent.actor.to(device)
+    agent.critic.to(device)
+    
     scores = []
     for epochs in range(EPOCHS):
         state, _ = env.reset()
@@ -45,7 +47,7 @@ def train():
         episode = Episode()
         for _ in range(EPOCHS):
             (actor, critic) = agent.forward(
-                torch.from_numpy(state).unsqueeze(0)
+                torch.from_numpy(state).unsqueeze(0).to(device)
             )
             predictions.append(ValueCritic(
                 actor,
@@ -57,8 +59,8 @@ def train():
             episode.add(reward)
             if done:
                 break
-        if epochs % 100 == 0:
-            scores.append(sum_reward)
+        
+        scores.append(sum_append(scores, sum_reward))
         calculated_loss = loss(agent, predictions, episode, device=device)
         print(f"{epochs} sum reward: {sum_reward} loss: {calculated_loss}")
 

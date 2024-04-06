@@ -9,7 +9,7 @@ class Epsilon:
 
     def action(self):
         if np.random.rand() < self.epsilon:
-            action = random.randint(0, 2)
+            action = random.randint(0, 1)
 
             if self.epsilon_min < self.epsilon:
                 self.epsilon *= self.decay

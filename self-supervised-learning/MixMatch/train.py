@@ -10,6 +10,7 @@ from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from Dataloader import Cifar10Dataloader, RawCifar10Dataloader
 from torch.utils.data import DataLoader
+import time
 
 """
 1. Run augmentation on a batch
@@ -34,7 +35,7 @@ step_size = 4
 batch_size = 64
 
 # Reference model with no mixup
-reference_model = Net()
+reference_model = Net().to(device)
 reference_optimizer = torch.optim.Adam(reference_model.parameters())
 reference_loop = TrainingLoop(reference_model, reference_optimizer, loss=torch.nn.CrossEntropyLoss())
 
@@ -64,8 +65,9 @@ training_accuracy_reference = []
 
 test_accuracy_mixmatch = []
 test_accuracy_reference = []
+start = time.time()
 
-for epoch in range(1_00):
+for epoch in range(1_500):
     print(f"Epoch {epoch}")
     loss_training = 0
     mixmatch_accuracy = 0
@@ -96,7 +98,7 @@ for epoch in range(1_00):
         x_predicted = model(u_mixed)
         loss_unlabeled = torch.nn.MSELoss()(x_predicted, uy_mixed)
         if torch.isnan(loss_unlabeled):
-            print("loss_unlabeled is nan")
+            #print("loss_unlabeled is nan")
             continue
 
         optimizer.zero_grad(
@@ -118,7 +120,9 @@ for epoch in range(1_00):
         optimizer.step()
     
     # one epoch
-    print(loss_training)
+    epochs_second = (epoch + 1) / (time.time() - start)
+    print(f"Epoch {epoch}, epochs / second {epochs_second}")
+
     #accuracy = reference_loop.train(test_loader)
     training_loss, training_accuracy = reference_loop.train(train_raw)
     test_accuracy = reference_loop.eval(test_loader)

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import random
 from optimization_playground_shared.rl.actor_critic import Episode, eps
 
-class Actor(torch.nn.Module):
+class Agent(torch.nn.Module):
     def __init__(self, state_size, action_size):
         super().__init__()
         self.actor = nn.Sequential(
@@ -23,15 +23,16 @@ class Actor(torch.nn.Module):
     def forward(self, x):
         return self.actor(x)
 
-device = torch.device('cpu')
+device = torch.device('cuda:0')
 env = gym.make('CartPole-v1')
 env.reset(seed=42)
 
-EPOCHS = 1_300
+EPOCHS = 1_000
+sum_append = lambda x, y: (x[-1] if len(x) > 0 else 0) + y 
 
 def random_agents():
     scores = []
-    for epochs in range(EPOCHS):
+    for _ in range(EPOCHS):
         _, _ = env.reset()
         sum_reward = 0
         for _ in range(EPOCHS):
@@ -40,16 +41,14 @@ def random_agents():
             sum_reward += reward
             if done:
                 break
-        if epochs % 100 == 0:
-            scores.append(sum_reward)
-            print(epochs)
+        scores.append(sum_append(scores, sum_reward))
     return scores
 
 def train():
-    agent = Actor(
+    agent = Agent(
         state_size=4,
         action_size=2
-    )
+    ).to(device)
     scores = []
     optimizer = torch.optim.Adam(agent.parameters())
     for epochs in range(EPOCHS):
@@ -61,7 +60,7 @@ def train():
         action_estimate = []
         for _ in range(EPOCHS):
             actor = agent.forward(
-                torch.from_numpy(state).unsqueeze(0)
+                torch.from_numpy(state).unsqueeze(0).to(device)
             )
             dist = Categorical(actor)
             action = dist.sample()
@@ -84,8 +83,7 @@ def train():
         loss.backward()
         optimizer.step()
         print(f"{epochs}: sum reward: {sum_reward} loss: {loss.item()}")
-        if epochs % 100 == 0:
-            scores.append(sum_reward)
+        scores.append(sum_append(scores, sum_reward))
     
     plot = Plot()
     plot.plot_figures(

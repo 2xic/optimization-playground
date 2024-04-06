@@ -6,7 +6,7 @@ class Q_valuePlanning:
     def __init__(self, model) -> None:
         self.model: Model = model
         self.b_actions = 2
-        self.action_size = 4
+        self.action_size = 2
         self.depth = 4
 
     def rollout(self, state):

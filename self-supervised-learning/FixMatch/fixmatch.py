@@ -1,6 +1,6 @@
 import torch
 from Augmentations import Augmentations
-from Parameters import loss_reduction, output_reduction
+import torch.nn.functional as F
 
 class FixMatch:
     def __init__(self) -> None:
@@ -12,17 +12,19 @@ class FixMatch:
         weak = self.augmentation.get_weak_augmentation(X)
         strong = self.augmentation.get_strong_augmentation(X)
 
-        prediction_weak, rows_kept = self.get_psuedo_label(output_reduction(model(weak).clone().detach()))
+        prediction_weak, rows_kept = self.get_psuedo_label(model(weak).clone().detach())
 
         if rows_kept.shape[0] == 0:
+            print("no rows kept :(")
             return torch.tensor((0))
 
         prediction_strong = model(strong)
 
         assert len(prediction_weak.shape) == 2
-        return torch.nn.CrossEntropyLoss(reduction=loss_reduction)(prediction_strong[rows_kept], prediction_weak)
+        return F.cross_entropy(prediction_strong[rows_kept], prediction_weak)
 
     def get_psuedo_label(self, prediction_weak: torch.Tensor):
+        prediction_weak = F.softmax(prediction_weak, dim=1)
         indices = torch.argmax(prediction_weak, dim=-1)
         rows_prediction = (prediction_weak.gather(1, indices.reshape((-1, 1)))).reshape(-1)
         rows_to_pseudo = torch.where(rows_prediction[:] > self.threshold)

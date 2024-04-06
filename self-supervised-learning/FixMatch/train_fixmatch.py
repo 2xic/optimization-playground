@@ -1,4 +1,4 @@
-from Model import FixMatchModel, Net
+from Model import FixMatchModel
 from Dataloader import Cifar10Dataloader, RawCifar10Dataloader
 from torch.utils.data import DataLoader
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
@@ -7,6 +7,10 @@ from optimization_playground_shared.plot.Plot import Plot, Figure
 from Dataloader import Cifar10Dataloader, RawCifar10Dataloader
 from torch.utils.data import DataLoader
 import torch
+import time
+from optimization_playground_shared.models.BasicConvModel import BasicConvModel
+
+device =  'cuda:0' if torch.cuda.is_available() else 'cpu' 
 
 dataset = Cifar10Dataloader()
 
@@ -19,9 +23,13 @@ raw_train_loader = DataLoader(RawCifar10Dataloader(dataset.dataset),
                           shuffle=True,
                           num_workers=2)
 
-reference_model = Net()
+reference_model = BasicConvModel(
+    input_shape=((3, 32, 32))
+).to(device)
 
-fixmatch_model = FixMatchModel(Net())
+fixmatch_model = FixMatchModel(BasicConvModel(
+    input_shape=((3, 32, 32))
+).to(device))
 fixmatch_model_optimizer = torch.optim.Adam(fixmatch_model.model.parameters())
 _, test_loader = get_dataloader()
 
@@ -37,11 +45,15 @@ training_accuracy_reference = []
 test_accuracy_mixmatch = []
 test_accuracy_reference = []
 
-for epoch in range(1_00):
+start = time.time()
+for epoch in range(1_500):
     fixxmatch_accuracy = 0
     samples = 0
     loss_training = 0
     for (x, y, z) in train_loader:
+        x = x.to(device)
+        y = y.to(device)
+        z = z.to(device)
         fixmatch_model_optimizer.zero_grad()
         (loss, accuracy) = fixmatch_model.training_step((x, y,z))
         loss.backward()
@@ -52,7 +64,8 @@ for epoch in range(1_00):
         samples += 1
         assert fixxmatch_accuracy <= samples, f"{fixxmatch_accuracy} vs {samples}"
 
-    print(f"Epoch {epoch}, acc {fixxmatch_accuracy} / {samples}")
+    epochs_second = (epoch + 1) / (time.time() - start)
+    print(f"Epoch {epoch}, epochs / second {epochs_second}")
 
     training_loss, training_accuracy = reference_loop.train(raw_train_loader)
     test_accuracy = reference_loop.eval(test_loader)
@@ -80,8 +93,8 @@ for epoch in range(1_00):
         figures=[
             Figure(
                 plots={
-                    "Training loss with MixMatch": training_loss_mixmatch,
-                    "Training loss without MixMatch": training_loss_reference,
+                    "Training loss with FixMatch": training_loss_mixmatch,
+                    "Training loss without FixMatch": training_loss_reference,
                 },
                 title="Loss",
                 x_axes_text="Epochs",
@@ -89,8 +102,8 @@ for epoch in range(1_00):
             ),
             Figure(
                 plots={
-                    "Training accuracy with MixMatch": training_accuracy_mixmatch,
-                    "Training accuracy without MixMatch": training_accuracy_reference,
+                    "Training accuracy with FixMatch": training_accuracy_mixmatch,
+                    "Training accuracy without FixMatch": training_accuracy_reference,
                 },
                 title="Training accuracy",
                 x_axes_text="Epoch",
@@ -98,8 +111,8 @@ for epoch in range(1_00):
             ),
             Figure(
                 plots={
-                    "Test accuracy with MixMatch": test_accuracy_mixmatch,
-                    "Test accuracy without MixMatch": test_accuracy_reference,
+                    "Test accuracy with FixMatch": test_accuracy_mixmatch,
+                    "Test accuracy without FixMatch": test_accuracy_reference,
                 },
                 title="Test accuracy",
                 x_axes_text="Epoch",

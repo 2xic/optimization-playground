@@ -11,7 +11,7 @@ class MixUp:
     def __call__(self, x, y, x2, y2, device):
         batch_size = 1
         l = torch.distributions.beta.Beta(self.alpha, self.alpha).sample(torch.tensor([batch_size])).to(device)
-        l = torch.maximum(l, torch.ones(l.shape) - l).to(device)
+        l = torch.maximum(l, torch.ones(l.shape).to(device) - l).to(device)
 
         new_x = x * l + (1 - l) * x2
         new_y = y * l + (1 - l) * y2

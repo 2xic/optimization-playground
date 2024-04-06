@@ -1,5 +1,3 @@
-
-
 from epsilon import Epsilon
 from loss import Loss
 from model import Model
@@ -17,6 +15,7 @@ def play(player: Model, epsilon: Epsilon):
     while not env.done():
         epsilon_action = epsilon.action()
         action = planner.rollout(env.env) if epsilon_action is None else epsilon_action
+      #  print((epsilon_action, action))
 
         (state, reward, action, gamma) = env.step(action)
         loss.store_trajectory(

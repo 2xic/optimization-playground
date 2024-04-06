@@ -1,5 +1,10 @@
-from config import Config
 import random
+from dataclasses import dataclass
+
+@dataclass
+class Config:
+    num_actions: int
+
 
 class RandomAgent:
     def __init__(self, config: Config, env):

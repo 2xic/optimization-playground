@@ -2,7 +2,7 @@ from env.simple_rl_env import SimpleRlEnv
 from config import Config
 from agent import Agent
 from debug import Debug
-from random_agent import RandomAgent
+from optimization_playground_shared.rl.random_agent import RandomAgent
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from average_over_time import EvaluationOverTime
 import torch
