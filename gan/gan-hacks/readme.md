@@ -1,3 +1,5 @@
+### Gan hacks
+
 <img src="./imgs/img_90.png" width="100%" >
 
 Not an hack, but looking at various discussions for how to train stable GANS.

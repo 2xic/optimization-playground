@@ -38,7 +38,9 @@ The page has many code snippets for various compression algorithms.
   - Context mixing
 - Preprocessing transforms the input data into a way that is more easily to compress. The data is compressed with a single pass with one bit at the time. This probability is encoded as arithmetic coding.
 - Independent models are used to predict the next probability of each input stream. 
-  
+
+
+[fx-cmix](https://github.com/kaitz/fx-cmix/tree/main/src) is a modification of this and won the latest (2024) hutter prize. There is some discussion on it [here](https://encode.su/threads/4161-fx-cmix-(HP)?p=81533&viewfull=1#post81533). Most of the code is on [kaitz](https://github.com/kaitz) github profile.
 
 ### [DeepZip: Lossless Compression using Recurrent Networks](https://web.stanford.edu/class/archive/cs/cs224n/cs224n.1174/reports/2761006.pdf)
 - Can RNNs be used for data compression ? 

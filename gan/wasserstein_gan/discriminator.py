@@ -1,5 +1,3 @@
-from torch import optim, nn
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -23,5 +21,4 @@ class Discriminator(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
-        x = torch.sigmoid(x)
         return x

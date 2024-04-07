@@ -27,7 +27,6 @@ def forward(gan: GanModel, train_loader):
     sum_d_loss = 0
     avg_discriminator_fake = 0
     avg_discriminator_real = 0
-    loss = F.binary_cross_entropy
 
     loss = GanBceLabelLoss()
 #    loss = StandardLoss()

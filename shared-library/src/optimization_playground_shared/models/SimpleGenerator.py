@@ -1,13 +1,11 @@
 from torch import nn
-import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import itertools
 import math
 
 class SimpleGenerator(nn.Module):
     def __init__(self, z, input_shape=(1, 28, 28)):
         super().__init__()
+        self.z = z
         self.input_shape = input_shape
         self.out = nn.Sequential(
           nn.Linear(z, 128),
