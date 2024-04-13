@@ -1,3 +1,7 @@
 pytorch-lightning
 torchvision
 graphviz
+
+sentencepiece
+transformer
+dataset

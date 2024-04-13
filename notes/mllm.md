@@ -50,3 +50,8 @@ Not that useful of an paper (technically speaking and that is just my opinion), 
 - The results still seem very basic though (Figure 7)
 
 [Unlocking the conversion of Web Screenshots into HTML Code with the WebSight Dataset](https://arxiv.org/pdf/2403.09029.pdf) is a related paper. They open sourced their [dataset](https://huggingface.co/datasets/HuggingFaceM4/WebSi
+
+### [Grok-1.5 Vision Preview](https://x.ai/blog/grok-1.5v)
+Adds multi-modal functionality to grok. It's SOTA on Math benchmark (mathvista) and text reading (TextVQA). 
+There are some examples from driving scene which the model is also able to correctly decode which is cool. These are from the RealWorldQA dataset which the model also is SOTA on.
+

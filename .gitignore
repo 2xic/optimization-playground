@@ -34,3 +34,5 @@ upload_vast*
 bins
 root
 TODO.md
+project.metadata.json
+dataset.csv

@@ -6,7 +6,3 @@ OpenAi [showed](https://openai.com/research/ai-and-compute) how much compute has
 - See [chip](./chips/) for some analysis on chips available
 - See [gpus](./gpus/) for some gpu notes
 
-
-## Articles to read
-[Understanding Roofline Charts](https://www.telesens.co/2018/07/26/understanding-roofline-charts/)
-

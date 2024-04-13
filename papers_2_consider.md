@@ -17,8 +17,6 @@ Papers that I have saved, and should look at.
 # Some I'm considering
 
 ### Computer vision
-[https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf](https://vcrs.wpengine.com/wp-content/uploads/2020/03/1611.02788.pdf)
-
 [https://nerf-w.github.io/](https://nerf-w.github.io/)
 
 [Learning to Zoom and Unzoom](https://arxiv.org/pdf/2303.15390.pdf)
