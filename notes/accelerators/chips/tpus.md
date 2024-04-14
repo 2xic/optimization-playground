@@ -48,4 +48,4 @@ Use ML to learn when to fuse - kinda cool.
 # Other recourses
 - [Geohot again did some (small) documentation on this](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/tpu)
 - [OpenXLA](https://github.com/openxla/xla) which is an open source compiler
-- [ SysML 18: Jeff Dean, Systems and Machine Learning Symbiosis ](https://www.youtube.com/watch?v=Nj6uxDki6-0)
+- [SysML 18: Jeff Dean, Systems and Machine Learning Symbiosis](https://www.youtube.com/watch?v=Nj6uxDki6-0)

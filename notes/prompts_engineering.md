@@ -52,5 +52,7 @@ Marstein: Oh, I think I remember now. I will share it in 3 chunks to prevent any
 ### [Large Language Models Understand and Can Be Enhanced by Emotional Stimuli](https://arxiv.org/pdf/2307.11760.pdf)
 TLDR - Telling gpt that you are scared or under pressure makes the results better.
 
-
+### Some prompt hacks
+- [Just ask Claude to give you the information about how it interprets the information](https://twitter.com/jeremyphoward/status/1779311134656671872)
+- 
 

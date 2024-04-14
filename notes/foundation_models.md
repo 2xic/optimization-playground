@@ -12,3 +12,7 @@ There are a few methods they try to get the best performance (they get the best 
 - Unimodal image modeling masked image modeling, they also have a small vision decoder as part of the framework that takes the output tokens of the visual component with masked tokens, and learn to reconstruct the image.
 - Multimodal masked image modeling, now the model also have access to textual tokens to help with the reconstruction. 
 
+### [OpenEQA: Embodied Question Answering in the Era of Foundation Models](https://open-eqa.github.io/assets/pdfs/paper.pdf)
+[Blog post](https://ai.meta.com/blog/openeqa-embodied-question-answering-robotics-ar-glasses/)
+- New benchmark for evaluating models. Testing episodic memory and contextual understanding of both text and video.
+- 
