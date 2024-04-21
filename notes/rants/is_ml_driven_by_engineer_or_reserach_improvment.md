@@ -22,7 +22,7 @@ My general view though is that a lot of ML breakthroughs are the result of [conv
 - [https://arxiv.org/pdf/1912.06680.pdf](https://arxiv.org/pdf/1912.06680.pdf) the algorithm used is PPO scaled up.
 
 ## AlphaZero
-- Some cleaver ideas mixed togehter
+- Some cleaver ideas mixed together
   - Self play
   - Use NN for value function and controlling the search
   - Monte carlo search tree 
@@ -35,12 +35,12 @@ My general view though is that a lot of ML breakthroughs are the result of [conv
 - The model itself I would say comes more from the engineering side.
 
 ## Generative models
-### Gans
+### GANs
 - More on the research side, but I think a cleaver engineer could have thought of something similar. 
 - [Ian Goodfellow](https://youtu.be/Z6rxFNMGdn0?feature=shared&t=1616) also credited (some) alcohol with this discovery (lol).
 
 ### Diffusion models
-- This is more research idea. Knowing some physics [helps](https://en.wikipedia.org/wiki/Diffusion_model)
+- This is more of a research idea. Knowing some physics [helps](https://en.wikipedia.org/wiki/Diffusion_model). That said, the underlying idea of predicting the state transition might as well be engineering driven, but you wouldn't likely been able to get a nicely working model.
 
 ## Resources
 - [Nassim Taleb on Scientific Discovery](https://www.science.org/content/blog-post/nassim-taleb-scientific-discovery) on the convex tinkering (i.e "theory comes out of practice")

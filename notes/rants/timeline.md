@@ -5,6 +5,13 @@ It's very hard to reason about some of the accomplishments in machine learning i
 
 Sadly a lot of today is just hype, we have come a far way, but I don't want to buy into the hype and looking at some retrospect help with that.
 
+The central piece missing in all of this is having a planner. Even LLMs can't really plan. You see things like [babyagi](https://github.com/yoheinakajima/babyagi), but even with scaled context etc. I don't think it will solve the underlying issue for the planning component. We need new architecture changes.
+
+[Tweet](https://twitter.com/jimkxa/status/1772672644443258926) has a good point also.
+```
+@realGeorgeHotz said when AI can do it, it stops being Intelligence. This moving window of definition is very curious
+```
+
 ### Chess = AI
 So in the middle/late nineteens, [Deep blue](https://en.wikipedia.org/wiki/Deep_Blue_(chess_computer)) was being developed and it beat Garry Kasparov in 1997. How ? Search! It used [alpha-beta](https://en.wikipedia.org/wiki/Deep_Blue_(chess_computer)#Hardware) search algorithm to search the game space and evaluate the best game positions.
 
@@ -43,6 +50,9 @@ Games with that aren't perfect information games = AI ?
 ### Evolution of GANs, why are Gan better?
 [4.5 years of GAN progress in one image](https://blog.acolyer.org/wp-content/uploads/2019/02/gans-tweet-1.jpeg?w=480) so image generations are clearly something the models are getting better at, but how ? 
 Compute, "smarter" algorithms (smarter is up for debate here, we could also just call it clever tricks), architecture changes.
+
+- [Soo much compute](http://www.transistorcount.com/)
+- 
 
 ### Evolutions of YOLO
 The [history of Yolo](https://deci.ai/blog/history-yolo-object-detection-models-from-yolov1-yolov8/)
@@ -87,14 +97,15 @@ Most (non machine learning) people don't realize GPT was first released in [2018
 
 What is this ? Hard to say, some say it's the recipe for AGI, but it clearly lacks a planner.
 
+
 ### The era of LLMs
 - ["AI software engineer"](https://www.cognition-labs.com/introducing-devin) 
   - https://medium.com/@avra42/is-databutton-the-new-full-stack-ai-alternative-to-devin-for-app-development-888a8e33a54a
   - https://twitter.com/batwood011/status/1767722399917813951
   - https://www.youtube.com/watch?v=tNmgmwEtoWE
   - https://news.ycombinator.com/item?id=40008109
-  - 
 - [AGI in 5 years](https://www.reuters.com/technology/nvidia-ceo-says-ai-could-pass-human-tests-five-years-2024-03-01/) ?
+- 
 
 My personal take on all of this is that LLM are great at compressing information, but not much more. They hallucinate so even the retrieval of information is sometimes very flaky.
 
@@ -105,7 +116,7 @@ My personal take on all of this is that LLM are great at compressing information
 
 ["a new dominant species"](https://youtu.be/jem1unAG4_k?feature=shared&t=10721). Synapse and neurons. Multiply (synapses) and accumulate (neurons). `bioFlops = synapses * clock rate`. 
 An ant (2 GFLOPS) ~ raspberry pi. Bee (200 GFLOPS) ~ 500 ants ~ Comma 2 device (smartphone). Mouse ~ 100 TFLOPS ~ Multiple GeForces. Cat ~ 2 PFLOPS ~ one rack. One human ~ 20 PFLOPS ~ one rack of TPU v3. 
-Humanity is a network. Cats are not networked, dogs are on LAN, but only humans are networked like the Internet. Collective intelligence. The brain software might not be particular good given it's hardware. 
+Humanity is a network. Cats are not networked, dogs are on LAN, but only humans are networked like the Internet. [Collective intelligence](https://twitter.com/karpathy/status/1780684098773876941). The brain software might not be particular good given it's hardware. 
 - The human race is about 1.6 (10^26) FLOPS = 100 billion petaFLOPS
 - Silicon flops in the world is about 10^21 (unsure where he got the numbers from)
 - Factor of 10^5 off.
@@ -122,19 +133,22 @@ With todays technology something like duplex is likely something that can be bui
 
 
 ### E2E is the way
-So we have seen some great accomplishments over the years. We see time and time again that learning things e2e is the way.
-- [AlphaDev](https://deepmind.google/discover/blog/alphadev-discovers-faster-sorting-algorithms/)
-- [Taco bell comma.ai trip](https://www.youtube.com/watch?v=cAWScxZuc0g) 
-- 
+**todo: not sure where I was going with this example. Maybe drop it? Or was the point to prove some accomplishments with true ML?**
 
- 
-### Side note: Self-driving cards
+So we have seen some great accomplishments over the years. We see time and time again that learning things e2e is the way.
+- [AlphaDev](https://deepmind.google/discover/blog/alphadev-discovers-faster-sorting-algorithms/). ML "generated" algorithms are part of the LLVM compiler. 
+- [Taco bell comma.ai trip](https://www.youtube.com/watch?v=cAWScxZuc0g). They also wrote up a blog-post on the [change](https://blog.comma.ai/taco-bell/).
+- [Learned indexes](https://arxiv.org/pdf/2012.12501.pdf)
+
+While all of these things are impressive by themselves, they don't solve the underlying issues we have on planning.
+
+### Side note: Self-driving cars
 Elon Musk is famous for his [self-driving cars predictions](https://www.consumerreports.org/cars/autonomous-driving/timeline-of-tesla-self-driving-aspirations-a9686689375/) having promised it will only be two years away for a decade soon.
 Robot taxis have also been promised for almost [half a decade](https://twitter.com/elonmusk/status/1148070210412265473) to just be a few years away. [Ali Rahimi](https://youtu.be/x7psGHgatGM?feature=shared&t=683) also mentioned this during his Alchemy talk.
 
 So what are the methods people use today ? There are a few various approaches to this problem (most of them are [scams](https://www.youtube.com/watch?v=w2Ok7jUUB9U))
 - [comma.ai](https://blog.comma.ai/) e2e machine learning is the way. People can buy and use the product. 
-- Telsa auotpilot is doing [a lot](https://www.youtube.com/watch?v=j0z4FweCy4M).
+- Telsa auotpilot is doing [a lot](https://www.youtube.com/watch?v=j0z4FweCy4M), but have technology that users can [use](https://www.youtube.com/watch?v=nW-3KcEKjpQ).
 - Waymo ? 
 - Cruise ?
 
@@ -155,3 +169,14 @@ So we are seeing some cool stuff here
 
 ### The problem today: planning
 So from we can gather from above all current solutions have one giant problem - they can't do long term planning.
+
+You can also very easily see that this is a problem as none of the models does well on ARC
+- [Comparing Humans, GPT-4, and GPT-4V On Abstraction and Reasoning Tasks](https://ncsi.cause-lab.net/pdf/LLMCP_4.pdf)
+- [LLMs and the Abstraction and Reasoning Corpus: Successes, Failures, and the Importance of Object-based Representations](https://arxiv.org/pdf/2305.18354.pdf)
+- https://twitter.com/ylecun/status/1768330345059872931
+- https://twitter.com/ylecun/status/1768342562270552241
+- 
+
+
+
+

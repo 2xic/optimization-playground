@@ -8,8 +8,6 @@ Lambda used to have 8 GPU instances for me, but no more :( ended up switching to
 ### Results
 The current results are without the label noise, since I don't see the exact same phenomena as OpenAI, I assume it might be a cause. The results are still interesting though. 
 
-![Resnet width / Test Accuracy](./plots/test_plot.png)
-
 ![Epoch wise test accuracy](./plots/epoch_wise_test_plot.png)
 
-![Test accuracy over time](./plots/line_test_plot.png)
+See more plots in [plots](./plots/) and script to generate those in [plot.py](./plot.py).

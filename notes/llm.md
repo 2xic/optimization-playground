@@ -431,14 +431,13 @@ TLDR: GPT behavior has drastically changed over the last couple of months. Mostl
 
 [Counter article](https://www.aisnakeoil.com/p/is-gpt-4-getting-worse-over-time) that adds a bit more nuance to the issue. 
 
-### [Llama 2](https://ai.meta.com/llama/)
+### [Llama 2](https://llama.meta.com/llama2/)
 - Public weights
 - [Karpathy therad on llama 2](https://twitter.com/karpathy/status/1681667444895539202?s=12)
 
 [Difference between llama 1](https://www.apps4rent.com/blog/llama-vs-llama-2/)
 - More data and larger context window
 - Uses RLHF
-- 
 
 ### [The Internal State of an LLM Knows When its Lying](https://arxiv.org/abs/2304.13734)
 - They train a classifier based on the the hidden layers of a LLM 
@@ -562,6 +561,8 @@ First read about it in regards to the Claude 3. Basically insert some random tex
 - [@moyix](https://twitter.com/moyix/status/1766234722873610446) tests if Claude is able to write a fuzzer which is cool. After some help Claude did succeed at the task. It also seemed able to [find](https://twitter.com/tobycmurray/status/1766339818945126851) bugs.
 - [@moyix](https://twitter.com/moyix/status/1765967602982027550) Fuzzing GIFs with Claude.
 
+Look at [this](https://twitter.com/VictorTaelin/status/1776096481704804789) of a case that GPT can't solve and there are many similar cases, but [Optus can](https://gist.github.com/GameDevGitHub/ffd826a4296008ba10d0df893f6fde62) with some clever prompting.
+
 ### [Yi: Open Foundation Models by 01.AI](https://arxiv.org/pdf/2403.04652.pdf)
 - Based on the LLaMa transformer, but with some modifications to the attention mechanism, activation functions and embeddings type.
 - Looking at the attached benchmarks results the model seems to lack coding skills and Math, but good at at various chinese language benchmarks and reading comprehension. 
@@ -645,6 +646,45 @@ timal multimodal performance and retain strong text performance."
 - "we train an LM to generate reasoning that helps it infer future text from a large internet text corpus"
 - See figure 1.
 - Feels somewhat similar to [Flux](https://flux.paradigm.xyz/), but just encoded inside the model and then with some mixing.
+
+
+### [Llama 3](https://llama.meta.com/llama3/)
+[blog posts](https://ai.meta.com/blog/meta-llama-3/)
+
+[source code](https://github.com/meta-llama/llama3)
+- Oh I notice `@torch.inference_mode` which I didn't know about
+- Uses [fairscale](https://github.com/facebookresearch/fairscale)
+- Code itself is short and nice.
+
+
+[model card](https://github.com/meta-llama/llama3/blob/main/MODEL_CARD.md)
+
+[Karapthy tweet](https://twitter.com/karpathy/status/1781028605709234613)
+
+- two variants 8B and 70B both receiving some SOTA scores
+- 7x larger dataset and more code included in the dataset and more focus on quality.
+- scaled up pre-training
+- Same architecture as llama 2
+- "Contradicts" with the Chinchilla "compute optimal" solution. They are ~75X beyond the optimal point based on chinchilla.
 - 
 
+### [Can Language Models Solve Olympiad Programming?](https://arxiv.org/pdf/2404.10952.pdf)
+- [New benchmark](https://github.com/princeton-nlp/USACO) 
+- Models generally don't do that well zero-shot, but with some additional prompting they do 1/3 of the human average based on the benchmark results.
+
+### [Fewer Truncations Improve Language Modeling](https://arxiv.org/pdf/2404.10830.pdf)
+- Instead of just raw concat of text documents, make them in chunks that are all coherent. This improves performance.
+-  "Best-fit Packing"
+
+### [Fineweb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)
+- [Filtered CommonCrawl dataset](https://twitter.com/gui_penedo/status/1781953413938557276)
+- Gives great scores!
+
+### [Training Dynamics of Contextual N-Grams in Language Models](https://arxiv.org/pdf/2311.00863.pdf)taa
+[Tweet](https://twitter.com/wesg52/status/1653750344877502464)
+
+[Tweet](https://twitter.com/lucia_quirke/status/1722970163535134958)
+
+- German language neuron (L3N669) part of a larger circuit.
+- Some good images here also
 

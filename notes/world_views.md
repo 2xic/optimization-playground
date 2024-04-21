@@ -37,3 +37,7 @@ Somewhat inspired from the last section "A Summary of Popular Positions" by [Xan
     - [Gwern](https://gwern.net/scaling-hypothesis)
     - [The bitter lesson?](http://www.incompleteideas.net/IncIdeas/BitterLesson.html)
 
+## Evolutionary algorithms
+- [Taelin](https://twitter.com/VictorTaelin/status/1781480313497018848) likes evolutionary algorithms. They don't have smooth curves so harder to predict, but they might be more powerful. He [wants to run them](https://twitter.com/VictorTaelin/status/1781519111937212799). 
+- 
+

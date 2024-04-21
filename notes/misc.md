@@ -36,3 +36,7 @@ They made some data observations which was kinda intresting
 3. Accounting for podcast interactions with audiobooks is essential for better understanding user preferences.
 - They use Graph based neural networks and seem to combine both the podcast and audiboook data part of the model. The system generates daily user and audio-book features. 
 
+### [On the Measure of Intelligence](https://arxiv.org/abs/1911.01547)
+- Created a dataset Abstraction and Reasoning Corpus ([ARC](https://github.com/fchollet/ARC)) to better model intelligence in a ML model.
+- There was a [Kaggle competition](https://www.kaggle.com/c/abstraction-and-reasoning-challenge/leaderboard) back on the day for this also
+

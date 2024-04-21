@@ -13,3 +13,5 @@ Sometimes I forget the projects I had planned, better to write it down here.
 
 - Look at, and ideally break down core parts of the paper and code for [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543) [Adding Conditional Control to Text-to-Image Diffusion Models(code)](https://github.com/lllyasviel/ControlNet)
 
+- Take a look at [feature-across-time](https://github.com/EleutherAI/features-across-time/tree/main)
+
