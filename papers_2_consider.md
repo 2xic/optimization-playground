@@ -23,8 +23,6 @@ Papers that I have saved, and should look at.
 
 [Waldo](https://arxiv.org/pdf/2211.14308.pdf)
 
-[Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture](https://arxiv.org/pdf/2301.08243.pdf)
-
 ### RL 
 [Flow Network based Generative Models for Non-Iterative Diverse Candidate Generation](https://arxiv.org/pdf/2106.04399.pdf)
 

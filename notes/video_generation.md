@@ -14,5 +14,6 @@
 I knew Stability also had launched a model for video generation, but they don't seem to use the transformer
 - They seem to use some of the existing model ideas used for 2D latent image diffusion models and insert temporal layers into them  
 - They seem to need to do a lot more pretraining and finetuning than what Sora had to, but hard to tell without seeing all the details of Sora
-- 
+
+The authors also had this [talk](https://www.youtube.com/watch?v=U3J6R9gfUhU) at the AGI house.
 
