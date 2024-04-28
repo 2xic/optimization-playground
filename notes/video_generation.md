@@ -17,3 +17,8 @@ I knew Stability also had launched a model for video generation, but they don't 
 
 The authors also had this [talk](https://www.youtube.com/watch?v=U3J6R9gfUhU) at the AGI house.
 
+## [SV3D: Novel Multi-view Synthesis and 3D Generation from a Single Image using Latent Video Diffusion](https://arxiv.org/pdf/2403.12008)
+[Blog post](https://stability.ai/news/introducing-stable-video-3d)
+
+- Make one 2d image into 3d view
+- Figure 2 shows the overview of the architecture. Quite nice.

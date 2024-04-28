@@ -7,3 +7,12 @@
 
 *todo*
 
+## NeuralHash
+- Apple made it for some of their [safety features](https://www.apple.com/child-safety/pdf/CSAM_Detection_Technical_Summary.pdf)
+- TLDR: Similar looking images will have same neural hash. i.e changes to aspect ratio doesn't change the hash and same is true for colors etc.
+- The pipeline is like this
+  - Image -> Feature encodings -> Hashing based on local-sensitives hash
+- [Adversarial attacks](https://towardsdatascience.com/apples-neuralhash-how-it-works-and-ways-to-break-it-577d1edc9838) can beat the system. [Source code](https://github.com/greentfrapp/apple-neuralhash-attack)
+- More attacks on [neural hash](https://jagdeepsb.github.io/assets/pdf/neuralhash%20icml%20ml4cyber%202022.pdf)
+- [Getting the model](https://github.com/AsuharietYgvar/AppleNeuralHash2ONNX?tab=readme-ov-file)
+- 

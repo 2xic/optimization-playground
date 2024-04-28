@@ -100,5 +100,7 @@ What is more interesting is the engineering section
 - They do however do well on tasks defined within the training data
 - 
 
-
+### [Gecko: Versatile Text Embeddings Distilled from Large Language Models](https://arxiv.org/pdf/2403.20327)
+- Google model.
+- They use a LLM to create the embeddings from by distilling it. 
 

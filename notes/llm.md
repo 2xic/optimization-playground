@@ -269,6 +269,12 @@ The loss seems to be as simple as predict the next token (or to be more precise 
 -> Dataset is from a previous study. Which one ? 
   -> Sounds like it's from https://arxiv.org/pdf/2208.13035.pdf but haven't found a source there
 
+### [PaLM Technical Report](https://arxiv.org/pdf/2204.02311)
+- Section four covers the setup of the infrastructure
+  - They use [Pathways system](https://arxiv.org/pdf/2203.12533) with some tldr presentation on it [here](https://www.cl.cam.ac.uk/~ey204/teaching/ACS/R244_2023_2024/presentation/S2/PATHWAYS_Balazs.pdf)
+- Section five has various general tips for the infrastructure for training a large models
+- 
+
 ### [PaLM 2 Technical Report](https://arxiv.org/pdf/2305.10403.pdf)
 -> Transformer architecture
 -> Upgraded (and improved) version of [PaLM](https://ai.googleblog.com/2022/04/pathways-language-model-palm-scaling-to.html) (released last year)
@@ -687,4 +693,24 @@ timal multimodal performance and retain strong text performance."
 
 - German language neuron (L3N669) part of a larger circuit.
 - Some good images here also
+
+### [phi-3](https://arxiv.org/pdf/2404.14219.pdf)
+[hackernews](https://news.ycombinator.com/item?id=40127806)
+
+- TLDR: Small model with certain nice to have capabilities that can be ran on a phone.
+- 3.8 million parameters trained on 3.3 trillion tokens.
+- Quite good benchmark results. 
+
+
+### [The Instruction Hierarchy: Training LLMs to Prioritize Privileged Instructions](https://arxiv.org/pdf/2404.13208.pdf)
+- LLMs are now trying to add migrations like we do in other software systems. The idea is "instruction hierarchy" to make it possible to separate out instructions from users and system prompts.
+- It does based on the provided benchmark seem to provide some robustness to prompt injection, but as all other migrations probably a new sandbox escape could be found.
+
+### [OpenELM](https://arxiv.org/pdf/2404.14619.pdf)
+[Source code](https://github.com/apple/corenet/tree/main/mlx_examples/open_elm)
+
+[Huggingface](https://huggingface.co/apple/OpenELM-3B-Instruct)
+
+- "This work releases OpenELM, a decoder-only transformer-based open language model."
+- 
 

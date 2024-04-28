@@ -21,3 +21,9 @@ Using batch normalization makes it easier to train neural networks without think
 
 The most interesting results from this paper imo is the fact that you cna tradeoff the search time of the search and the training time. For each additional 10x of train-time compute, 15x of test-time compute (search time) can be removed.
 
+### [Prioritized Training on Points that are Learnable, Worth Learning, and Not Yet Learnt](https://arxiv.org/pdf/2206.07137)
+[Source code](https://github.com/OATML/RHO-Loss)
+
+The idea is to compute how much information there is in a given batch of the dataset. How is this done ? You calculate the loss between the batch against some model that is also trained on some holdout set. This way to get some information about how useful that batch of data is.
+
+

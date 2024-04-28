@@ -54,5 +54,6 @@ TLDR - Telling gpt that you are scared or under pressure makes the results bette
 
 ### Some prompt hacks
 - [Just ask Claude to give you the information about how it interprets the information](https://twitter.com/jeremyphoward/status/1779311134656671872)
+- [Many-shot Jailbreaking](https://cdn.sanity.io/files/4zrzovbb/website/af5633c94ed2beb282f6a53c595eb437e8e7b630.pdf) by just giving enough examples in a long context the LLM will give you the instructions.
 - 
 

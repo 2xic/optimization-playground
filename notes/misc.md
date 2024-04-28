@@ -40,3 +40,10 @@ They made some data observations which was kinda intresting
 - Created a dataset Abstraction and Reasoning Corpus ([ARC](https://github.com/fchollet/ARC)) to better model intelligence in a ML model.
 - There was a [Kaggle competition](https://www.kaggle.com/c/abstraction-and-reasoning-challenge/leaderboard) back on the day for this also
 
+### [The Hardware Lottery](https://arxiv.org/pdf/2009.06489)
+- Hardware is a driving factor for whether a research idea is successful or not.
+  - The idea for Neural networks is more than 30 years old, but it's just in recent years it had a breakthrough because of the hardware limitations 30 years ago.
+- Hardware lottery therefore refer to whether a research idea is successful because of current hardware capabilities or not.
+  - We want the best algorithms to win because they are best, not because of some lottery.
+- 
+

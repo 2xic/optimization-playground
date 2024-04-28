@@ -37,3 +37,34 @@ The TLDR: they trained a language model transfers on a language task, then trans
   - Noise latent + timestep is the input
   - Images look nice
 
+### [ITRANSFORMER: INVERTED TRANSFORMERS ARE EFFECTIVE FOR TIME SERIES FORECASTING](https://arxiv.org/pdf/2310.06625)
+[Hackernews thread](https://news.ycombinator.com/item?id=37848321)
+
+[Source code](https://github.com/thuml/iTransformer)
+
+- Based on the tests then run this looks quite promising
+- The entire time-series is a token (wtf?). 
+- [Reddit](https://old.reddit.com/r/MachineLearning/comments/175ep6x/r_tsinghua_university_inverting_transformers/) thread mentions [TSMixer](https://arxiv.org/pdf/2303.06053)
+
+### [Mixture-of-Depths: Dynamically allocating compute in transformer-based language models](https://arxiv.org/pdf/2404.02258)
+- Use a router to chose among potential computation paths
+- THe options are 
+  - Standard block computation
+  - Residual connection
+
+### [Visual Autoregressive Modeling: Scalable Image Generation via Next-Scale Prediction](https://arxiv.org/pdf/2404.02905)
+[Website](https://var.vision/)
+
+[Github](https://github.com/FoundationVision/VAR)
+
+[Youtube Video](https://www.youtube.com/watch?v=yJ396Ksiv2s) which has some great coverage on this.
+
+- Instead of predicting the next image patch token, they try to predict the next resolution token.
+- General flow
+  - Have one image that is then created into multiple resolutions
+  - Send them through VqVAE to get some representation (tokens)
+    - Which should be more efficient and generate fewer tokens that the normal ImageGPT style patches.
+  - The goal of the transformer is to predict those representations
+- In section 3.1 they have 3 points for why this is better than the existing method. TLDR - structure is lost with the ImageGPT style method, it's inefficient and there is no causal relationship.
+- 
+
