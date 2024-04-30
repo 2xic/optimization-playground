@@ -22,3 +22,8 @@ The authors also had this [talk](https://www.youtube.com/watch?v=U3J6R9gfUhU) at
 
 - Make one 2d image into 3d view
 - Figure 2 shows the overview of the architecture. Quite nice.
+
+### [Diffusion Models for Video Generation](https://lilianweng.github.io/posts/2024-04-12-diffusion-video/)
+1. Getting video and text pair is hard, didn't think about that before, but I guess that is true.
+2. [U-net and DIT are the main players](https://lilianweng.github.io/posts/2021-07-11-diffusion-models/#model-architecture)
+3. [Training-free adaptation](https://lilianweng.github.io/posts/2024-04-12-diffusion-video/#training-free-adaptation) was something knew that I was unaware of, but very cool. It references this [paper](https://arxiv.org/pdf/2303.13439)

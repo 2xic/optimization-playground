@@ -1,6 +1,5 @@
 import chromadb
 from chromadb.config import Settings
-from collections import namedtuple
 
 class Chroma:
     def __init__(self) -> None:

@@ -13,6 +13,7 @@ Papers that I have saved, and should look at.
 - [https://nn.labml.ai/index.html](https://nn.labml.ai/index.html)
 - [https://openai.com/blog/learning-day](https://openai.com/blog/learning-day)
 - [https://mlcollective.org/dlct/](https://mlcollective.org/dlct/)
+- [https://pair.withgoogle.com/explorables/](https://pair.withgoogle.com/explorables/)
 
 # Some I'm considering
 
