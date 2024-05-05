@@ -6,10 +6,26 @@ Use dilated attention to be scale up.
 [tweet](https://twitter.com/giffmana/status/1676864336764055552?s=12)
 
 ### [Transformer-based World Models Are Happy With 100k Interactions](https://arxiv.org/pdf/2303.07109.pdf)
-- TODO ? 
+- Transformer
+  - Inputs
+    - (reward if index > 0)
+    - Latent representation of the observation
+    - Action
+  - Output
+    - Deterministic hidden state
+  - Final output
+    - Reward
+    - Gamma
+    - Next latent state
+- The observation comes from an autoencoder.
+  - This is based on DreamerV2
+- Transformer-XL
+- Actor and critic policy is trained on top of this imaginary trajectory.
 
 ### [Transformers are Sample Efficient World Models](https://arxiv.org/pdf/2209.00588.pdf)
-- TODO ? 
+[Source code](https://github.com/eloialonso/iris)
+
+- This is the same idea as in [Transformer-based World Models Are Happy With 100k Interactions](https://arxiv.org/pdf/2303.07109.pdf)
 
 ### [GLU Variants Improve Transformer](https://arxiv.org/pdf/2002.05202v1.pdf)
 - [Gated linear units](https://paperswithcode.com/method/glu)

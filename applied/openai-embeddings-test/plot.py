@@ -11,7 +11,7 @@ def get_path_files():
     path = {}
     path_colors = {}
 
-    colors = ["red", "blue", "green"]
+    colors = ["red", "blue", "green", "pink", "yellow"]
 
 
     for index, i in enumerate(os.environ["playlists"].split(",")+ ["shared="]):
@@ -53,7 +53,11 @@ def get_tracks():
 
     positions_tracks = {}
 #    tsne = TSNE(random_state=1, n_iter=15000, metric="cosine", init='random', learning_rate='auto')
-    tsne = TSNE(random_state=1, metric="cosine", init='random', learning_rate='auto')
+#    tsne = TSNE(random_state=1, metric="cosine", init='random', learning_rate='auto')
+#    tsne = TSNE(random_state=1, metric="cosine", init='random', learning_rate='auto')
+    # allegedly I was using the values wrong, but I don't think so
+    # http://web.archive.org/web/20200108213532/https://towardsdatascience.com/why-you-are-using-t-sne-wrong-502412aab0c0?gi=8382eea29b7d
+    tsne = TSNE(n_components=2, verbose=1, n_iter=10_000, learning_rate='auto')
     embedding_position = tsne.fit_transform(np.asarray(prediction))
 
     for track_id, position in zip(track_ids, embedding_position):
@@ -70,6 +74,9 @@ def plot_embeddings():
         x = []
         y = []
         for i in tracks:
+            # skip all known tracks
+            if not i in positions_tracks:
+                continue
             x.append(positions_tracks[i][0])    
             y.append(positions_tracks[i][1])    
         ax.scatter(x, y, color=path_colors[playlist], label=playlist)

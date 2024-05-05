@@ -16,8 +16,6 @@ def get_lyrics(track_id):
     try:
         response = requests.get(
             f"https://spclient.wg.spotify.com/color-lyrics/v2/track/{track_id}?format=json&vocalRemoval=false&market=from_token",
-            # https://spclient.wg.spotify.com/metadata/4/track/b2e8920eea2e4b01beb5dc90ab0a2e52?market=from_token
-            # https://spclient.wg.spotify.com/color-lyrics/v2/track/5rAUZy2eDdegBxUVYxePK2/image/https%3A%2F%2Fi.scdn.co%2Fimage%2Fab67616d0000b27346557fdc7325844aa2177155?format=json&vocalRemoval=false&market=from_token
             headers={
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0',
                 'Accept': 'application/json',
@@ -59,7 +57,7 @@ if __name__ == "__main__":
     offset = 0
     crawled = 0
     playlist_entries = []
-    while crawled < 10:
+    while crawled <= 10:
         items = get_playlist(playlist_id, offset)["items"]
       #  print(items)
         for i in items:

@@ -714,3 +714,12 @@ timal multimodal performance and retain strong text performance."
 - "This work releases OpenELM, a decoder-only transformer-based open language model."
 - 
 
+### [Training LLMs over Neurally Compressed Text](https://arxiv.org/pdf/2404.03626)
+- Use compression to get longer context windows
+- Arithmetic Coding does not work
+- Equal-Info Windows does work
+  - One model learns to compress the text
+  - One model is trained on the compressed text
+- 
+
+
