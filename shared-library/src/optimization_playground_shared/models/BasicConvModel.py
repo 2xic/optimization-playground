@@ -70,6 +70,7 @@ class BasicConvModel(nn.Module):
             get_output_shape(input_shape,
             [self.conv1, self.pool, self.conv2, self.pool])
         ))
+        self.num_classes = num_classes
         self.fc1 = nn.Linear(16 * self.output_shape[0] * self.output_shape[1], 256)
         self.out = nn.Sequential(
             self.fc1,
