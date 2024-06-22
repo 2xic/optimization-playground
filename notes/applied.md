@@ -5,6 +5,13 @@
 ## [AlphaFold](https://www.nature.com/articles/s41586-021-03819-2)
 [source code](https://github.com/google-deepmind/alphafold)
 
+### AlphaFold 3
+- [Thread](https://x.com/jankosinski/status/1788283743423045642)
+- [Blogpost](https://blog.google/technology/ai/google-deepmind-isomorphic-alphafold-3-ai-model/)
+- [Paper](https://www.nature.com/articles/s41586-024-07487-w)
+- It's a collab with [isomorphic labs](https://www.isomorphiclabs.com/articles/alphafold-3-predicts-the-structure-and-interactions-of-all-of-lifes-molecules)
+- 
+
 *todo*
 
 ## NeuralHash

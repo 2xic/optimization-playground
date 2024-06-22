@@ -9,6 +9,8 @@ Sometimes I forget the projects I had planned, better to write it down here.
 
 - Implement [spreading vectors for similarity search](./notes/search.md)
 
+- Implement [Cycle gan](https://arxiv.org/pdf/1703.10593)
+
 - Using ML for generating of fuzzing inputs
 
 - Look at, and ideally break down core parts of the paper and code for [Adding Conditional Control to Text-to-Image Diffusion Models](https://arxiv.org/abs/2302.05543) [Adding Conditional Control to Text-to-Image Diffusion Models(code)](https://github.com/lllyasviel/ControlNet)

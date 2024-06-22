@@ -21,3 +21,35 @@ Using batch normalization makes it easier to train neural networks without think
 
 The most interesting results from this paper imo is the fact that you cna tradeoff the search time of the search and the training time. For each additional 10x of train-time compute, 15x of test-time compute (search time) can be removed.
 
+## [MatMul-Free LM](https://arxiv.org/pdf/2406.02528)
+[Source code](https://github.com/ridgerchu/matmulfreellm)
+
+- language model with no matmul operations.
+- They use `BitLinear layers` which consistent of only {-1, 0, -1} for the weight values
+  - This is the trick as then the operation can be represented as a addition or subtraction operation
+  - They use Gated Linear Unit also
+- Benchmarks show performance close to other methods, but with much more reduced memory usage.
+
+## [Mamba: Linear-Time Sequence Modeling with Selective State Spaces](https://openreview.net/pdf?id=AL1fq05o7H)
+[MAMBA from Scratch: Neural Nets Better and Faster than Transformers](https://www.youtube.com/watch?app=desktop&v=N6Piou4oYx8)
+- State space model
+- RNN < Attention ?
+  - RNN can't compute in parallel
+  - RNN has vanishing gradients
+  - [Linear RNN ?](https://openreview.net/pdf?id=M3Yd3QyRG4) 
+    - Use Linear function instead of a neural network
+    - SOTA of the Long Range Arena benchmark
+    - Does not beat Transformers though ...
+      - Problem: If values are close to 1 in previous layer this value will stay un-changed, if it is close to 0 then it will start to forget 
+  - Mamba  
+    - Use linear learned weights
+    - 
+
+## [xLSTM: Extended Long Short-Term Memory](https://arxiv.org/pdf/2405.04517)
+- LSTMs updated for the Transformer ERA (one of the co-author is also the original co-investor of LSTMs)
+- Changes
+  - (sLSTM) Exponential gates are added so that the layer can revise storage decisions.
+  - (mLSTM) Instead of the memory cell being a scalar, it's now a matrix.
+    - Key, value storage like the transformer :D 
+- The results are on par with current transformer like models.
+

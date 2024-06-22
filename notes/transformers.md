@@ -27,6 +27,10 @@ Use dilated attention to be scale up.
 
 - This is the same idea as in [Transformer-based World Models Are Happy With 100k Interactions](https://arxiv.org/pdf/2303.07109.pdf)
 
+### [Offline Reinforcement Learning as One Big Sequence Modeling Problem](https://arxiv.org/pdf/2106.02039)
+- This is the same general idea as in [Transformer-based World Models Are Happy With 100k Interactions](https://arxiv.org/pdf/2303.07109.pdf)
+  - They use BEAM search for the planning though
+
 ### [GLU Variants Improve Transformer](https://arxiv.org/pdf/2002.05202v1.pdf)
 - [Gated linear units](https://paperswithcode.com/method/glu)
 -  Seemed to show promising results on the attached benchmarks

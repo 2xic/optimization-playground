@@ -47,3 +47,9 @@ They made some data observations which was kinda intresting
   - We want the best algorithms to win because they are best, not because of some lottery.
 - 
 
+### [The Platonic Representation Hypothesis](https://arxiv.org/pdf/2405.07987)
+- TLDR: Representation for vision and text models are converging
+  - This seems to happen also when trained with different objectives and data
+
+
+

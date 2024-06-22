@@ -11,4 +11,9 @@
 - Interesting paper: can we predict the error rate of a pruned network ? 
   - They mostly study resnet like architectures
 - See figure 7 and figure 8 for context
-- 
+
+## [gzip Predicts Data-dependent Scaling Laws](https://arxiv.org/pdf/2405.16684)
+[Twitter thread](https://x.com/khoomeik/status/1795477359933706272)
+
+1. Scaling laws are sensitive to the complexity of the dataset
+2. gzip is a good predictor of said complexity

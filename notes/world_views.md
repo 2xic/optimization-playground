@@ -11,6 +11,7 @@ Somewhat inspired from the last section "A Summary of Popular Positions" by [Xan
 
 ## We have a long way to go
 - [François Chollet](https://twitter.com/fchollet/status/1639692810659188737)
+  - [Another good thread](https://x.com/fchollet/status/1598938868606464001)
 
 # World view for LLMs
 
