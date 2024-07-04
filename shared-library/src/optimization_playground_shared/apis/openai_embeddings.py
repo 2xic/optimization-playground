@@ -33,16 +33,17 @@ def get_models():
     )
 
 def get_embeddings(text, model):
+    # TODO: TOken length validation is in OpenAiAdaEmbeddings
     payload = {
-            # TODO: Improve the limit checks
-            "input": " ".join(text.split(" ")[:3_000]),
+            "input": text,
             "model": model
     }
     cache = cache_handler.load(**payload)
-    if cache is not None:
+    if cache is not None and "error" not in cache:
         return cache
     
   #  print(payload)
+    print("Requesting ... ")
     results = requests.post("https://api.openai.com/v1/embeddings?model", 
         json=payload,
         headers={

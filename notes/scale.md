@@ -17,3 +17,9 @@
 
 1. Scaling laws are sensitive to the complexity of the dataset
 2. gzip is a good predictor of said complexity
+
+## [inverse scaling prize](https://github.com/inverse-scaling/prize)
+[Paper](https://arxiv.org/pdf/2306.09479)
+
+- Many benchmark results will improve when the model is scaled up, but what kind of tasks do worse on a bigger model ? 
+- 

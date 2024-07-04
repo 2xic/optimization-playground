@@ -3,3 +3,5 @@
 - They believe that if you double the model parameters, you should also double the amount of tokens you train on.
 - To verify the hypothesis they train a model based on the prediction they have. The results is that by having less parameters than other models, but more data they are able to outperform other famous models like GPT-3 on various evaluation tasks.
 
+[Chinchilla Explained: How to read DeepMind's paper on Compute-Optimal Scaling Laws](https://alexandrabarr.beehiiv.com/p/chinchilla-explained) breaks this down a bit more in a easier to digest way.
+- 
