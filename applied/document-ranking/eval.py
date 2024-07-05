@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 import os
 from dataset import get_dataset
 from pipeline import Pipeline
-from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, B25Wrapper
+from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper
+from optimization_playground_shared.classics.bm_25 import BM25
 
 def evaluation():
     X, y = get_dataset()
@@ -17,10 +18,11 @@ def evaluation():
     )
 
     model_pipeline_configs = {
-        "bm25": [
-            B25Wrapper(),
-            B25Wrapper(),
-            B25Wrapper(),
+        "hf-MiniLM": [
+            HuggingFaceWrapper(),
+        ],
+        "BM25": [
+            BM25(),
         ],
         "open_ai": [
             OpenAiEmbeddingsWrapper()

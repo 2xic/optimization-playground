@@ -24,7 +24,7 @@ def get_dataset():
         if text in seen:
             continue
         seen[text] = True
-        if len(text) > 0:
+        if len(text.strip()) > 0:
             X.append(text)
             y.append(i["is_good"])
 
