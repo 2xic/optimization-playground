@@ -57,8 +57,13 @@ def evaluation():
             best_local_config_string = f"{model.__class__.__name__} + {base_config_name}"
         results[best_local_config_string] = best_local_config_score
 
+    results = {
+        key:value
+        for key, value in sorted(results.items(), key=lambda x: x[1])
+    }
     config_name = list(results.keys())
     values = list(results.values())
+    
     plt.bar(config_name, values,width = 0.4)
     plt.xlabel("Config name")
     plt.ylabel("Accuracy %")
