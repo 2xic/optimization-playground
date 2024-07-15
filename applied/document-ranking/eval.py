@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import os
 from dataset import get_dataset
 from pipeline import Pipeline
-from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper
+from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper, ClaudeWrapper
 from optimization_playground_shared.classics.bm_25 import BM25
 
 def evaluation():
@@ -18,19 +18,24 @@ def evaluation():
     )
 
     model_pipeline_configs = {
+            "tf_idf": [
+            TfIdfWrapper(max_features=75),
+            TfIdfWrapper(max_features=100),
+            TfIdfWrapper(max_features=150),
+        ],
+        "open_ai": [
+            OpenAiEmbeddingsWrapper("text-embedding-ada-002"),
+            OpenAiEmbeddingsWrapper("text-embedding-3-large"),
+            OpenAiEmbeddingsWrapper("text-embedding-3-small"),
+        ],
+        "voyage": [
+            ClaudeWrapper(),
+        ],
         "hf-MiniLM": [
             HuggingFaceWrapper(),
         ],
         "BM25": [
             BM25(),
-        ],
-        "open_ai": [
-            OpenAiEmbeddingsWrapper()
-        ],
-        "tf_idf": [
-            TfIdfWrapper(max_features=75),
-            TfIdfWrapper(max_features=100),
-            TfIdfWrapper(max_features=150),
         ],
     }
     results = {}
@@ -73,6 +78,8 @@ def evaluation():
         os.path.dirname(os.path.abspath(__file__)),
         "ResultsRankerTrain.png"
     )
+    plt.xticks(rotation=45, ha='right')
+    plt.tight_layout()
     plt.savefig(path)
 
 if __name__ == "__main__":

@@ -110,3 +110,12 @@ Basically create sub goals and works towards them which helps with convergence o
 improves performance and scalability in a variety of domains."
 - They have results to back this up also!
 
+## [Diffusion for World Modeling: Visual Details Matter in Atari](https://arxiv.org/pdf/2405.12399)
+- So core idea here seems to be that they used diffusion for the rollout
+  - Render it conditionally on the past action + state to get the next state
+  - Next state goes into policy with new action output
+- They spend a lot of time talking about the diffusion components
+  - for instance DDPM models seems to work less well (i.e less stable) than EDM during their testing.
+- Just using diffusions did give them SOTA though on the Atari benchmark.
+- 
+

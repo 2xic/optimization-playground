@@ -5,9 +5,9 @@ import time
 
 load_dotenv()
 
-from optimization_playground_shared.apis.openai_ada_embeddings import OpenAiAdaEmbeddings
+from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
 
-model = OpenAiAdaEmbeddings()
+model = OpenAiEmbeddings()
 # I want to study some OpenAi embeddings
 # No clear goal, just visualize the embeddings in various contexts
 # Actually, I want to study embeddings between spotify playlist.

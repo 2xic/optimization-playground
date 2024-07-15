@@ -10,6 +10,11 @@ class TrainingLoop:
         self.epoch = 1
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
         print(f"Using {self.device} for training")
+        self.iterator_loop = lambda x, _train: x
+
+    def use_tqdm(self):
+        self.iterator_loop = lambda x, train: tqdm(x, desc="Training" if train else "Testing")
+        return self
     
     def eval(self, dataloader):
         return self.eval_with_loss(dataloader)[1]
@@ -29,7 +34,7 @@ class TrainingLoop:
         length = 0
 
         #loop = tqdm(dataloader, desc="Training" if train else "Testing")
-        for (X, y) in dataloader:
+        for (X, y) in self.iterator_loop(dataloader, train):
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)

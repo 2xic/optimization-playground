@@ -722,4 +722,18 @@ timal multimodal performance and retain strong text performance."
   - One model is trained on the compressed text
 - 
 
+### [Meta large language model compiler: Foundation models of Compiler Optimizations](https://arxiv.org/pdf/2407.02524)
+[This model is sensitive](https://x.com/justinetunney/status/1806862107457282282)
+
+- Built on top of the LLAMA code foundation model
+- LLM compiler understands compiler IR, assembly and optimizations techniques
+- Model is trained in two stages
+  - First on the raw assembly and IR
+  - The fine-tuned 
+- They use LLVM as the optimizer and the target code
+- They also use the clang compiler for the IR
+  - THe clang compiler can switch between LLVM IR and the Assembly and this way the model learns the relationship between the two
+
+
+
 
