@@ -22,4 +22,9 @@
 - [Adversarial attacks](https://towardsdatascience.com/apples-neuralhash-how-it-works-and-ways-to-break-it-577d1edc9838) can beat the system. [Source code](https://github.com/greentfrapp/apple-neuralhash-attack)
 - More attacks on [neural hash](https://jagdeepsb.github.io/assets/pdf/neuralhash%20icml%20ml4cyber%202022.pdf)
 - [Getting the model](https://github.com/AsuharietYgvar/AppleNeuralHash2ONNX?tab=readme-ov-file)
+
+## [STRIDE: Simple Type Recognition In Decompiled Executables](https://arxiv.org/pdf/2407.02733)
+- They used transformers to better recover the dissembled C code.
+  - Which improves recovery of structs for instance.
+- They opensourced the [dataset](https://github.com/hgarrereyn/STRIDE?tab=readme-ov-file#dataset).
 - 

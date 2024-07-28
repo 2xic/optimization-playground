@@ -22,3 +22,5 @@ Some project they mention that seem cool
 - Sim2Real experiment
 - Use RL to optimize some SQL query / Something else
 - Training a simple driving simulator (https://arxiv.org/pdf/1608.01230.pdf) with same dataset as the speed challenge 
+- Train a GAN / Autoencoder to add invisible watermarks 
+  - Similar to [this](https://github.com/ShieldMnt/invisible-watermark#supported-algorithms)

@@ -51,5 +51,14 @@ They made some data observations which was kinda intresting
 - TLDR: Representation for vision and text models are converging
   - This seems to happen also when trained with different objectives and data
 
-
+## [AlphaProof](https://deepmind.google/discover/blog/ai-solves-imo-problems-at-silver-medal-level/)
+- Silver medal winner in the international math olympiad :D
+- RL Based with LM and uses the Lean proof engine.
+- Eval
+  - Solved one question in minutes
+  - Spent up to 3 days to solve the others
+  - They scored 28 / 42 points
+- AlphaGeometry 2
+  - Upgraded version of [AlphaGeometry](https://deepmind.google/discover/blog/alphageometry-an-olympiad-level-ai-system-for-geometry/)
+  - neural-symbolic with a language model based on Gemini. It uses search trees to tackle more complex problems.
 

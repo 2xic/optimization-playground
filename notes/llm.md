@@ -672,7 +672,6 @@ timal multimodal performance and retain strong text performance."
 - scaled up pre-training
 - Same architecture as llama 2
 - "Contradicts" with the Chinchilla "compute optimal" solution. They are ~75X beyond the optimal point based on chinchilla.
-- 
 
 ### [Can Language Models Solve Olympiad Programming?](https://arxiv.org/pdf/2404.10952.pdf)
 - [New benchmark](https://github.com/princeton-nlp/USACO) 
@@ -735,5 +734,56 @@ timal multimodal performance and retain strong text performance."
   - THe clang compiler can switch between LLVM IR and the Assembly and this way the model learns the relationship between the two
 
 
+### [Llama 3.1](https://llama.meta.com/)
+[Blog post](https://ai.meta.com/blog/meta-llama-3-1/)
+- Open source, beats version 3.0 on all previous benchmarks. It's also not too far away from other (closed source) models on human evaluation benchmarks.
+- 405B, 70B, 8B parameter models and 128K context window
 
+[Github](https://github.com/meta-llama/llama-models/blob/main/models/llama3_1)
+- They still use [Fairscale](https://github.com/facebookresearch/fairscale) to scale the models like they did with the original 3.0 version.
 
+[Paper](https://scontent-arn2-1.xx.fbcdn.net/v/t39.2365-6/452387774_1036916434819166_4173978747091533306_n.pdf?_nc_cat=104&ccb=1-7&_nc_sid=3c67a6&_nc_ohc=7qSoXLG5aAYQ7kNvgEW7diW&_nc_ht=scontent-arn2-1.xx&oh=00_AYCx3MpfitSLHlW3PM3Y8cS36gltiKE5oKStyyPyB9FKxw&oe=66AB184D)
+The paper is super detailed, describing a lot of details most companies with closed source models do not share. Great! 
+- **Data**: 8.3x increase in multilingual tokens. They have also improved the data pipelines to give higher quality and quantity data.
+- **Scale**: The flagship model (405B) was trained 50X longer than Llama 2.
+- **Architecture**: Using dense transformer instead of mixture of experts to improve the trainings stability.
+- Pre training
+  - The standard cleanup (remove nsfw content etc)
+  - Make sure the trained documents are in the distribution and not outliers
+  - Used a classifier to learn the data mix. This classifier then down-samples overrepresented content like entertainment.
+  - Scaling laws etc. etc.
+- Post training 
+  - [Direct Preference Optimization](https://arxiv.org/pdf/2305.18290) instead of RLHF (used by Llama 2).
+  - Supervised fine-tuning models and rewards models are also used part of the loop.
+- **Compute**: 16K H100 GPUs, scheduled using [MAST](https://www.usenix.org/system/files/osdi24-choudhury.pdf). Each server has eighth GPUs, two CPUs, 80G DRAM and 700W power supply. All linked with NVLINK.
+- They also have sections on experimenting with multi-modal capabilities.
+
+## [Scaling and evaluating sparse autoencoders](https://arxiv.org/pdf/2406.04093)
+[Blog post](https://openai.com/index/extracting-concepts-from-gpt-4/)
+- Use autoencoder to recover activation from a LM.
+- Model structure
+  - Inputs are the dense activations
+  - Outputs are the spare features
+
+## [Improving Model Safety Behavior with Rule-Based Rewards](https://cdn.openai.com/rule-based-rewards-for-language-model-safety.pdf)
+[Blog post](https://openai.com/index/improving-model-safety-behavior-with-rule-based-rewards/)
+
+**The idea**
+- Prompt goes into the policy model and generates N complentions. The reward model gives a score in addition to the rule based rewards.
+  - The rule based rewards are based on a large language model grader with a list of desiered properties.
+**Other things to note**
+- Uses synthetic data as part of the pipeline also.
+- 
+
+## [Prover-Verifier Games improve legibility of language model outputs](https://openai.com/index/prover-verifier-games-improve-legibility/)
+[Paper](https://arxiv.org/pdf/2407.13692)
+
+The idea
+- Train one model to score if the answer is correct or not (verifier).
+- Train two models for generating respones
+  - One that generates truthful answers
+  - One that generates un-truthtul answers (aderverisal)
+
+The verifier is also a much weaker model. Use this in a RL loop and boom you get a stronger verifier. 
+
+Somehwat similiar to this [Self-playing Adversarial Language Game Enhances LLM Reasoning](https://arxiv.org/pdf/2404.10642) paper.
