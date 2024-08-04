@@ -1,4 +1,5 @@
 import torch
+import json
 
 class Vocab:
     def __init__(self) -> None:
@@ -22,8 +23,10 @@ class SimpleVocab:
         self.vocab = Vocab()
 
     def encode(self, sentence):
+        X = []
         for i in sentence.split(" "):
-            self.vocab.add(i)
+            X.append(self.vocab.add(i))
+        return X
 
     def get_tensor(self, sentence, sequence_length):
         if sequence_length == -1:
@@ -37,6 +40,12 @@ class SimpleVocab:
             for index, i in enumerate(sentence.split(" ")[:sequence_length]):
                 torch_tensor[0][index] = self.vocab.add(i)
         return torch_tensor
+    
+    def get_tensor_from_tokens(self, tokens, sequence_length):
+        torch_tensor = torch.zeros((1, sequence_length)).fill_(self.vocab.PADDING_IDX).long()
+        c = torch.tensor(tokens)        
+        torch_tensor[0, :len(tokens)] = c[:]
+        return torch_tensor
             
     def lock(self):
         self.vocab.locked = True
@@ -45,4 +54,3 @@ class SimpleVocab:
     @property
     def size(self):
         return len(self.vocab.index_vocab)
-    

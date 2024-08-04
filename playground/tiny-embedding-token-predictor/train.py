@@ -5,13 +5,11 @@ from optimization_playground_shared.dataloaders.RawTensorToDataloader import get
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from tiny_model import TinyModel, Config
 
-SEQUENCE_LENGTH = 128
-batch_size = 32
+SEQUENCE_LENGTH = 32
+batch_size = 4
 source_vocab = SimpleVocab()
-# device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 print("Starting .... ")
-
 
 def sliding_vocab(text):
     X = []
@@ -24,15 +22,29 @@ def sliding_vocab(text):
             " ".join(words[max(i-SEQUENCE_LENGTH, 0):i]), sequence_length=SEQUENCE_LENGTH))
         y.append(source_vocab.get_tensor(
             " ".join(words[i:i+1]), sequence_length=1)[0])
-        if 32 * 2048 < len(X):
-            break
+    if len(X) == 0:
+        return source_vocab.get_tensor("", sequence_length=SEQUENCE_LENGTH), source_vocab.get_tensor("", sequence_length=SEQUENCE_LENGTH)
     return torch.concat(X), torch.concat(y)
+
+def encode_document(text):
+    X = []
+    words = text.lower().replace(":", " : ").strip().split(" ")
+    words = list(filter(lambda x: len(x), words))
+    for i in range(1, len(words)):
+        X.append(source_vocab.get_tensor(
+            " ".join(words[max(i-SEQUENCE_LENGTH, 0):i]), sequence_length=SEQUENCE_LENGTH))
+    return torch.concat(X)
 
 def get_dataset():
     text = None
     with open("tinyshakespeare.txt", "r") as file:
         text = file.read()
+    X, y = sliding_vocab(text)
+    source_vocab.lock()
+    return X, y
 
+def get_document_dataset(document):
+    text = "\n".join(document)
     X, y = sliding_vocab(text)
     source_vocab.lock()
     return X, y
@@ -51,8 +63,19 @@ def predict(model):
             results.append(source_vocab.vocab.index_vocab[i])
         return " ".join(results)
 
-def train():
-    X, y = get_dataset()
+def get_model(config=None):
+    if config is None:
+        config = Config(
+            vocab_size=source_vocab.size,
+            embedding_dim=32,
+            dropout=0.1,
+            sequence_size=SEQUENCE_LENGTH,
+            padding_index=source_vocab.vocab.PADDING_IDX,
+        )
+    model = TinyModel(config)
+    return model
+
+def train(X, y, model=None):
     dataloader = get_raw_dataloader((
         X.clone(),
         y.clone()
@@ -60,20 +83,14 @@ def train():
         batch_size=batch_size,
         shuffle=False,
     )
-
-    config = Config(
-        vocab_size=source_vocab.size,
-        embedding_dim=32,
-        dropout=0.1,
-        sequence_size=SEQUENCE_LENGTH,
-        padding_index=source_vocab.vocab.PADDING_IDX,
-    )
-    model = TinyModel(config)
+    if model is None:
+        model = get_model()
     optimizer = optim.Adam(model.parameters())
     trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=source_vocab.vocab.PADDING_IDX))
     (loss, acc) = trainer.use_tqdm().train(dataloader)
     print((loss, acc))
-    print(predict(model))
+    return model
 
 if __name__ == "__main__":
-    train()
+    X, y = get_dataset()
+    train(X, y)

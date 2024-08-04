@@ -27,5 +27,4 @@ def get_dataset():
         if len(text.strip()) > 0:
             X.append(text)
             y.append(i["is_good"])
-
     return X, y

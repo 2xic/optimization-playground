@@ -34,7 +34,8 @@ class TrainingLoop:
         length = 0
 
         #loop = tqdm(dataloader, desc="Training" if train else "Testing")
-        for (X, y) in self.iterator_loop(dataloader, train):
+        training_loop = self.iterator_loop(dataloader, train)
+        for (X, y) in training_loop:
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)
@@ -52,8 +53,8 @@ class TrainingLoop:
                 )
                 loss.backward()
                 self.optimizer.step()
-                if isinstance(dataloader, tqdm):
-                    dataloader.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
+                if isinstance(training_loop, tqdm):
+                    training_loop.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
             
             # TODO: Maybe instead add a custom accuracy metric field
             if y_pred.shape[-1] == 1:

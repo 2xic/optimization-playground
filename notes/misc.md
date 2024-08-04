@@ -62,3 +62,12 @@ They made some data observations which was kinda intresting
   - Upgraded version of [AlphaGeometry](https://deepmind.google/discover/blog/alphageometry-an-olympiad-level-ai-system-for-geometry/)
   - neural-symbolic with a language model based on Gemini. It uses search trees to tackle more complex problems.
 
+
+## [Segment Anything Model 2](https://github.com/smlxl/storage-explorer/)
+[Original model](https://ai.meta.com/blog/segment-anything-foundation-model-image-segmentation/)
+
+- Segmentation model + Prompt model
+- Open source
+- Very impressive model :') 
+
+

@@ -38,9 +38,10 @@ class OpenAiEmbeddingsWrapper:
             X.append(self.encoder.get_embedding(i))
         return X
     
+# https://huggingface.co/models?pipeline_tag=feature-extraction&sort=trending
 class HuggingFaceWrapper:
-    def __init__(self) -> None:
-        self.model_id = "sentence-transformers/all-MiniLM-L6-v2"
+    def __init__(self, model="sentence-transformers/all-MiniLM-L6-v2") -> None:
+        self.model_id = model
         self.hf_token = os.environ["hugginf_face"]
         self.is_trained = False
         self.cache_handler = CacheEmbeddings()

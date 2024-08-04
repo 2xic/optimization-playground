@@ -8,6 +8,8 @@ from dataset import get_dataset
 from pipeline import Pipeline
 from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper, ClaudeWrapper
 from optimization_playground_shared.classics.bm_25 import BM25
+from torch_models_test import EmbeddingWrapper
+from torch_contrastive_model import ContrastiveEmbeddingWrapper
 
 def evaluation():
     X, y = get_dataset()
@@ -18,7 +20,26 @@ def evaluation():
     )
 
     model_pipeline_configs = {
-            "tf_idf": [
+        "torch_contrastive": [
+            ContrastiveEmbeddingWrapper(),
+        ],
+        "untrained reference": [
+            EmbeddingWrapper(trained=False),
+        ],
+        "torch_next_token": [
+            EmbeddingWrapper(),
+        ],
+        "mixedbread-ai":[
+            HuggingFaceWrapper(
+                "mixedbread-ai/mxbai-embed-large-v1"
+            ),
+        ],
+        "intfloat":[
+            HuggingFaceWrapper(
+                "intfloat/multilingual-e5-large"
+            ),
+        ],
+        "tf_idf": [
             TfIdfWrapper(max_features=75),
             TfIdfWrapper(max_features=100),
             TfIdfWrapper(max_features=150),
@@ -76,7 +97,7 @@ def evaluation():
     plt.title("Results")
     path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)),
-        "ResultsRankerTrain.png"
+        "results.png"
     )
     plt.xticks(rotation=45, ha='right')
     plt.tight_layout()

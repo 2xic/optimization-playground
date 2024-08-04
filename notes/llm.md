@@ -758,6 +758,13 @@ The paper is super detailed, describing a lot of details most companies with clo
 - **Compute**: 16K H100 GPUs, scheduled using [MAST](https://www.usenix.org/system/files/osdi24-choudhury.pdf). Each server has eighth GPUs, two CPUs, 80G DRAM and 700W power supply. All linked with NVLINK.
 - They also have sections on experimenting with multi-modal capabilities.
 
+They have a some good subsection under section 3 on hardware failures and things they did to do things efficient
+- 39% of the hardware failures came from the GPUs and 78% of all interruptions were related to hardware.
+- They do "4D parallelism" 
+- They use `TORCH_NCCL_AVOID_RECORD_STREAMS` to reduce memory
+  - They forked the NVIDIA NCCL library also to make things more efficent
+  - 
+
 ## [Scaling and evaluating sparse autoencoders](https://arxiv.org/pdf/2406.04093)
 [Blog post](https://openai.com/index/extracting-concepts-from-gpt-4/)
 - Use autoencoder to recover activation from a LM.

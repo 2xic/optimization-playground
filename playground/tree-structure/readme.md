@@ -1,6 +1,6 @@
 Goal is to be able to parse a tree with a neural network.
 
-Found theses recources which seem useful 
+Found theses recourses which seem useful 
 - [https://github.com/erickrf/treernn](https://github.com/erickrf/treernn)
 - [https://lili-mou.github.io/paper/2016-AAAI-DL4program.pdf](https://lili-mou.github.io/paper/2016-AAAI-DL4program.pdf)
 

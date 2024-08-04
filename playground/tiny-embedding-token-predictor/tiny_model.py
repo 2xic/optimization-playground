@@ -23,8 +23,7 @@ class TinyModel(nn.Module):
 
         self.embedding = nn.Embedding(config.vocab_size, config.embedding_dim)
         self.output = nn.Sequential(*[
-            nn.Linear(config.embedding_dim *
-                      config.sequence_size, config.vocab_size),
+            nn.Linear(config.embedding_dim * config.sequence_size, config.vocab_size),
         ])
         self.pos_encoder = PositionalEncoding(
             config.embedding_dim,
@@ -34,18 +33,22 @@ class TinyModel(nn.Module):
 
     def forward(self, X: Tensor):
         assert len(X.shape) == 2
-        # embedding
         source = self.embedding(X) + self.pos_encoder(X)
-        # forward
-#        transformer_out = self.transformer_decoder(source, source)
         transformer_out = source.reshape(X.shape[0], -1)
-        # Remapping into
-        # (SEQ_LEN, BATCH_SIZE, VOCAB_SIZE) -> (BATCH_SIZE, VOCAB_SIZE, SEQ_LEN)
-        return self.output(transformer_out)  # .permute(0, 2, 1)
+        return self.output(transformer_out)
 
     def forward_argmax(self, x):
         prediction = self.forward(x)
         return prediction.argmax(dim=1)
+    
+    def embeddings(self, X):
+        values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_size))
+        for x in X:
+            x = x.reshape((1, ) + X.shape[1:])
+            assert len(X.shape) == 2
+            with torch.no_grad():
+                values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
+        return values
 
     def rollout(self, seed, steps, device=torch.device('cpu')):
         output = []
