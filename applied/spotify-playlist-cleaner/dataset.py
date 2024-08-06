@@ -11,7 +11,9 @@ class Dataset:
 
     def load(self, exclude=[], include=None, minimum=10):
         count = 0
-        for playlist in self.api.get_playlists():
+        playlists = self.api.get_playlists()
+        counter = 0
+        for playlist in playlists:
             if include is not None and playlist.id not in include:
                 continue
             if playlist.id in exclude:
@@ -20,20 +22,23 @@ class Dataset:
             count += 1
             if count > minimum:
                 break
+            counter += 1
+        assert counter > 0, "Found no playlists"
         return self
     
     def load_playlist(self, id):
+        print(f"Loading playlist {id} ...")
         if id not in self.ids_features:
-            for playlist in self.api.get_playlists():
-                if playlist.id == id:
-                    self.ids_to_name[playlist.id] = playlist.name
-                    songs, features = self._get_songs(playlist.id)
-                    self.ids_features[playlist.id] = features
-                    self.ids_songs[playlist.id] = songs
+            playlist = self.api.get_playlist(id)
+            assert playlist.id == id
+            self.ids_to_name[playlist.id] = playlist.name
+            songs, features = self._get_songs(playlist.id)
+            self.ids_features[playlist.id] = features
+            self.ids_songs[playlist.id] = songs
 
-                    index = len(self.id_class)
-                    self.id_class[playlist.id] = index
-                    self.class_id[index] = playlist.id
+            index = len(self.id_class)
+            self.id_class[playlist.id] = index
+            self.class_id[index] = playlist.id
         return self
     
     def get_x_y(self, features=[], split=0.8, adjust_n_samples=False):
@@ -105,8 +110,15 @@ class Dataset:
             songs = self.api.get_playlist_songs(playlist_id, offset=offset)
             delta = 0
             for song in songs:
-                i = list(self.api.get_song_feature(id=song.id))[0]
-                features.append(i)
+                print(song.name)
+                song_features = self.api.get_song_feature(id=song.id)
+                if song_features is None:
+                    continue
+                song_features = list(song_features)
+                if len(song_features) == 0:
+                    continue
+                # since all items are part of an array
+                features.append(list(song_features)[0])
                 all_songs.append(song)
                 delta += 1
             offset += 10

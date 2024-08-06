@@ -110,6 +110,9 @@ def sample_document(source_vocab, documents, config, batch_size=32):
         document_a_index = random.randint(0, len(encoded_a) - 1)
         document_b_index = random.randint(0, len(encoded_b) - 1)
 
+        if index_a == index_b:
+            document_b_index = min(document_a_index - document_b_index, 200)
+
         tensor_a = source_vocab.get_tensor_from_tokens(
             encoded_a[document_a_index:document_a_index+config.sequence_size],
             config.sequence_size
@@ -147,7 +150,7 @@ def train_model(source_vocab, model, config, documents):
 
     progress = tqdm.tqdm(range(1000))
     sum_loss = None
-    sun_accuracy = None
+    sum_accuracy = None
     index = 1
     for _ in progress:
         (x, y, z) = sample_document(source_vocab, documents, config)

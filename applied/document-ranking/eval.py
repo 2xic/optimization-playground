@@ -10,6 +10,7 @@ from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper
 from optimization_playground_shared.classics.bm_25 import BM25
 from torch_models_test import EmbeddingWrapper
 from torch_contrastive_model import ContrastiveEmbeddingWrapper
+from xgboost import XGBRegressor
 
 def evaluation():
     X, y = get_dataset()
@@ -72,15 +73,18 @@ def evaluation():
                 RandomForestRegressor(max_depth=2, random_state=0),
                 RandomForestRegressor(max_depth=8, random_state=0),
                 RandomForestRegressor(max_depth=4, random_state=0),
-                svm.SVR()
+                svm.SVR(),
+                XGBRegressor(),
             ]
             for model in models:
                 model.fit(X_train, y_train)
                 accuracy = accuracy_score(y_test, list(map(lambda x: min(max(round(x), 0), 1), model.predict(X_test))))
                 print(f"{model.__class__.__name__} -> accuracy: {accuracy}")
-            print("")
-            best_local_config_score = max(best_local_config_score, (accuracy * 100))
-            best_local_config_string = f"{model.__class__.__name__} + {base_config_name}"
+                print("")
+                new_score = accuracy * 100
+                if new_score > best_local_config_score:
+                    best_local_config_score = new_score
+                    best_local_config_string = f"{model.__class__.__name__} + {base_config_name}"
         results[best_local_config_string] = best_local_config_score
 
     results = {

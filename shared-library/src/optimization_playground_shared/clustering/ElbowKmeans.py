@@ -13,4 +13,3 @@ class ElbowKmeans:
 
     def predict(self, X):
         return self.model.predict(X)
-    

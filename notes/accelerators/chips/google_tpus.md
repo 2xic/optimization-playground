@@ -20,6 +20,8 @@ Using BFloat16 (Brain Floating Point Format 16) is a one of the the Google TPUs 
 - [A Domain-Specific Architecture for Deep Neural Networks](https://cacm.acm.org/magazines/2018/9/230571-a-domain-specific-architecture-for-deep-neural-networks/fulltext)
 - Use `Bfloat16`
 - [Image Classification at Supercomputer Scale](https://arxiv.org/pdf/1811.06992.pdf)
+- https://thechipletter.substack.com/p/googles-first-tpu-architecture?utm_source=substack&utm_medium=email&utm_content=share
+- 
 
 ## [Ten Lessons From Three Generations Shaped Google’s TPUv4i](https://gwern.net/doc/ai/scaling/hardware/2021-jouppi.pdf)
 *todo*

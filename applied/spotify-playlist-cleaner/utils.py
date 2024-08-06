@@ -36,6 +36,7 @@ def load_dataset():
         split=0.8,
         adjust_n_samples=False
     )
+    assert len(x) == len(y) and len(x) > 0
     x, y = shuffle(x, y)
     return x, y, x_test, y_test, dataset
 
@@ -79,9 +80,7 @@ def build_suggestion(model, dataset: Dataset):
         reorganize_playlist,
         features=features
     )
-    combined = [
-
-    ]
+    combined = []
     print(dataset.ids_to_name)
     print("Predicting ...")
     for x, song in zip(x_pred, songs):

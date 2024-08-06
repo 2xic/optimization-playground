@@ -13,9 +13,12 @@ def find_model(X, y, x_test, y_test, log=True):
     best_model = None
     best_accuracy = 0
 
+    classes_count = max(y) + 1
+    features_count = len(X[0])
+
     for clf in [
-        ConvTorchModel(len(X[0]), max(y) + 1),
-        LinearTorchModel(len(X[0]), max(y) + 1),
+        ConvTorchModel(features_count, classes_count),
+        LinearTorchModel(features_count, classes_count),
         XGBClassifier(),
         RandomForestClassifier(max_depth=22),
         RandomForestClassifier(max_depth=14),

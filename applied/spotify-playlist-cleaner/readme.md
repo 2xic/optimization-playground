@@ -14,7 +14,9 @@ When I find a song I put it in `songs that has to be relocated`, and then later 
     "include": [
         "*playlist id*"
     ], 
-    "reorganize_playlist": "*playlist id*"
+    "reorganize_playlist": "*playlist id*",
+    "host": "*your host:port where you are running the wirehead server*",
+    "user_display_name": "*your display name on spotify*",
 }
 ```
 4. Run `python3 download_all_features.py`
