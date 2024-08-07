@@ -32,8 +32,8 @@ class TrainingLoop:
         total_loss = torch.tensor(0.0, device=device)
         accuracy = torch.tensor(0.0, device=device)
         length = 0
+        has_nan_loss = False
 
-        #loop = tqdm(dataloader, desc="Training" if train else "Testing")
         training_loop = self.iterator_loop(dataloader, train)
         for (X, y) in training_loop:
             X = X.to(device)
@@ -42,20 +42,30 @@ class TrainingLoop:
 
             if not self.loss is None:
                 loss = self.loss(y_pred, y)
-                total_loss += loss
+                if torch.isnan(loss):
+                    has_nan_loss = True
+                else:
+                    total_loss += loss
+                    has_nan_loss = False
             else:
                 total_loss = None
 
-            if train:
+            # Nan loss can hurt training, I don't like it.
+            if train and not has_nan_loss:
                 assert self.loss is not None
                 self.optimizer.zero_grad(
                   set_to_none=True
                 )
                 loss.backward()
                 self.optimizer.step()
-                if isinstance(training_loop, tqdm):
+
+            # Fallback
+            if isinstance(training_loop, tqdm):
+                if has_nan_loss:
+                    training_loop.set_description(f"Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
+                else:
                     training_loop.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
-            
+        
             # TODO: Maybe instead add a custom accuracy metric field
             if y_pred.shape[-1] == 1:
                 # check if it is within the error margin

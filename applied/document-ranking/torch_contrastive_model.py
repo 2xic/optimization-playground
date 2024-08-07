@@ -13,6 +13,8 @@ import tqdm
 
 cache_path = ".model_contrastive_state.pkt"
 
+BATCH_SIZE = 32
+
 def create_vocab_dataset(documents):
     source = ".source_vocab_metadata"
     if not os.path.isfile(source):
@@ -26,7 +28,6 @@ def create_vocab_dataset(documents):
     else:
         with open(source, "rb") as file:
             return pickle.load(file)
-
 
 @dataclass
 class ContrastiveConfig:
@@ -92,16 +93,16 @@ class ContrastiveLoss(torch.nn.Module):
         eq = (delta == label).sum()
         return eq / x.shape[0] * 100
 
-def sample_document(source_vocab, documents, config, batch_size=32):
+def sample_document(source_vocab, documents, config):
     X = []
     y = []
     label = []
-    for _ in range(batch_size):
+    for _ in range(BATCH_SIZE):
         index_a = random.randint(0, len(documents) - 1)
         index_b = random.randint(0, len(documents) - 1)
 
         # one items should at least be the same
-        if random.randint(0, batch_size) < batch_size // 2:
+        if random.randint(0, BATCH_SIZE) < BATCH_SIZE // 2:
             index_a = index_b
         
         encoded_a = source_vocab.encode(documents[index_a])
@@ -148,7 +149,7 @@ def train_model(source_vocab, model, config, documents):
     optimizer = optim.Adam(model.parameters())
     contrastive_loss = ContrastiveLoss()
 
-    progress = tqdm.tqdm(range(1000))
+    progress = tqdm.tqdm(range(1000 * (len(documents) // BATCH_SIZE)))
     sum_loss = None
     sum_accuracy = None
     index = 1

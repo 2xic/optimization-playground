@@ -12,9 +12,11 @@ if __name__ == "__main__":
                 songs = api.get_playlist_songs(playlist_id, offset=offset)
                 delta = 0
                 for song in songs:
-                    api.get_song_feature(
+                    response = api.get_song_feature(
                         id=song.id
                     )
+                    for i in response:
+                        print((song, i))
                     delta += 1
                     offset += 1
                 if delta == 0:

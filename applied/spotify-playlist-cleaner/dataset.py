@@ -121,7 +121,7 @@ class Dataset:
                 features.append(list(song_features)[0])
                 all_songs.append(song)
                 delta += 1
-            offset += 10
+            offset += delta
             if delta == 0:
                 break
         return all_songs, features

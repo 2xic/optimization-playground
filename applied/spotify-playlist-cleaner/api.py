@@ -113,7 +113,8 @@ class Api:
 
     def get_playlist_songs(self, id, offset=0):
         print(f"{self.api_url}/playlist/{id}?offset={offset}")
-        for i in self.get_requests_cache(f"{self.api_url}/playlist/{id}?offset={offset}", max_age=self.playlist_max_age)["items"]:
+        response = self.get_requests_cache(f"{self.api_url}/playlist/{id}?offset={offset}", max_age=self.playlist_max_age)
+        for i in response["items"]:
             images = i["track"]["album"]["images"]
             url = None
             if not images is None:
