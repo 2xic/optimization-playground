@@ -16,7 +16,7 @@ import tqdm
 import random
 
 BATCH_SIZE = 1
-SEQUENCE_LENGTH = 128
+SEQUENCE_LENGTH = 64
 CACHE_FILE = ".model_state_gpt.pkt"
 
 """
@@ -102,7 +102,7 @@ def encode_document_text(vocab, text):
     y = []
     words = text.lower().replace(":", " : ").strip().split(" ")
     words = list(filter(lambda x: len(x), words))
-    max_size = 256
+    max_size = 64
     start_index = random.randint(0, max(len(words), len(words) - max_size)) if len(words) > 0 else 0
     for i in range(start_index, len(words) - 1):
         X.append(vocab.get_tensor(
@@ -120,20 +120,6 @@ def get_document_dataset(vocab, document):
     text = "\n".join(document)
     X, y = encode_document_text(vocab, text)
     return X, y
-
-def predict(vocab, model):
-    results = []
-    seed = vocab.get_tensor(
-        "second citizen : ", sequence_length=-1).reshape(-1)
-
-    with torch.no_grad():
-        y = model.rollout(
-            seed=seed,
-            steps=512,
-        )
-        for i in y:
-            results.append(vocab.vocab.index_vocab[i])
-        return " ".join(results)
 
 def get_model(vocab):
     config = Config(
@@ -170,7 +156,7 @@ def train_loop(vocab, model, X_raw_documents):
         trainer.use_tqdm().train(dataloader)
         torch.save({
             "model": model.state_dict(),
-            "config": model.config
+       #     "config": model.config
         }, CACHE_FILE)
     return model
 
@@ -192,23 +178,25 @@ class RandomModel:
 
 class EmbeddingWrapper:
     def __init__(self, trained=True) -> None:
+        X, _ = get_dataset()
+        self.vocab = create_vocab_dataset(X)
         if trained == False:
             self.model = RandomModel()
         else:
-            self.model = get_cached_model()
+            self.model = get_cached_model(self.vocab)
 
     # pre trained
     def train(self, X):
         output = []
         for i in tqdm.tqdm(X):
-            out = get_embed(self.model, i)
+            out = get_embed(self.model, self.vocab, i)
             output.append(out[0])
         return output
 
     def transforms(self, X):
         output = []
         for i in tqdm.tqdm(X):
-            out = get_embed(self.model, i)
+            out = get_embed(self.model, self.vocab, i)
             output.append(out[0])
         return output
 
