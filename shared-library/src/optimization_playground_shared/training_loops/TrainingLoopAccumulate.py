@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
+from tqdm import tqdm
 
 class TrainingLoopAccumulate:
-    def __init__(self, model, optimizer):
+    def __init__(self, model, optimizer, loss= nn.NLLLoss()):
         self.model = model
         self.optimizer = optimizer
-        self.loss = nn.NLLLoss()
+        self.loss = loss
         self.accumulate_steps = 32
         self.epoch = 0
+        self.iterator_loop = lambda x, _train: x
     
     def eval(self, dataloader):
         with torch.no_grad():
@@ -17,6 +19,10 @@ class TrainingLoopAccumulate:
     def train(self, dataloader):
         return self._iterate(dataloader, train=True)
 
+    def use_tqdm(self):
+        self.iterator_loop = lambda x, train: tqdm(x, desc="Training" if train else "Testing")
+        return self
+
     def _iterate(self, dataloader, train=True):
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
         self.model.to(device)
@@ -24,20 +30,30 @@ class TrainingLoopAccumulate:
         accuracy = torch.tensor(0.0, device=device)
         length = 0
 
-        for index, (X, y) in enumerate(dataloader):
+        has_nan_loss = None
+        training_loop = self.iterator_loop(dataloader, train)
+        for index, (X, y) in enumerate(training_loop):
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)
 
             if train:
                 loss = self.loss(y_pred, y)
-                loss.backward()
-
+                if not torch.isnan(loss):
+                    loss.backward()
+                    total_loss += loss
+                # Do the step and zero_grad
                 if (0 < index) and index % self.accumulate_steps:
                     self._step()
-                total_loss += loss             
             accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += X.shape[0]
+            # Fallback
+            if isinstance(training_loop, tqdm):
+                if has_nan_loss:
+                    training_loop.set_description(f"Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
+                else:
+                    training_loop.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
+        
 
         self._step()
         accuracy = (accuracy / length) * 100 

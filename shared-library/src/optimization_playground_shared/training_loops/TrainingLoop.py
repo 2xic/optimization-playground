@@ -59,13 +59,6 @@ class TrainingLoop:
                 loss.backward()
                 self.optimizer.step()
 
-            # Fallback
-            if isinstance(training_loop, tqdm):
-                if has_nan_loss:
-                    training_loop.set_description(f"Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
-                else:
-                    training_loop.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
-        
             # TODO: Maybe instead add a custom accuracy metric field
             if y_pred.shape[-1] == 1:
                 # check if it is within the error margin
@@ -73,6 +66,14 @@ class TrainingLoop:
             else:
                 accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += X.shape[0]
+
+            # Fallback
+            if isinstance(training_loop, tqdm):
+                if has_nan_loss:
+                    training_loop.set_description(f"Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
+                else:
+                    training_loop.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
+        
         accuracy = (accuracy / length) * 100 
         self.epoch += 1
         return (

@@ -16,28 +16,6 @@ from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
 
 
-"""
-======
-"""
-
-import torch.autograd as autograd
-class STEFunction(autograd.Function):
-    @staticmethod
-    def forward(ctx, input):
-        return (input > 0).float()
-    @staticmethod
-    def backward(ctx, grad_output):
-        return F.hardtanh(grad_output)
-class StraightThroughEstimator(nn.Module):
-    def __init__(self):
-        super(StraightThroughEstimator, self).__init__()
-    def forward(self, x):
-        x = STEFunction.apply(x)
-        return x
-"""
-======
-"""
-
 # equation 1
 def q(x, b, e):
     return (2 ** e) * torch.min(
@@ -55,27 +33,30 @@ class CompressionConv(nn.Module):
         self.stride = stride
         self.weight = torch.nn.Parameter(torch.Tensor(out_channels, in_channels, kernel_size, kernel_size))
         nn.init.normal_(self.weight)
-        self.bias = torch.nn.Parameter(torch.Tensor(out_channels)) # in_channels, kernel_size, kernel_size)
+        self.bias = torch.nn.Parameter(torch.Tensor(out_channels))
         nn.init.normal_(self.bias)
         # parameters used to compress the network
         eps = -8.
         bits = 2.
-        self.bit_depth = torch.nn.Parameter(torch.zeros((out_channels, 1, 1, 1)).fill_(bits))
-        self.floating_point_exp = torch.zeros((out_channels, 1, 1, 1)).fill_(eps)
-        self.ste = StraightThroughEstimator()
+        # full(shape, value) = tensor(shape)._fill(value)
+        self.bit_depth = torch.nn.Parameter(torch.full((out_channels, 1, 1, 1), bits))
+        # TODO: should this be learnable ? 
+        self.floating_point_exp = torch.full((out_channels, 1, 1, 1), eps)
 
     def bits(self):
+        # equation 4
         return F.relu(self.bit_depth).sum() + torch.prod(torch.tensor(self.weight.shape[1:]))
 
     def forward(self, input):
         weights = q(
             self.weight,
-            F.relu(self.bit_depth),
+            self.bit_depth,
             self.floating_point_exp
         )
         # Make the gradients flow, STE
-        compressed_weight = self.ste(weights)
-        compressed_weight = 2 ** self.floating_point_exp * compressed_weight
+        # https://x.com/ptrblck_de/status/1177224632597929984?lang=en
+        # https://x.com/realDcThang/status/1177252043662209024
+        compressed_weight = weights +  (weights - weights.round()).detach()
         return F.conv2d(input, compressed_weight, self.bias, self.stride,
                         self.padding, dilation=1, groups=1)
 
@@ -89,18 +70,11 @@ class BasicConvModel(nn.Module):
             conv_layer = CompressionConv
 
         self.m = nn.BatchNorm2d(input_shape[0])
-        self.conv1 = conv_layer(input_shape[0], 12, 5)
+        self.conv1 = conv_layer(input_shape[0], 16, 5)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = conv_layer(12, 16, 5)
-        # self.output_shape = ((
-        #     get_output_shape(input_shape,
-        #     [self.conv1, self.pool, self.conv2, self.pool])
-        # ))
+        self.conv2 = conv_layer(16, 16, 5)
         self.num_classes = num_classes
-        self.fc1 = nn.Linear(256, 256)
         self.out = nn.Sequential(
-            self.fc1,
-            nn.ReLU(),
             nn.Linear(256, num_classes),
             nn.LogSoftmax(dim=1),
         )

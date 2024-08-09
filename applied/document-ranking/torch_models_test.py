@@ -7,7 +7,7 @@ from optimization_playground_shared.nlp.PositionalEncoding import PositionalEnco
 from optimization_playground_shared.nlp.utils.sampling import temperature_sampling
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
-from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
+from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
 import pickle
 from dataset import get_dataset
 import torch
@@ -142,7 +142,7 @@ def get_cached_model(vocab):
 
 def train_loop(vocab, model, X_raw_documents):
     optimizer = optim.Adam(model.parameters(), lr=13e-4)
-    trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
+    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
     for _  in range(32):
         document = X_raw_documents[random.randint(0, len(X_raw_documents) - 1)]
         X, y = get_document_dataset(vocab, [document])
