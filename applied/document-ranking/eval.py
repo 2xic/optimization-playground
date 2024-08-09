@@ -8,7 +8,7 @@ from dataset import get_dataset
 from pipeline import Pipeline
 from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper, ClaudeWrapper
 from optimization_playground_shared.classics.bm_25 import BM25
-from torch_models_test import EmbeddingWrapper
+from torch_gpt_like_model import EmbeddingWrapper
 from torch_contrastive_model import ContrastiveEmbeddingWrapper
 from xgboost import XGBRegressor
 
