@@ -70,9 +70,9 @@ class BasicConvModel(nn.Module):
             conv_layer = CompressionConv
 
         self.m = nn.BatchNorm2d(input_shape[0])
-        self.conv1 = conv_layer(input_shape[0], 16, 5)
+        self.conv1 = conv_layer(input_shape[0], 32, 5)
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv2 = conv_layer(16, 16, 5)
+        self.conv2 = conv_layer(32, 16, 5)
         self.num_classes = num_classes
         self.out = nn.Sequential(
             nn.Linear(256, num_classes),
@@ -118,10 +118,9 @@ epochs = 1_000
 
 for _ in tqdm(range(epochs)):
     (loss, accuracy) = iterator.train(train)
-    training_accuracy.append(accuracy)
-    training_loss.append(loss)
-    training_qbits.append(get_qbits(model))
-    print(get_qbits(model))
+    training_accuracy.append(accuracy.item())
+    training_loss.append(loss.item())
+    training_qbits.append(get_qbits(model).item())
 
     plot = Plot()
     plot.plot_figures(
