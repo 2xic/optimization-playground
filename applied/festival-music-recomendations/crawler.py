@@ -4,15 +4,26 @@ import os
 import requests
 import time
 from tqdm import tqdm
-import json
 from dataclasses import dataclass
+from dateutil import parser
+from collections import defaultdict
+from shared import spotify_playlist_cleaner_endpoint
+
+@dataclass
+class BestTrack:
+    name: str
+    id: str
 
 @dataclass
 class Artists:
     name: str
     image: str
     score: float
-    best_track: str
+    datetime: str
+    hour: str
+    timestamp: int
+    best_track: BestTrack
+
 
 def get_hash_path(url):
     hash_id = hashlib.sha256(url.encode()).hexdigest()
@@ -36,12 +47,11 @@ def requests_with_cache(url):
     return data.text
 
 def get_artist_scores():
-    spotify_playlist_cleaner_endpoint = "http://localhost:5000"
     main_embed = "https://embeds.appmiral.com/d7nDnUtMvU/en/embed.html?version=1722940803"
     text = requests_with_cache(main_embed)
     artists = BeautifulSoup(text).find_all("div",onclick=lambda x: x is not None and "appm_showDetail2" in x)
 
-    artists_score = []
+    artists_score = defaultdict(list)
     for i in tqdm(artists):
         artist_name = (i.attrs.get("data-artist-name", None))
         if artist_name is None:
@@ -57,6 +67,7 @@ def get_artist_scores():
             continue
         spotify_artists_url = spotify_artists_url["href"]
         spotify_artists_id = spotify_artists_url.replace("https://open.spotify.com/artist/", "")
+        date_str = page.find("span", {"class":"appm-dt-performance-item__meta-date"}).text
 
         print(artist_name)
         print(f"\t{artist_id}")
@@ -70,20 +81,38 @@ def get_artist_scores():
             continue
         # THen we need to get the songs features 
         total_score = 0
+        best_track = None
         for i in response["tracks"]:
             track_id = i["id"]
             song_features = requests.get(f"{spotify_playlist_cleaner_endpoint}/song/distance?song_id={track_id}").json()
+            i["score"] = song_features["distance"]
+            if best_track is None or best_track["score"] > i["score"]:
+                best_track = i
             total_score += song_features["distance"]
         #print((artist_name, total_score))
-        artists_score.append(
+        datetime = parser.parse(date_str.split("-")[0], fuzzy=True)
+        # print((date_str, datetime))
+        timestamp = int(datetime.timestamp())
+        short_datetime = datetime.replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        best_track = BestTrack(
+            id=best_track["id"],
+            name=best_track["name"],
+        )
+        artists_score[short_datetime].append(
             Artists(
                 name=artist_name,
                 score=total_score,
                 image=None,
-                best_track=None
+                datetime=datetime.strftime("%Y-%m-%d"),
+                hour=datetime.strftime("%H:%M"),
+                timestamp=timestamp,
+                best_track=best_track,
             )
         )
-    return sorted(artists_score, key=lambda x: x.score)[:10]
+    sorted_artists_score = {}
+    for _, values in sorted(artists_score.items(), key=lambda x: x[0]):
+        sorted_artists_score[values[0].datetime] = sorted(values, key=lambda x: x.score)
+    return sorted_artists_score
 
 if __name__ == "__main__":
     get_artist_scores()

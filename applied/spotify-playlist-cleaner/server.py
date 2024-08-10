@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask import render_template
 from model import get_or_train_model, train_cluster_model
 from utils import build_suggestion
@@ -79,7 +79,9 @@ def api_get_song_playlist_recommendation():
 def play():
     song_id = request.args.get("song_id")
     api.play_song(song_id)
-    return "OK"
+    resp = Response("OK")
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    return resp
 
 @app.route("/move_song", methods=["POST"])
 def server_move_song():
@@ -94,4 +96,4 @@ def server_move_song():
     return "OK"
 
 if __name__ == "__main__":
-    app.run()
+    app.run(port=5015)
