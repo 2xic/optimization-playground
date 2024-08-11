@@ -10,7 +10,8 @@ class TrainingLoopAccumulate:
         self.accumulate_steps = 32
         self.epoch = 0
         self.iterator_loop = lambda x, _train: x
-    
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
+
     def eval(self, dataloader):
         with torch.no_grad():
             (_loss, acc) = self._iterate(dataloader, train=False)
@@ -24,17 +25,16 @@ class TrainingLoopAccumulate:
         return self
 
     def _iterate(self, dataloader, train=True):
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
-        self.model.to(device)
-        total_loss = torch.tensor(0.0, device=device)
-        accuracy = torch.tensor(0.0, device=device)
+        self.model.to(self.device)
+        total_loss = torch.tensor(0.0, device=self.device)
+        accuracy = torch.tensor(0.0, device=self.device)
         length = 0
 
         has_nan_loss = None
         training_loop = self.iterator_loop(dataloader, train)
         for index, (X, y) in enumerate(training_loop):
-            X = X.to(device)
-            y = y.to(device)
+            X = X.to(self.device)
+            y = y.to(self.device)
             y_pred = self.model(X)
 
             if train:
@@ -50,11 +50,10 @@ class TrainingLoopAccumulate:
             # Fallback
             if isinstance(training_loop, tqdm):
                 if has_nan_loss:
-                    training_loop.set_description(f"Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
+                    training_loop.set_description(f"({self.device.type}) Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
                 else:
-                    training_loop.set_description(f"Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
+                    training_loop.set_description(f"({self.device.type}) Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
         
-
         self._step()
         accuracy = (accuracy / length) * 100 
         self.epoch += 1

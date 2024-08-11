@@ -120,13 +120,11 @@ class ClaudeWrapper:
             
             response = requests.post(api_url, headers=headers, json=payload)
             embed = response.json()
-    #        if response.status_code != 200:
-    #            print(embed)
-            assert type(data) == list, data
             self.cache_handler.save(
                 payload,
                 embed
             )
             time.sleep(1)
         data = embed["data"][0]["embedding"]
+        assert type(data) == list, data
         return np.asarray(data).astype(np.float32)

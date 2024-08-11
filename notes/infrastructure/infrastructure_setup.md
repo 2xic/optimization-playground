@@ -9,6 +9,7 @@ Some good links
 - Be prepared for hardware failures
   - [Jeff dean](https://perspectives.mvdirona.com/2008/06/jeff-dean-on-google-infrastructure/) also mentioned this in some talk. Hardware failure in isolation is uncommon, but the more computers you have the more common it becomes
   - You don't want your entire cluster to fail if one computer fails
+
 ### Monitoring
 - DataDog 
 - `nvidia-smi` is bad, use something like tensor core utilization instead.

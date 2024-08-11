@@ -21,7 +21,6 @@ class Transformer(nn.Module):
                 self.embedding_dims
             ) for _ in range(num_layers)
         ])
-
         self.decoder_blocks = nn.ModuleList([
             DecoderBlock(
                 self.embedding_dims

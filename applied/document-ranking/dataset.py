@@ -3,7 +3,10 @@ from dotenv import load_dotenv
 import os
 import json
 
-load_dotenv()
+if os.path.isfile(".env"):
+    load_dotenv()
+else:
+    load_dotenv(".env.minimal")
 
 def get_dataset():
     results = None

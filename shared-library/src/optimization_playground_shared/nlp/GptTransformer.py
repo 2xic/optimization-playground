@@ -59,6 +59,15 @@ class GptTransformerModel(nn.Module):
         # (SEQ_LEN, BATCH_SIZE, VOCAB_SIZE) -> (BATCH_SIZE, VOCAB_SIZE, SEQ_LEN)
         return self.output(transformer_out)  # .permute(0, 2, 1)
 
+    def embeddings(self, X):
+        values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_size))
+        for x in X:
+            x = x.reshape((1, ) + X.shape[1:])
+            assert len(X.shape) == 2
+            with torch.no_grad():
+                values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
+        return values
+
     def forward_argmax(self, x):
         prediction = self.forward(x)
         return prediction.argmax(dim=1)

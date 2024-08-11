@@ -10,7 +10,9 @@ from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper
 from optimization_playground_shared.classics.bm_25 import BM25
 from torch_gpt_like_model import EmbeddingWrapper
 from torch_contrastive_model import ContrastiveEmbeddingWrapper
+from torch_gpt_like_model_bigger import EmbeddingWrapperBigger
 from xgboost import XGBRegressor
+import json
 
 def evaluation():
     X, y = get_dataset()
@@ -19,8 +21,10 @@ def evaluation():
     X_train_original, X_test_original, y_train_original, y_test_original = train_test_split(
         X, y, test_size=0.33, random_state=42
     )
-
     model_pipeline_configs = {
+        "torch_next_token_bigger": [
+            EmbeddingWrapperBigger(),
+        ],
         "torch_contrastive": [
             ContrastiveEmbeddingWrapper(),
         ],
@@ -77,14 +81,16 @@ def evaluation():
                 XGBRegressor(),
             ]
             for model in models:
+                config_name =  f"{model.__class__.__name__} + {base_config_name}"
+                print((config_name))
                 model.fit(X_train, y_train)
                 accuracy = accuracy_score(y_test, list(map(lambda x: min(max(round(x), 0), 1), model.predict(X_test))))
-                print(f"{model.__class__.__name__} -> accuracy: {accuracy}")
+                print(f"\t{model.__class__.__name__} -> accuracy: {accuracy}")
                 print("")
                 new_score = accuracy * 100
                 if new_score > best_local_config_score:
                     best_local_config_score = new_score
-                    best_local_config_string = f"{model.__class__.__name__} + {base_config_name}"
+                    best_local_config_string = config_name
         results[best_local_config_string] = best_local_config_score
 
     results = {

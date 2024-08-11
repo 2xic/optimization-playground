@@ -54,7 +54,6 @@ class DecoderLayer(torch.nn.Module):
             AttentionLayer(self.hidden_size, self.hidden_size),
             nn.Tanh(),
         ])
-
         self.blocks_encoder = nn.Sequential(*[
             AttentionLayer(self.hidden_size, self.hidden_size),
             nn.Tanh(),

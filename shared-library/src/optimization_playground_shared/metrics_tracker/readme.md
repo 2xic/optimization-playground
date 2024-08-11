@@ -2,6 +2,27 @@
 Very simple metrics tracker to make it easier to keep track of current training round and older runs.
 You also get a code diff so you can see what actually changed between experiment runs.
 
+How to use on the model side
+```python
+metrics_tracker = Tracker("example_model")
+metrics_tracker.log(
+    Metrics(
+        epoch=epoch,
+        loss=sum_loss,
+        training_accuracy=None,
+        prediction=Prediction.text_prediction(
+            "example"
+        )
+    )
+)
+```
+
+Then to start the consumer 
+```bash
+python3 consumer.py # start the frontend interface and server used for tracking metrics.
+```
+
+
 ## Todo
 - I want a way to launch `n` runs with the same configs to make sure there is no issue with the local minima or similar. 
 

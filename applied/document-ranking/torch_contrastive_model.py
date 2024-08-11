@@ -76,7 +76,7 @@ class ContrastiveLoss(torch.nn.Module):
     def __init__(self) -> None:
         super(ContrastiveLoss, self).__init__()
         self.distance = lambda x, y: ((x - y) ** 2).sum(dim=1)
-        self.margin = 0.3
+        self.margin = 5
 
     def forward(self, x, y, label):
         distance = self.distance(x, y)
@@ -141,13 +141,15 @@ def get_contrastive_model(source_vocab):
     )
     model = TinyDeltaModel(config_)
     if os.path.isfile(cache_path):
-        checkpoint = torch.load(cache_path)
+        checkpoint = torch.load(cache_path, map_location="cpu")
         model.load_state_dict(checkpoint['model'])
     return model, config_
 
 def train_model(source_vocab, model, config, documents):
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     optimizer = optim.Adam(model.parameters())
     contrastive_loss = ContrastiveLoss()
+    model.to(device)
 
     progress = tqdm.tqdm(range(1000 * (len(documents) // BATCH_SIZE)))
     sum_loss = None
@@ -155,9 +157,13 @@ def train_model(source_vocab, model, config, documents):
     index = 1
     for _ in progress:
         (x, y, z) = sample_document(source_vocab, documents, config)
+        x = x.to(device)
+        y = y.to(device)
+        z = z.to(device)
+
         a = model(x)
         b = model(y)
-        loss = contrastive_loss(a, b, z)    
+        loss = contrastive_loss(a, b, z)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -217,7 +223,4 @@ if __name__ == "__main__":
     # 
     torch.save({
         "model": model.state_dict(),
-#        "config": model.config
     }, cache_path)
-
-
