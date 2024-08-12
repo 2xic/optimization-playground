@@ -27,6 +27,7 @@ def create_vocab_dataset(documents) -> SimpleVocab:
             source_vocab.encode(i)
         with open(source, "wb") as file:
             pickle.dump(source_vocab, file)
+        return source_vocab
     else:
         with open(source, "rb") as file:
             return pickle.load(file)
