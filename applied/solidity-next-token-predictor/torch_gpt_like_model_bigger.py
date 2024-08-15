@@ -1,32 +1,32 @@
-from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
+import os
 import torch
 import torch.optim as optim
+from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
-from dataset import get_dataset
-import torch
-import os
-import tqdm 
-import random
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
-from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_words
-import time
+from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
+from pre_generator import get_cache_file
 
 os.makedirs(".cache", exist_ok=True)
 
-BATCH_SIZE = 256
-SEQUENCE_LENGTH = 128
-CACHE_FILE = ".model_state_gpt_bigger.pkt"
+BATCH_SIZE = 2
+SEQUENCE_LENGTH = 64
+CACHE_FILE = ".model_state.pkt"
 
+def get_document_words(text):
+    # todo: create a good tokenizer, this does not really work for code tokens
+    if type(text) == bytes:
+        return text.decode().split(" ")
+    else:
+        return text.split(" ")
 
-# @jit()
 def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_index):
     words = get_document_words(text)
     count_words = len(words)
     vocab_add = vocab.vocab.get 
     # preload all the words fast
     words = torch.tensor(list(map(lambda x: vocab_add(x), words)), dtype=torch.long)
- #   print(words)
     for i in range(count_words - 1):
         start_index = 0
         if i > SEQUENCE_LENGTH:
@@ -78,83 +78,35 @@ def get_cached_model(vocab):
         model.load_state_dict(checkpoint['model'])
     return model
 
-def train_loop(vocab, model, X_raw_documents):
+def train_loop(vocab, model):
     optimizer = optim.Adam(model.parameters(), lr=13e-4)
     trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
-    X, y = get_document_dataset(vocab, X_raw_documents)
-    dataloader = get_raw_dataloader((
-        X.clone(),
-        y.clone()
-    ),
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-    )
+    dataloader = ZmqDataloader()
     for _ in range(1024):
-        _ = trainer.use_tqdm().train(dataloader)
-
-        torch.save({
-            "model": model.state_dict(),
-        }, CACHE_FILE)
+        print("Starting batch ")
+        for document in dataloader:
+            # TODO: add batch checkpoints to the training loop?
+            X, y = get_document_dataset(vocab, [document])
+            raw_dataloader = get_raw_dataloader((
+                X.clone(),
+                y.clone()
+            ),
+                batch_size=BATCH_SIZE,
+                shuffle=True,
+            )
+            _ = trainer.use_tqdm().train(raw_dataloader)
+            torch.save({
+                "model": model.state_dict(),
+            }, CACHE_FILE)
     return model
 
-def train_model(vocab, X):
-    assert vocab is not None
-    model = get_cached_model(vocab)
-    model = train_loop(vocab, model, X)
-    return model
-
-def get_embed(model, vocab, document):
-    X = encode_document_embed_text(vocab,document, sequence_length=SEQUENCE_LENGTH)
-    return model.embeddings(X)
-
-class RandomModel:
-    def __init__(self) -> None:
-        pass
-
-    def embeddings(self, _x):
-        return torch.rand((1, 1024))
-
-class EmbeddingWrapperBigger:
-    def __init__(self, trained=True) -> None:
-        X, _ = get_dataset()
-        self.vocab = create_vocab_dataset(X)
-        if trained == False:
-            self.model = RandomModel()
-        else:
-            self.model = get_cached_model(self.vocab).eval()
-
-    # pre trained
-    def train(self, X):
-        output = []
-        for i in tqdm.tqdm(X):
-            out = get_embed(self.model, self.vocab, i)
-            output.append(out[0])
-        return output
-
-    def transforms(self, X):
-        output = []
-        for i in tqdm.tqdm(X):
-            out = get_embed(self.model, self.vocab, i)
-            output.append(out[0])
-        return output
 
 if __name__ == "__main__":
-    benchmark = False
-    X, _ = get_dataset()
-    vocab = create_vocab_dataset(X)
-
-    if benchmark:
-        total = 0
-        for index in range(100):
-            random_index = random.randint(0, len(X) - 1)
-            document = X[random_index]
-            start = time.time()
-            _ = get_document_dataset(vocab, [document])
-            end = time.time()
-            print((f"({index}) document {random_index}", end - start))
-            print("")
-            total += (end - start)
-        print(f"Total {total}")
-    else:
-        train_model(vocab, X)
-        print("Done?")
+    # todo: vocab needs to be pre-generated on the dataloader side.
+    vocab = get_cache_file()
+    assert vocab is not None
+    print("Loaded vocab")
+    model = get_cached_model(vocab)
+    print("Loaded model")
+    model = train_loop(vocab, model)
+    print(model)

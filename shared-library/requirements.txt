@@ -5,3 +5,4 @@ scikit-learn
 accelerate
 nvidia-ml-py3
 xgboost
+pyzmq

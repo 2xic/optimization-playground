@@ -29,6 +29,12 @@ class SimpleVocab:
         for i in sentence.split(" "):
             X.append(self.vocab.add(i))
         return X
+    
+    def decode(self, tokens):
+        X = []
+        for i in tokens:
+            X.append(self.vocab.index_vocab[i])
+        return "".join(X)
 
     def get_tensor(self, sentence, sequence_length):
         if sequence_length == -1:
