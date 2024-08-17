@@ -3,6 +3,7 @@ import torch
 import torch.optim as optim
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
+from optimization_playground_shared.plot.Plot import Plot, Figure
 from dataset import get_dataset
 import torch
 import os
@@ -89,9 +90,35 @@ def train_loop(vocab, model, X_raw_documents):
         batch_size=BATCH_SIZE,
         shuffle=True,
     )
+    training_accuracy = []
+    training_loss = []
     for _ in range(1024):
-        _ = trainer.use_tqdm().train(dataloader)
-
+        (loss, accuracy) = trainer.use_tqdm().train(dataloader)
+        training_accuracy.append(accuracy.item())
+        training_loss.append(loss.item())
+        plot = Plot()
+        plot.plot_figures(
+            figures=[
+                Figure(
+                    plots={
+                        "Loss": training_loss,
+                    },
+                    title="Training loss",
+                    x_axes_text="Epochs",
+                    y_axes_text="Loss",
+                ),
+                Figure(
+                    plots={
+                        "Training accuracy": training_accuracy,
+                    },
+                    title="Accuracy",
+                    x_axes_text="Epochs",
+                    y_axes_text="accuracy",
+                ),
+            ],
+            name=f'training_bigger_model.png'
+        )
+        
         torch.save({
             "model": model.state_dict(),
         }, CACHE_FILE)

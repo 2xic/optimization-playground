@@ -72,13 +72,18 @@ class GptTransformerModel(nn.Module):
         prediction = self.forward(x)
         return prediction.argmax(dim=1)
 
-    def rollout(self, seed, steps, device):
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+    def rollout(self, seed, steps):
         with torch.no_grad():
             output = []
             for index in range(steps):
                 next_predicted = None
                 if (len(seed) - 1) < index:
-                    X = torch.zeros(1, self.sequence_size).reshape(1, -1).to(device).long().fill_(self.config.padding_index)
+                    X = torch.zeros(1, self.sequence_size).reshape(1, -1).to(self.device).long().fill_(self.config.padding_index)
                     copy = torch.tensor(output[-self.sequence_size:]).long()
                     X[0, :copy.shape[0]] = copy
 

@@ -12,11 +12,11 @@ class TrainingLoopPlot:
 
         for _ in tqdm(range(epochs)):
             (loss, accuracy) = self.training_loop.train(dataloader)
-            training_accuracy.append(accuracy)
-            training_loss.append(loss)
+            training_accuracy.append(accuracy.item())
+            training_loss.append(loss.item())
         
         plot = Plot()
-        name = self.training_loop.model.__class__.__name__
+        name = self.training_loop.model.__class__.__name__.lower()
         plot.plot_figures(
             figures=[
                 Figure(

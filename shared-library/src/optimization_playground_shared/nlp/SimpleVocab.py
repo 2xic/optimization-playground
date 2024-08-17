@@ -1,4 +1,21 @@
 import torch
+import string
+
+def splitter(sentence):
+    tokenizer = []
+    token = ""
+    sentence = sentence.replace("\r\n", "\n")
+    for i in sentence:
+        if i in string.punctuation or i in string.whitespace:
+            if len(token) > 0:
+                tokenizer.append(token)
+            tokenizer.append(i)
+            token = ""
+        else:
+            token += i
+    if len(token) > 0:
+        tokenizer.append(token)
+    return tokenizer            
 
 class Vocab:
     def __init__(self) -> None:
@@ -8,8 +25,9 @@ class Vocab:
         self.PADDING_IDX = self.add("<PADDING>")
 
     def get(self, word):
-        return self.vocab_index.get(word, self.PADDING_IDX)
-
+        out = self.vocab_index.get(word, self.PADDING_IDX)
+        return out
+    
     def add(self, word):
         if not self.locked and not word in self.vocab_index:
             index = len(self.index_vocab)
@@ -26,7 +44,7 @@ class SimpleVocab:
 
     def encode(self, sentence):
         X = []
-        for i in sentence.split(" "):
+        for i in splitter(sentence):
             X.append(self.vocab.add(i))
         return X
     
@@ -39,13 +57,13 @@ class SimpleVocab:
     def get_tensor(self, sentence, sequence_length):
         if sequence_length == -1:
             output = []
-            for index, i in enumerate(sentence.split(" ")[:sequence_length]):
+            for index, i in enumerate(splitter(sentence)[:sequence_length]):
                 output.append(self.vocab.add(i))
             return torch.tensor([output])
 
         torch_tensor = torch.zeros((1, sequence_length)).fill_(self.vocab.PADDING_IDX).long()
         if sentence is not None:
-            for index, i in enumerate(sentence.split(" ")[:sequence_length]):
+            for index, i in enumerate(splitter(sentence)[:sequence_length]):
                 torch_tensor[0][index] = self.vocab.add(i)
         return torch_tensor
 

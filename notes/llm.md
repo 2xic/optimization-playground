@@ -794,3 +794,10 @@ The idea
 The verifier is also a much weaker model. Use this in a RL loop and boom you get a stronger verifier. 
 
 Somehwat similiar to this [Self-playing Adversarial Language Game Enhances LLM Reasoning](https://arxiv.org/pdf/2404.10642) paper.
+
+## [RLHF is just a vibe check](https://x.com/karpathy/status/1821277264996352246)
+Good post from Karpathy on why RLHF != RL.
+
+## [SQL injection like attacks in LLM](https://x.com/karpathy/status/1823418177197646104)
+Another good post from Karpathy. Basically special tokens used by LLM models can be misused. I.e you can inject `<|endoftext|>` to trick a model that it's the end of the text.
+

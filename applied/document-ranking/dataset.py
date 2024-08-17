@@ -12,9 +12,9 @@ if os.path.isfile(".env"):
 else:
     load_dotenv(".env.minimal")
 
-def get_dataset():
+def get_dataset(force=False):
     all_results = None
-    if os.path.isfile("cache.json"):
+    if os.path.isfile("cache.json") and not force:
         all_results = json.load(open("cache.json"))
     else:
         all_results = []
@@ -34,13 +34,14 @@ def get_dataset():
                     "credentials": os.environ["auth_header"]
                 }).json()
                 end = time.time()
-                if (end - start) > 5:
+                if (end - start) > 15:
                     print("Long response ... early exiting")
                     break
                 with open(path, "w") as file:
                     json.dump(results, file)
             all_results += results["entries"]
             offset = results["next_offset"]
+            print((len(results["entries"]), len(all_results), results["next_offset"]))
             if results["done"]:
                 break
             elif len(all_results) > 300:
@@ -63,4 +64,4 @@ def get_dataset():
     return X, y
 
 if __name__ == "__main__":
-    get_dataset()
+    get_dataset(force=True)

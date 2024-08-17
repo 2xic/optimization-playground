@@ -3,23 +3,27 @@ import torch
 import torch.optim as optim
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
-from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
+from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
+from optimization_playground_shared.nlp.SimpleVocab import splitter
 from pre_generator import get_cache_file
+import atexit
+import time
+from optimization_playground_shared.utils.General import save_model_atomic, load_model
 
 os.makedirs(".cache", exist_ok=True)
 
-BATCH_SIZE = 2
-SEQUENCE_LENGTH = 64
+BATCH_SIZE = 64
+SEQUENCE_LENGTH = 256
 CACHE_FILE = ".model_state.pkt"
 
 def get_document_words(text):
     # todo: create a good tokenizer, this does not really work for code tokens
     if type(text) == bytes:
-        return text.decode().split(" ")
+        return splitter(text.decode())
     else:
-        return text.split(" ")
+        return splitter(text)
 
 def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_index):
     words = get_document_words(text)
@@ -74,14 +78,15 @@ def get_cached_model(vocab):
     vocab.lock()
     model = get_model(vocab)
     if os.path.isfile(CACHE_FILE):
-        checkpoint = torch.load(CACHE_FILE, map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
+        checkpoint = load_model(CACHE_FILE)
+        model.load_state_dict(checkpoint['model_state_dict'])
     return model
 
-def train_loop(vocab, model):
+def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
     optimizer = optim.Adam(model.parameters(), lr=13e-4)
-    trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
+    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
     dataloader = ZmqDataloader()
+    last_save = 0
     for _ in range(1024):
         print("Starting batch ")
         for document in dataloader:
@@ -95,11 +100,28 @@ def train_loop(vocab, model):
                 shuffle=True,
             )
             _ = trainer.use_tqdm().train(raw_dataloader)
-            torch.save({
-                "model": model.state_dict(),
-            }, CACHE_FILE)
+            print(vocab.decode(
+                model.rollout(
+                    vocab.get_tensor("contract ", sequence_length=-1)[0],
+                    steps=100
+                )
+            ))
+            """
+            X, y = next(iter(raw_dataloader))
+            print(torch.argmax(model(X.to(model.device)), 1))
+            print(y)
+            """
+            if (time.time() - last_save) > 60:
+                save_model_atomic(CACHE_FILE, model)
+                last_save = time.time()
     return model
 
+def save_model():
+    print("STARTING TO SAVE MODEL")
+    save_model_atomic(CACHE_FILE, model)
+    print("DONE SAVING MODEL")
+
+atexit.register(save_model)
 
 if __name__ == "__main__":
     # todo: vocab needs to be pre-generated on the dataloader side.
