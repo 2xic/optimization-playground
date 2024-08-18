@@ -8,7 +8,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torch
 from tqdm import tqdm
-import matplotlib.pyplot as plt
 import torch.nn as nn
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 from optimization_playground_shared.metrics_tracker.metrics import Prediction

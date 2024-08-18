@@ -13,7 +13,7 @@ import tqdm
 
 cache_path = ".model_contrastive_state.pkt"
 
-BATCH_SIZE = 32
+BATCH_SIZE = 256
 
 def create_vocab_dataset(documents):
     source = ".source_vocab_metadata"
@@ -192,14 +192,12 @@ class ContrastiveEmbeddingWrapper:
     def __init__(self) -> None:
         # None as the model should already been trained
         vocab = create_vocab_dataset(None)
-        model, config = get_contrastive_model(vocab)
-        self.model = model
-        self.config = config
         self.vocab = vocab
-        self.model.eval()
         
     # pre trained
     def train(self, X):
+        self.model, self.config = get_contrastive_model(self.vocab)
+        self.model.eval()
         output = []
         for i in tqdm.tqdm(X):
             out = rollout_model(self.model, i, self.vocab, self.config)
@@ -220,7 +218,6 @@ if __name__ == "__main__":
     model, config = get_contrastive_model(vocab)
 
     model = train_model(vocab, model, config, X)
-    # 
     torch.save({
         "model": model.state_dict(),
     }, cache_path)

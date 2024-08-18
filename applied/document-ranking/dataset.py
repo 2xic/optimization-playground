@@ -18,10 +18,11 @@ def get_dataset(force=False):
         all_results = json.load(open("cache.json"))
     else:
         all_results = []
+        limit = 100
         offset = 0
         while True:
             print("Downloading ... offset = ", offset)
-            url = os.environ["host"] + f"?offset={offset}"
+            url = os.environ["host"] + f"?offset={offset}&limit={limit}"
             path = os.path.join(".cache", hashlib.sha256(url.encode()).hexdigest())
             results = None
 
@@ -34,17 +35,17 @@ def get_dataset(force=False):
                     "credentials": os.environ["auth_header"]
                 }).json()
                 end = time.time()
+                with open(path, "w") as file:
+                    json.dump(results, file)
                 if (end - start) > 15:
                     print("Long response ... early exiting")
                     break
-                with open(path, "w") as file:
-                    json.dump(results, file)
             all_results += results["entries"]
             offset = results["next_offset"]
-            print((len(results["entries"]), len(all_results), results["next_offset"]))
+            print((len(results["entries"]), len(all_results), results["next_offset"], results["done"]))
             if results["done"]:
                 break
-            elif len(all_results) > 300:
+            elif len(all_results) > 1_000:
                 print("early breaking")
                 break
         with open("cache.json", "w") as file:

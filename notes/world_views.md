@@ -21,8 +21,7 @@ Somewhat inspired from the last section "A Summary of Popular Positions" by [Xan
 
 ### Holders of this belief
 - [Yann LeCun](https://twitter.com/ylecun/status/1654980939515084803)
-- https://arxiv.org/pdf/2305.18654.pdf
-  - https://twitter.com/drummatick/status/1763974019404189902
+  - [A Path Towards Autonomous Machine Intelligence](https://openreview.net/pdf?id=BZ5a1r-kVsf) is a document LeCun wrote that frames a very different approach to solving this problem. JEPA and world models are his focus with the addition of some other modules.
 
 ### The opposition
 -  [Transfer learning proves LLMs aren’t stochastic parrots – Trenton Bricken & Sholto Douglas](https://www.youtube.com/watch?v=3Fyv3VIgeS4) 

@@ -1,24 +1,20 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 import torch.optim as optim
 from torch import Tensor
 from dataclasses import dataclass
 from optimization_playground_shared.nlp.PositionalEncoding import PositionalEncoding
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
-#from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from dataset import get_dataset
 import torch
 import os
 import tqdm 
-import random
-from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_words
-# from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
-# metrics_tracker = Tracker("torch_gpt_embeddings")
+from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_dataset
 
-BATCH_SIZE = 32
+BATCH_SIZE = 256
 SEQUENCE_LENGTH = 128
-CACHE_FILE = ".model_state_gpt.pkt"
+CACHE_FILE = ".model_state_gpt_lr.pkt"
 
 """
 GPT is a decoder only 
@@ -65,30 +61,6 @@ class TinyModel(nn.Module):
                 values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
         return values
 
-
-def encode_document_text(vocab, text):
-    X = []
-    y = []
-    words = get_document_words(text)
-    max_batch_size = 1024
-    start_index = random.randint(0, max(len(words), len(words) - max_batch_size)) if len(words) > 0 else 0
-    for i in range(start_index, len(words) - 1):
-        X.append(vocab.get_tensor(
-            " ".join(words[max(i-SEQUENCE_LENGTH, 0):i]), sequence_length=SEQUENCE_LENGTH))
-        y.append(vocab.get_tensor(
-            " ".join(words[i:i+1]), sequence_length=1)[0])
-        if len(X) > max_batch_size:
-            break
-    if len(X) == 0:
-        return vocab.get_tensor("", sequence_length=SEQUENCE_LENGTH), vocab.get_tensor("", sequence_length=SEQUENCE_LENGTH)
-    return torch.concat(X), torch.concat(y)
-
-def get_document_dataset(vocab, document):
-    assert type(document) == list
-    text = "\n".join(document)
-    X, y = encode_document_text(vocab, text)
-    return X, y
-
 def get_model(vocab):
     config = Config(
         vocab_size=vocab.size,
@@ -109,53 +81,21 @@ def get_cached_model(vocab):
     return model
 
 def train_loop(vocab, model, X_raw_documents):
-    optimizer = optim.Adam(model.parameters(), lr=13e-4)
+    optimizer = optim.Adam(model.parameters())
     trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
-    if torch.cuda.is_available():
-        for epoch  in range(1024):
-            documents = []
-            for _  in range(256):
-                documents.append(X_raw_documents[random.randint(0, len(X_raw_documents) - 1)])
-            X, y = get_document_dataset(vocab, documents)
-            dataloader = get_raw_dataloader((
-                X.clone(),
-                y.clone()
-            ),
-                batch_size=BATCH_SIZE,
-                shuffle=False,
-            )
-            _ = trainer.use_tqdm().train(dataloader)
-            """
-            metrics_tracker.log(
-                Metrics(
-                    epoch=epoch,
-                    loss=sum_loss,
-                    training_accuracy=acc,
-                    prediction=None
-                )
-            )
-            """
+    X, y = get_document_dataset(vocab, X_raw_documents, SEQUENCE_LENGTH)
+    dataloader = get_raw_dataloader((
+        X.clone(),
+        y.clone()
+    ),
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+    )
+    for _ in range(1024):
+        _ = trainer.use_tqdm().train(dataloader)
         torch.save({
             "model": model.state_dict(),
-    #     "config": model.config
         }, CACHE_FILE)
-    else:
-        #  trainer.device = torch.device("cpu") # easier to debug with cpu
-        for _  in range(32):
-            document = X_raw_documents[random.randint(0, len(X_raw_documents) - 1)]
-            X, y = get_document_dataset(vocab, [document])
-            dataloader = get_raw_dataloader((
-                X.clone(),
-                y.clone()
-            ),
-                batch_size=BATCH_SIZE,
-                shuffle=False,
-            )
-            trainer.use_tqdm().train(dataloader)
-            torch.save({
-                "model": model.state_dict(),
-        #     "config": model.config
-            }, CACHE_FILE)
     return model
 
 def train_model(vocab, X):
@@ -179,13 +119,16 @@ class EmbeddingWrapper:
     def __init__(self, trained=True) -> None:
         X, _ = get_dataset()
         self.vocab = create_vocab_dataset(X)
-        if trained == False:
+        self.trained = trained
+        self.model = None
+
+    # pre trained
+    def train(self, X):
+        if self.trained == False:
             self.model = RandomModel()
         else:
             self.model = get_cached_model(self.vocab).eval()
 
-    # pre trained
-    def train(self, X):
         output = []
         for i in tqdm.tqdm(X):
             out = get_embed(self.model, self.vocab, i)

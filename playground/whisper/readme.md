@@ -1,7 +1,8 @@
+## Whisper model
+
 - Sequence-to-sequence Transformer model (unlike GPT)
 - some tricks done to support audio (namely the conv)
 - decoder is prompted to various tasks
-- 
 
 ## official links
 

@@ -22,4 +22,15 @@
 [Paper](https://arxiv.org/pdf/2306.09479)
 
 - Many benchmark results will improve when the model is scaled up, but what kind of tasks do worse on a bigger model ? 
-- 
+
+## [Extrapolating performance in language modeling benchmarks](https://epochai.org/files/llm-benchmark-extrapolation.pdf)
+Did some evaluation and testing of scaling laws on LLMs. The research show that benchmark performance is predicable using scaling laws. 
+Aggregated benchmark performance is more predicable than individual performance.
+
+## [Scaling Laws for Transfer](https://arxiv.org/pdf/2102.01293)
+How does scaling laws affect transfer learning? 
+- "Ossification" - can a models performance be hurt by pre-training ? In certain scenarios, it might. Smaller models might benefits from being trained from scratch, but larger onces are less effected (Figure 5).
+  - This also happens even if the models are trained for much longer, smaller fine-tuned models have no way of recovering.
+- On smaller datasets pre-training is more compute efficient.
+- They created a unified scaling law for pre-training that looks a lot similar to the existing onces.
+- **Conclusion**: scaling laws also existing for pre-training.

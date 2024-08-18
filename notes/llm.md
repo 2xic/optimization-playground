@@ -801,3 +801,12 @@ Good post from Karpathy on why RLHF != RL.
 ## [SQL injection like attacks in LLM](https://x.com/karpathy/status/1823418177197646104)
 Another good post from Karpathy. Basically special tokens used by LLM models can be misused. I.e you can inject `<|endoftext|>` to trick a model that it's the end of the text.
 
+## [How does apple intelligence get a high quality LLM on mobile ?](https://x.com/awnihannun/status/1818648522805436553)
+- ~3B parameters, so pretty small model (6gb in 16bit)
+- Quantized (mixed precision some weights are 2bit, some are 4bit)
+
+[Technical report](https://arxiv.org/pdf/2407.21075)
+- [Trained with axlearn](https://github.com/apple/axlearn) and JAX
+- Used Google TPUs
+
+

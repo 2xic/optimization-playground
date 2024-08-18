@@ -10,52 +10,15 @@ import os
 import tqdm 
 import random
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
-from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_words
+from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_dataset
 import time
 
 os.makedirs(".cache", exist_ok=True)
 
 BATCH_SIZE = 256
 SEQUENCE_LENGTH = 128
-CACHE_FILE = ".model_state_gpt_bigger.pkt"
+CACHE_FILE = ".model_state_gpt_bigger_lr.pkt"
 
-
-# @jit()
-def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_index):
-    words = get_document_words(text)
-    count_words = len(words)
-    vocab_add = vocab.vocab.get 
-    # preload all the words fast
-    words = torch.tensor(list(map(lambda x: vocab_add(x), words)), dtype=torch.long)
- #   print(words)
-    for i in range(count_words - 1):
-        start_index = 0
-        if i > SEQUENCE_LENGTH:
-            start_index = i - SEQUENCE_LENGTH
-        context = words[start_index:i]
-        next_token = words[i]
-        # add the entries
-        tensor_x[entries_index, :context.shape[-1]] = context
-        tensor_y[entries_index] = next_token
-        entries_index += 1
-    return tensor_x, tensor_y, entries_index
-
-hash_documents = {}
-
-def get_document_dataset(vocab: SimpleVocab, documents):
-    assert type(documents) == list
-    entries_count = 0
-    for i in documents:
-        entries_count += len(get_document_words(i))
-
-    X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-    y = torch.full(size=(entries_count, ), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-    entries_index = 0
-    for document in documents:
-        X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index)
-    assert not torch.all(X == 0), "All zeros is bad"
-    assert not torch.all(y == 0), "All zeros is bad"
-    return X, y
 
 def get_model(vocab):
     config = Config(
@@ -71,18 +34,18 @@ def get_model(vocab):
     model = GptTransformerModel(config)
     return model
 
-def get_cached_model(vocab):
+def get_cached_model(vocab, cache_file):
     vocab.lock()
     model = get_model(vocab)
-    if os.path.isfile(CACHE_FILE):
-        checkpoint = torch.load(CACHE_FILE, map_location='cpu')
+    if os.path.isfile(cache_file):
+        checkpoint = torch.load(cache_file, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
     return model
 
 def train_loop(vocab, model, X_raw_documents):
-    optimizer = optim.Adam(model.parameters(), lr=13e-4)
+    optimizer = optim.Adam(model.parameters())
     trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
-    X, y = get_document_dataset(vocab, X_raw_documents)
+    X, y = get_document_dataset(vocab, X_raw_documents, SEQUENCE_LENGTH)
     dataloader = get_raw_dataloader((
         X.clone(),
         y.clone()
@@ -116,7 +79,7 @@ def train_loop(vocab, model, X_raw_documents):
                     y_axes_text="accuracy",
                 ),
             ],
-            name=f'training_bigger_model.png'
+            name=f'training_bigger_model_lr.png'
         )
         
         torch.save({
@@ -126,7 +89,7 @@ def train_loop(vocab, model, X_raw_documents):
 
 def train_model(vocab, X):
     assert vocab is not None
-    model = get_cached_model(vocab)
+    model = get_cached_model(vocab, CACHE_FILE)
     model = train_loop(vocab, model, X)
     return model
 
@@ -145,13 +108,19 @@ class EmbeddingWrapperBigger:
     def __init__(self, trained=True) -> None:
         X, _ = get_dataset()
         self.vocab = create_vocab_dataset(X)
-        if trained == False:
-            self.model = RandomModel()
-        else:
-            self.model = get_cached_model(self.vocab).eval()
+        self.trained = trained
+        self.model = None
+        self.cache_file = CACHE_FILE
+
+    def load(self, new_cache_file):
+        self.cache_file = new_cache_file
 
     # pre trained
     def train(self, X):
+        if self.trained == False:
+            self.model = RandomModel()
+        else:
+            self.model = get_cached_model(self.vocab, cache_file=self.cache_file).eval()
         output = []
         for i in tqdm.tqdm(X):
             out = get_embed(self.model, self.vocab, i)

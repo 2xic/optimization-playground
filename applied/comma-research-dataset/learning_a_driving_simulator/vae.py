@@ -1,9 +1,6 @@
+import torch
 import torch.nn as nn
 from optimization_playground_shared.models.BasicConvModel import get_output_shape
-import torch
-
-import torch.nn as nn
-
 
 class Reshape(nn.Module):
     def __init__(self, *args):

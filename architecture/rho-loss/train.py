@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch
 from optimization_playground_shared.dataloaders.Mnist import get_dataloader_validation
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
+from optimization_playground_shared.training_loops.TrainingLoopPlot import TrainingLoopPlot
 import torch.optim as optim
 import random
 import tqdm
@@ -104,7 +105,9 @@ for _  in tqdm.tqdm(range(100)):
 
 
 print("RHO")
-print(TrainingLoop(big_model, big_model_optimizer).eval(test))
+accuracy_eval = TrainingLoop(big_model, big_model_optimizer).eval(test).item()
+print(f"\t{accuracy_eval}")
 print("NO RHO")
-print(TrainingLoop(big_model_no_rho, big_model_optimizer_no_rho).eval(test))
+accuracy_eval = TrainingLoop(big_model_no_rho, big_model_optimizer_no_rho).eval(test).item()
+print(f"\t{accuracy_eval}")
 

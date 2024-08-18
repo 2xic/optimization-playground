@@ -9,7 +9,7 @@ class TrainingLoop:
         self.loss = loss
         self.epoch = 1
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
-        print(f"Using {self.device} for training")
+        print(f"Using {self.device} for inference")
         self.iterator_loop = lambda x, _train: x
 
     def use_tqdm(self):

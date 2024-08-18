@@ -12,18 +12,18 @@ from torch_gpt_like_model import EmbeddingWrapper
 from torch_contrastive_model import ContrastiveEmbeddingWrapper
 from torch_gpt_like_model_bigger import EmbeddingWrapperBigger
 from xgboost import XGBRegressor
-import json
+from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_classes
 
 def evaluation():
     X, y = get_dataset()
-    print("Dataset fetched")
-
+    X, y = balance_classes(X, y)
     X_train_original, X_test_original, y_train_original, y_test_original = train_test_split(
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
         "torch_next_token_bigger": [
             EmbeddingWrapperBigger(),
+            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
         ],
         "torch_contrastive": [
             ContrastiveEmbeddingWrapper(),
@@ -40,9 +40,7 @@ def evaluation():
             ),
         ],
         "intfloat":[
-            HuggingFaceWrapper(
-                "intfloat/multilingual-e5-large"
-            ),
+            HuggingFaceWrapper("intfloat/multilingual-e5-large"),
         ],
         "tf_idf": [
             TfIdfWrapper(max_features=75),
@@ -68,7 +66,7 @@ def evaluation():
     for base_config_name in model_pipeline_configs:
         best_local_config_score = 0
         best_local_config_string = None
-        for embedding in model_pipeline_configs[base_config_name]:
+        for index, embedding in enumerate(model_pipeline_configs[base_config_name]):
             (X_train, X_test, y_train, y_test) = Pipeline().transform(
                 X_train_original, X_test_original, y_train_original, y_test_original, embedding
             )
@@ -91,6 +89,10 @@ def evaluation():
                 if new_score > best_local_config_score:
                     best_local_config_score = new_score
                     best_local_config_string = config_name
+            # Clear the memory bag.
+            model_pipeline_configs[base_config_name][index] = None
+        # clear the model to free up memory.
+        model_pipeline_configs[base_config_name] = []
         results[best_local_config_string] = best_local_config_score
 
     results = {
