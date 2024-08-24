@@ -114,13 +114,18 @@ class EmbeddingWrapperBigger:
 
     def load(self, new_cache_file):
         self.cache_file = new_cache_file
+        return self
 
-    # pre trained
-    def train(self, X):
+    def _load(self):
         if self.trained == False:
             self.model = RandomModel()
         else:
             self.model = get_cached_model(self.vocab, cache_file=self.cache_file).eval()
+
+    # pre trained
+    def train(self, X):
+        if self.model is None:
+            self._load()
         output = []
         for i in tqdm.tqdm(X):
             out = get_embed(self.model, self.vocab, i)
@@ -128,6 +133,8 @@ class EmbeddingWrapperBigger:
         return output
 
     def transforms(self, X):
+        if self.model is None:
+            self._load()
         output = []
         for i in tqdm.tqdm(X):
             out = get_embed(self.model, self.vocab, i)

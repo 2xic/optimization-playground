@@ -1,13 +1,7 @@
 import os
-from get_tokenized_shellcode import get_dataloader
-from models.TransformerEncoder import TransformerEncoderModel
-import torch
-from sklearn.manifold import TSNE
 from flask import Flask, render_template
 from flask import Flask
 import json
-from eval import get_2d_embeddings
-import sys
 import argparse
 
 

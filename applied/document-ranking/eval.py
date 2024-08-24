@@ -17,13 +17,19 @@ from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_
 def evaluation():
     X, y = get_dataset()
     X, y = balance_classes(X, y)
+    X = [str(i) for i in X]
+    assert type(X[0]) == str, type(X[0])
     X_train_original, X_test_original, y_train_original, y_test_original = train_test_split(
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
+        "BM25": [
+            BM25(),
+        ],
         "torch_next_token_bigger": [
             EmbeddingWrapperBigger(),
-            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
+#            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
+            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
         ],
         "torch_contrastive": [
             ContrastiveEmbeddingWrapper(),
@@ -33,6 +39,7 @@ def evaluation():
         ],
         "torch_next_token": [
             EmbeddingWrapper(),
+            EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
         ],
         "mixedbread-ai":[
             HuggingFaceWrapper(
@@ -54,12 +61,6 @@ def evaluation():
         ],
         "voyage": [
             ClaudeWrapper(),
-        ],
-        "hf-MiniLM": [
-            HuggingFaceWrapper(),
-        ],
-        "BM25": [
-            BM25(),
         ],
     }
     results = {}

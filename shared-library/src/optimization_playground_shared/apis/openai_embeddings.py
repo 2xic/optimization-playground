@@ -62,3 +62,6 @@ class OpenAiEmbeddings:
             print(error)
             return error
         return np.asarray(response["data"][0]["embedding"]).astype(np.float32)
+
+    def name(self):
+        return self.model

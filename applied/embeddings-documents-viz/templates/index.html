@@ -1,0 +1,184 @@
+<html>
+
+<head>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+
+<body class="body">
+    <div class="tab">
+    </div>
+</body>
+
+
+<style>
+    #container {
+        display: flex;
+        height: 100%;
+    }
+
+    #mynetwork {
+        width: 50%;
+        height: 100%;
+        border: 1px solid lightgray;
+    }
+
+    #code {
+        width: 50%;
+        height: 100%;
+        border: 1px solid lightgray;
+        overflow: scroll;
+    }
+
+    body {
+        font-family: Arial;
+    }
+</style>
+
+<script>
+    const color = [
+        "lime",
+        "blue",
+        "red",
+        "purple",
+        "yellow"
+    ]
+    var model_data;
+    (async () => {
+        model_data = await fetch('/data').then((a) => {
+            return a.json()
+        });
+
+        const container = document.createElement("div");
+        container.id = "container";
+
+        const code = document.createElement("div");
+        code.id = "code";
+
+        const metadata_div = document.createElement("div");
+        metadata_div.id = "metadata";
+
+        const header = document.createElement("h1");
+        header.innerText = "Metadata"
+
+        const headerLabel = document.createElement("h4");
+        headerLabel.innerText = "(click a node to see)"
+
+        /*
+            Checkboxes ... 
+        */
+        const modelsHeader = document.createElement("h1");
+        modelsHeader.innerText = "Models"
+        code.append(modelsHeader);
+
+        Object.keys(model_data).forEach((item, index) => {
+            const checkBoxDiv = document.createElement("div");
+            const checkBox = document.createElement("input");
+            checkBox.type = "checkbox";
+            checkBox.checked = true;
+            checkBox.id = item;
+            checkBox.onclick = () => {
+                loadviz();
+            }
+
+            const label = document.createElement("label");
+            label.innerText = item;
+            label.style.color = color[index]
+
+            checkBoxDiv.append(checkBox)
+            checkBoxDiv.append(label)
+            code.append(checkBoxDiv);
+        });
+
+        code.append(header)
+        code.append(headerLabel)
+        code.appendChild(metadata_div);
+
+        const network = document.createElement("div");
+        network.id = "network";
+
+        container.appendChild(network);
+        container.appendChild(code);
+
+        const tabContent = document.createElement("div");
+        tabContent.appendChild(container)
+        document.getElementsByTagName("body")[0].appendChild(tabContent)
+
+        loadviz();
+    })()
+
+    // List of model names
+    function loadviz() {
+        const checkedModels = [
+            ...document.getElementsByTagName("input"),
+        ].map((item) => {
+            return [item.id, item.checked]
+        });
+
+        let id = 0;
+        var container = document.getElementById("network");
+        var nodes = new vis.DataSet({});
+        const documentId2NodeIds = {};
+        let modelIndex = 0;
+        for (const [modelId, isChecked] of checkedModels) {
+            if (isChecked) {
+                const modelData = model_data[modelId];
+                Object.keys(modelData).map((key) => {
+                    console.log(modelData[key])
+                    if (!documentId2NodeIds[key]) {
+                        documentId2NodeIds[key] = []
+                    }
+                    const entry = {
+                        id: id++,
+                        x: modelData[key]["point"]["x"],
+                        y: modelData[key]["point"]["y"],
+                        fixed: true,
+                        custom_id: key,
+                        url: modelData[key]["url"],
+                        color: color[modelIndex],
+                        shape: "dot",
+                        size: 20,
+                    };
+                    documentId2NodeIds[key].push(entry)
+                    nodes.add([entry])
+                    return entry;
+                })
+            }
+            modelIndex++;
+        }
+
+        var data = {
+            nodes,
+        };
+        var options = {};
+        var network = new vis.Network(container, data, options);
+
+        let previousClickedNode = undefined;
+
+        network.on('click', async function (properties) {
+            var ids = properties.nodes;
+            var clickedNodes = nodes.get(ids);
+            // console.log('clicked nodes:', clickedNodes);
+
+            //   clickedNodes[0].color = "black";
+
+            document.getElementById("metadata").innerText = clickedNodes[0]["url"];
+            // Restore the node
+            if (previousClickedNode) {
+                for (const i of previousClickedNode) {
+                    console.log(i)
+                    nodes.update({ ...i });
+                }
+            }
+            /*
+                One other thing is that on each click I want to see the location of the other nodes also.
+            */
+            previousClickedNode = documentId2NodeIds[clickedNodes[0].custom_id];
+            for (const i of documentId2NodeIds[clickedNodes[0].custom_id]) {
+                nodes.update({ ...i, id: i.id, size: 50 });
+            }
+        });
+    }
+</script>
+
+</html>

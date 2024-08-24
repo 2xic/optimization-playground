@@ -53,11 +53,11 @@ class TinyModel(nn.Module):
         return prediction.argmax(dim=1)
     
     def embeddings(self, X):
-        values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_size))
-        for x in X:
-            x = x.reshape((1, ) + X.shape[1:])
-            assert len(X.shape) == 2
-            with torch.no_grad():
+        with torch.no_grad():
+            values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_size))
+            for x in X:
+                x = x.reshape((1, ) + X.shape[1:])
+                assert len(X.shape) == 2
                 values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
         return values
 
@@ -72,11 +72,11 @@ def get_model(vocab):
     model = TinyModel(config)
     return model
 
-def get_cached_model(vocab):
+def get_cached_model(vocab, cache_file):
     vocab.lock()
     model = get_model(vocab)
-    if os.path.isfile(CACHE_FILE):
-        checkpoint = torch.load(CACHE_FILE, map_location="cpu")
+    if os.path.isfile(cache_file):
+        checkpoint = torch.load(cache_file, map_location="cpu")
         model.load_state_dict(checkpoint['model'])
     return model
 
@@ -100,7 +100,7 @@ def train_loop(vocab, model, X_raw_documents):
 
 def train_model(vocab, X):
     assert vocab is not None
-    model = get_cached_model(vocab)
+    model = get_cached_model(vocab, CACHE_FILE)
     model = train_loop(vocab, model, X)
     return model
 
@@ -121,13 +121,18 @@ class EmbeddingWrapper:
         self.vocab = create_vocab_dataset(X)
         self.trained = trained
         self.model = None
+        self.cache_file = CACHE_FILE
 
+    def load(self, new_cache_file):
+        self.cache_file = new_cache_file
+        return self
+    
     # pre trained
     def train(self, X):
         if self.trained == False:
             self.model = RandomModel()
         else:
-            self.model = get_cached_model(self.vocab).eval()
+            self.model = get_cached_model(self.vocab, self.cache_file).eval()
 
         output = []
         for i in tqdm.tqdm(X):

@@ -763,7 +763,12 @@ They have a some good subsection under section 3 on hardware failures and things
 - They do "4D parallelism" 
 - They use `TORCH_NCCL_AVOID_RECORD_STREAMS` to reduce memory
   - They forked the NVIDIA NCCL library also to make things more efficent
-  - 
+
+[Bringing Llama 3 to life](https://engineering.fb.com/2024/08/21/production-engineering/bringing-llama-3-to-life/) 
+- they built two clusters one with RoCE and one with Infiniband to understand the tradeoffs (`RoCE` was used for the LLama models). 
+- [MAST](https://www.usenix.org/system/files/osdi24-choudhury.pdf)
+- They wrote various debug visluaizations to find issues in the clusters.
+
 
 ## [Scaling and evaluating sparse autoencoders](https://arxiv.org/pdf/2406.04093)
 [Blog post](https://openai.com/index/extracting-concepts-from-gpt-4/)
