@@ -1,0 +1,88 @@
+<!--
+    Show to links with some metadata 
+-->
+<style>
+    .flex-container {
+        display: flex;
+        background-color: DodgerBlue;
+        margin: 10px;
+    }
+
+    .flex-container>div {
+        background-color: #f1f1f1;
+        margin: 10px;
+        padding: 20px;
+    }
+
+    .candidate {
+        max-width: 50%;
+        width: 50%;
+    }
+</style>
+
+<script>
+    async function submitWinner(winner_id, looser_id){
+        const results = await fetch('/submit_results', {
+            method: "POST",
+            body: JSON.stringify({
+                // Submit it as a 
+                "results": {
+                    "winner_id": winner_id,
+                    "looser_id": looser_id
+                }
+            }),
+            headers: {
+                "content-type":"application/json"
+            }
+        }).then(async (a) => {
+            const output = await a.json()
+            if (output["status"] == "OK"){
+                window.location.reload();
+            } else {
+                alert("Bad status ...")
+            }
+        });
+    }
+
+    function winnerCandidate1() {
+        submitWinner(
+            {{ candidate_1.id }},
+            {{ candidate_2.id }},
+        )
+    }
+
+    function winnerCandidate2() {
+        submitWinner(
+            {{ candidate_2.id }},
+            {{ candidate_1.id }},
+        )
+    }
+</script>
+
+<html>
+
+<body>
+    <div class="flex-container">
+        <div class="candidate">
+            <h4>{{ candidate_1.title }}</h4>
+            <a href="{{ candidate_1.url }}">{{ candidate_1.url }}</a>
+            <p>
+                {{ candidate_1.description }}
+            </p>
+
+            <button onclick="winnerCandidate1()">Winner candidate 1</button>
+        </div>
+
+        <div class="candidate">
+            <h4>{{ candidate_2.title }}</h4>
+            <a href="{{ candidate_2.url }}">{{ candidate_2.url }}</a>
+            <p>
+                {{ candidate_2.description }}
+            </p>
+
+            <button onclick="winnerCandidate2()">Winner candidate 2</button>
+        </div>
+    </div>
+</body>
+
+</html>
