@@ -5,9 +5,8 @@ https://netman.aiops.org/~peidan/ANM2021/2.MachineLearningBasics/LectureCoverage
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset_creator.dataloader import DocumentListDataset
+from dataset_creator_pairwise.dataloader import DocumentListDataset
 from torch.utils.data import DataLoader
-from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
 

@@ -5,7 +5,7 @@ https://embracingtherandom.com/machine-learning/tensorflow/ranking/deep-learning
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset_creator_pairwise.dataloader import DocumentListDataset
+from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
@@ -21,29 +21,36 @@ class Model(nn.Module):
             nn.Sigmoid(),
             nn.Linear(1024, 512),
             nn.Sigmoid(),
-        ])
-        self.output_layers = nn.Sequential(*[
             nn.Linear(512, 256),
-            nn.Linear(256, 2),
-            nn.Softmax(),
+            nn.Sigmoid(),
         ])
+        self.output_layers = nn.Sequential(
+            nn.Linear(256, 128),
+            nn.Sigmoid(),
+            nn.Linear(128, 5),
+            nn.Softmax(),
+        )
 
-    def forward(self, item_1, item_2):
-        delta = self.base_layers(item_1) - self.base_layers(item_2)
+    def forward(self, item_1, item_2, item_3, item_4, item_5):
+        delta = self.base_layers(item_1) +\
+                self.base_layers(item_2) +\
+                self.base_layers(item_3) +\
+                self.base_layers(item_4) +\
+                self.base_layers(item_5)
         return self.output_layers(delta)
 
-    def label(self, item_1, item_2):
-        return (self.forward(item_1, item_2) >= torch.tensor(0.5)).long()
+    def label(self, item_1, item_2, item_3, item_4, item_5):
+        return (self.forward(item_1, item_2, item_3, item_4, item_5) >= torch.tensor(0.5)).long()
 
 
 if __name__ == "__main__":
     batch_size = 32
     model = Model(embeddings_size=1536)
     optimizer = torch.optim.Adam(model.parameters())
-    train_dataset = DocumentListDataset(train=True)
+    train_dataset = DocumentRankDataset(train=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    test_dataset = DocumentListDataset(train=False)
+    test_dataset = DocumentRankDataset(train=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     epoch_accuracy = []
@@ -53,17 +60,17 @@ if __name__ == "__main__":
         sum_accuracy = torch.tensor(0.0)
         sum_loss = torch.tensor(0.0)
         count = torch.tensor(0.0)
-        for (x, y, label) in train_loader:
-            predicted = model(x, y)
+        for (item_1, item_2, item_3, item_4, item_5, label) in train_loader:
+            predicted = model(item_1, item_2, item_3, item_4, item_5)
             model.zero_grad()
-       #     print((predicted, label))
+
             loss = nn.KLDivLoss()(predicted, label)   
             loss.backward()
             optimizer.step()
             
-            pseudo_label = torch.argmax(model.label(x, y), dim=0)
+            pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=0)
             label = torch.argmax(label, dim=0)
-            # accuracy = (pseudo_label == label).long().sum() / label.shape[0]  * 100
+
             sum_loss += loss
             sum_accuracy += (pseudo_label == label).long().sum()
             count += label.shape[0]
@@ -74,8 +81,8 @@ if __name__ == "__main__":
         with torch.no_grad():
             sum_accuracy = torch.tensor(0.0)
             count = torch.tensor(0.0)
-            for (x, y, label) in test_loader:
-                pseudo_label = torch.argmax(model.label(x, y), dim=0)
+            for (item_1, item_2, item_3, item_4, item_5, label) in train_loader:
+                pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=0)
                 label = torch.argmax(label, dim=0)
 
                 sum_accuracy += (pseudo_label == label).long().sum()
@@ -112,5 +119,5 @@ if __name__ == "__main__":
                 y_axes_text="accuracy",
             ),
         ],
-        name=f'training_listnet.png'
+        name=f'training_listnet_list.png'
     )

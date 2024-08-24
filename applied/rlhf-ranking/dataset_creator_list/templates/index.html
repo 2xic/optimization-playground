@@ -1,0 +1,121 @@
+<!--
+    Show to links with some metadata 
+-->
+<style>
+    .flex-container {
+        display: flex;
+        flex-direction: column;
+        background-color: DodgerBlue;
+        margin: 10px;
+    }
+
+    .flex-container>div {
+        background-color: #f1f1f1;
+        margin: 10px;
+        padding: 20px;
+    }
+
+    .candidate {
+        display: flex;
+        flex-direction: row;
+    }
+
+    .score {
+        display: flex;
+        flex-direction: column;
+    }
+</style>
+
+<script>
+    function up(id) {
+        const element = document.getElementById(id.toString());
+        if (element.previousElementSibling) {
+            const previousElement = element.previousElementSibling;
+            if (previousElement) {
+                element.parentNode.insertBefore(element, previousElement);
+                check();
+            }
+        }
+    }
+
+    function down(id) {
+        const element = document.getElementById(id.toString());
+        if (element.nextElementSibling) {
+            const previousElement = element.nextElementSibling;
+            if (previousElement) {
+                element.parentNode.insertBefore(previousElement, element);
+                check();
+            }
+        }
+    }
+
+    function getList(){
+        const parent = document.getElementsByClassName("flex-container")[0];
+        const children = parent.children;
+        return children;
+    }
+
+    function check(){
+        const children = getList();
+
+        for(let i = 0; i < children.length; i++){
+            const theId = children[i].id
+            document.getElementById("up_" + theId).disabled = i == 0;
+            document.getElementById("down_" + theId).disabled = (i + 1) == children.length; 
+        }
+    }
+
+    async function submit() {
+        const order = getList();
+        const ids = [];
+        for(const item of order){
+            ids.push(item.id)
+        }
+        const results = await fetch('/submit_results', {
+            method: "POST",
+            body: JSON.stringify({
+                "results": ids,
+            }),
+            headers: {
+                "content-type": "application/json"
+            }
+        }).then(async (a) => {
+            const output = await a.json()
+            if (output["status"] == "OK") {
+                window.location.reload();
+            } else {
+                alert("Bad status ...")
+            }
+        });
+    }
+
+    window.onload = () => {
+        check();
+    }
+</script>
+
+<html>
+
+<body>
+    <div class="flex-container">
+        {% for entry in candidates %}
+        <div class="candidate" id="{{ entry.id }}">
+            <div class="score">
+                <button onclick="up({{ entry.id }})" id="up_{{ entry.id }}">up</button>
+                <button onclick="down({{ entry.id }})" id="down_{{ entry.id }}">down</button>
+            </div>
+            <div>
+                <h4>{{ entry.title }}</h4>
+                <a href="{{ entry.url }}">{{ entry.url }}</a>
+                <p>
+                    {{ entry.description }}
+                </p>
+            </div>
+        </div>
+        {% endfor %}
+
+    </div>
+    <button onclick="submit()">Submit</button>
+</body>
+
+</html>
