@@ -28,7 +28,7 @@ class Model(nn.Module):
             nn.Linear(256, 128),
             nn.Sigmoid(),
             nn.Linear(128, 5),
-            nn.Softmax(),
+            nn.Softmax(dim=1),
         )
 
     def forward(self, item_1, item_2, item_3, item_4, item_5):
@@ -64,7 +64,7 @@ if __name__ == "__main__":
             predicted = model(item_1, item_2, item_3, item_4, item_5)
             model.zero_grad()
 
-            loss = nn.KLDivLoss()(predicted, label)   
+            loss = nn.KLDivLoss(reduction="batchmean")(predicted, label)   
             loss.backward()
             optimizer.step()
             

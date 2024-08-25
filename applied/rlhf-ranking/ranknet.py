@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset_creator_pairwise.dataloader import DocumentRankDataset
+from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
@@ -33,10 +33,10 @@ if __name__ == "__main__":
     batch_size = 32
     model = Model(embeddings_size=1536)
     optimizer = torch.optim.Adam(model.parameters())
-    train_dataset = DocumentRankDataset(train=True)
+    train_dataset = DocumentRankDataset(train=True, dataset_format="binary")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    test_dataset = DocumentRankDataset(train=False)
+    test_dataset = DocumentRankDataset(train=False, dataset_format="binary")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     epoch_accuracy = []

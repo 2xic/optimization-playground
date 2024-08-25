@@ -5,7 +5,7 @@ https://netman.aiops.org/~peidan/ANM2021/2.MachineLearningBasics/LectureCoverage
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset_creator_pairwise.dataloader import DocumentListDataset
+from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
@@ -22,7 +22,7 @@ class Model(nn.Module):
             nn.Linear(1024, 512),
             nn.Sigmoid(),
             nn.Linear(512, 2),
-            nn.Softmax(),
+            nn.Softmax(dim=1),
         ])
 
     def forward(self, item_1, item_2):
@@ -34,7 +34,7 @@ class Model(nn.Module):
 
 
 def quality_component(expected, predicted, Rqi):
-    return torch.nn.KLDivLoss()(expected, predicted) / Rqi
+    return torch.nn.KLDivLoss(reduction="batchmean")(expected, predicted) / Rqi
 
 def cost_component(Rqi):
     return Rqi
@@ -53,10 +53,10 @@ if __name__ == "__main__":
     batch_size = 32
     model = Model(embeddings_size=1536)
     optimizer = torch.optim.Adam(model.parameters())
-    train_dataset = DocumentListDataset(train=True)
+    train_dataset = DocumentRankDataset(train=True, dataset_format="binary")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    test_dataset = DocumentListDataset(train=False)
+    test_dataset = DocumentRankDataset(train=False, dataset_format="binary")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     epoch_accuracy = []

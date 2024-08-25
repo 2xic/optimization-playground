@@ -4,8 +4,7 @@ https://embracingtherandom.com/machine-learning/tensorflow/ranking/deep-learning
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from dataset_creator_pairwise.dataloader import DocumentListDataset
+from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
@@ -25,7 +24,7 @@ class Model(nn.Module):
         self.output_layers = nn.Sequential(*[
             nn.Linear(512, 256),
             nn.Linear(256, 2),
-            nn.Softmax(),
+            nn.Softmax(dim=1),
         ])
 
     def forward(self, item_1, item_2):
@@ -40,10 +39,10 @@ if __name__ == "__main__":
     batch_size = 32
     model = Model(embeddings_size=1536)
     optimizer = torch.optim.Adam(model.parameters())
-    train_dataset = DocumentListDataset(train=True)
+    train_dataset = DocumentRankDataset(train=True, dataset_format="softmax", row_size=2)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    test_dataset = DocumentListDataset(train=False)
+    test_dataset = DocumentRankDataset(train=False, dataset_format="softmax", row_size=2)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     epoch_accuracy = []
@@ -57,7 +56,7 @@ if __name__ == "__main__":
             predicted = model(x, y)
             model.zero_grad()
        #     print((predicted, label))
-            loss = nn.KLDivLoss()(predicted, label)   
+            loss = nn.KLDivLoss(reduction="batchmean")(predicted, label)   
             loss.backward()
             optimizer.step()
             
