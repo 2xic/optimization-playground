@@ -16,27 +16,30 @@ class Model(nn.Module):
 
         self.base_layers = nn.Sequential(*[
             nn.Linear(embeddings_size, 2048),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(2048, 1024),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(1024, 512),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(512, 256),
-            nn.Sigmoid(),
+            nn.ReLU(),
         ])
+        n = 5
         self.output_layers = nn.Sequential(
-            nn.Linear(256, 128),
+            nn.Linear(256 * n, 128),
             nn.Sigmoid(),
-            nn.Linear(128, 5),
+            nn.Linear(128, n),
             nn.Softmax(dim=1),
         )
 
     def forward(self, item_1, item_2, item_3, item_4, item_5):
-        delta = self.base_layers(item_1) +\
-                self.base_layers(item_2) +\
-                self.base_layers(item_3) +\
-                self.base_layers(item_4) +\
+        delta = torch.concat((
+                self.base_layers(item_1),
+                self.base_layers(item_2),
+                self.base_layers(item_3),
+                self.base_layers(item_4),
                 self.base_layers(item_5)
+        ), dim=1)
         return self.output_layers(delta)
 
     def label(self, item_1, item_2, item_3, item_4, item_5):
@@ -56,7 +59,8 @@ if __name__ == "__main__":
     epoch_accuracy = []
     epoch_loss = []
     epoch_test_accuracy = []
-    for _ in tqdm(range(5_00)):
+    iterator = tqdm(range(1_00))
+    for _ in iterator:
         sum_accuracy = torch.tensor(0.0)
         sum_loss = torch.tensor(0.0)
         count = torch.tensor(0.0)
@@ -67,13 +71,16 @@ if __name__ == "__main__":
             loss = nn.KLDivLoss(reduction="batchmean")(predicted, label)   
             loss.backward()
             optimizer.step()
+
+            # assert not torch.all(torch.argmax(label, dim=1) == 0)
             
-            pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=0)
-            label = torch.argmax(label, dim=0)
+            pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=1)
+            label = torch.argmax(label, dim=1)
 
             sum_loss += loss
             sum_accuracy += (pseudo_label == label).long().sum()
             count += label.shape[0]
+
         epoch_loss.append(sum_loss.item())
 #        epoch_accuracy.append(sum_accuracy / count * 100)
         epoch_accuracy.append(sum_accuracy / count * 100)
@@ -81,14 +88,16 @@ if __name__ == "__main__":
         with torch.no_grad():
             sum_accuracy = torch.tensor(0.0)
             count = torch.tensor(0.0)
-            for (item_1, item_2, item_3, item_4, item_5, label) in train_loader:
-                pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=0)
-                label = torch.argmax(label, dim=0)
+            for (item_1, item_2, item_3, item_4, item_5, label) in test_loader:
+                pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=1)
+                label = torch.argmax(label, dim=1)
 
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
 
             epoch_test_accuracy.append(sum_accuracy / count * 100)
+
+        iterator.set_description(f"Training acc: {epoch_accuracy[-1]}, testing acc: {epoch_test_accuracy[-1]}, loss {epoch_loss[-1]}")
 
 
     plot = Plot()

@@ -48,7 +48,8 @@ if __name__ == "__main__":
     epoch_accuracy = []
     epoch_loss = []
     epoch_test_accuracy = []
-    for _ in tqdm(range(5_00)):
+    iterator = tqdm(range(1_00))
+    for _ in iterator:
         sum_accuracy = torch.tensor(0.0)
         sum_loss = torch.tensor(0.0)
         count = torch.tensor(0.0)
@@ -60,8 +61,10 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
             
-            pseudo_label = torch.argmax(model.label(x, y), dim=0)
-            label = torch.argmax(label, dim=0)
+            pseudo_label = torch.argmax(model.label(x, y), dim=1)
+            label = torch.argmax(label, dim=1)
+            assert pseudo_label.shape[0] == x.shape[0]
+            assert label.shape[0] == x.shape[0]
             # accuracy = (pseudo_label == label).long().sum() / label.shape[0]  * 100
             sum_loss += loss
             sum_accuracy += (pseudo_label == label).long().sum()
@@ -74,14 +77,16 @@ if __name__ == "__main__":
             sum_accuracy = torch.tensor(0.0)
             count = torch.tensor(0.0)
             for (x, y, label) in test_loader:
-                pseudo_label = torch.argmax(model.label(x, y), dim=0)
-                label = torch.argmax(label, dim=0)
+                pseudo_label = torch.argmax(model.label(x, y), dim=1)
+                label = torch.argmax(label, dim=1)
+                assert pseudo_label.shape[0] == x.shape[0]
+                assert label.shape[0] == x.shape[0]
 
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
 
             epoch_test_accuracy.append(sum_accuracy / count * 100)
-
+        iterator.set_description(f"Training acc: {epoch_accuracy[-1]}, testing acc: {epoch_test_accuracy[-1]}, loss {epoch_loss[-1]}")
 
     plot = Plot()
     plot.plot_figures(

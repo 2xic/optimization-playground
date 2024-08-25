@@ -15,11 +15,12 @@ from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddin
 def get_embeddings(link_id):
     url = os.environ["host_link"]
     # Find the content si.
-    full_link = url + f"/text/{link_id}"
+    full_link = url + f"/text/{link_id}?refetch=true"
     results = requests.get(full_link, cookies={
         "credentials": os.environ["auth_header"]
     }).text
     if len(results) < 500:
+        print(f"Skipping {link_id}")
         return None
     return results
 

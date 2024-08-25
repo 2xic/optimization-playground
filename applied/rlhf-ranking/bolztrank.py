@@ -9,6 +9,7 @@ from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
+import torch
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -16,25 +17,34 @@ class Model(nn.Module):
 
         self.base_layers = nn.Sequential(*[
             nn.Linear(embeddings_size, 2048),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(2048, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 32),
+            nn.ReLU(),
+        ])
+        # we have two items
+        n = 2
+        self.output = nn.Sequential(*[
+            nn.Linear(32 * n, 1),
             nn.Sigmoid(),
-            nn.Linear(1024, 512),
-            nn.Sigmoid(),
-            nn.Linear(512, 2),
-            nn.Softmax(dim=1),
         ])
 
     def forward(self, item_1, item_2):
-        delta = self.base_layers(item_1) - self.base_layers(item_2)
-        return F.sigmoid(delta)
+        assert not torch.all(item_1 == item_2)
+        delta = torch.concat((
+            self.base_layers(item_1),
+            self.base_layers(item_2),
+            ), dim=1
+        )
+        return self.output(delta)
 
     def label(self, item_1, item_2):
-        return (self.forward(item_1, item_2) >= torch.tensor(0.5)).long()
+        return ((self.forward(item_1, item_2)) > 0.5).long()
 
 
 def quality_component(expected, predicted, Rqi):
-    return torch.nn.KLDivLoss(reduction="batchmean")(expected, predicted) / Rqi
+    return torch.nn.BCELoss()(expected, predicted) / Rqi
 
 def cost_component(Rqi):
     return Rqi
@@ -62,23 +72,24 @@ if __name__ == "__main__":
     epoch_accuracy = []
     epoch_loss = []
     epoch_test_accuracy = []
-    for _ in tqdm(range(5_00)):
+    for _ in tqdm(range(1_00)):
         sum_accuracy = torch.tensor(0.0)
         sum_loss = torch.tensor(0.0)
         count = torch.tensor(0.0)
         for (x, y, label) in train_loader:
             predicted = model(x, y)
             model.zero_grad()
-       #     print((predicted, label))
             loss = boltz_rank_optimization(predicted, label)   
             loss.backward()
             optimizer.step()
-            
-            pseudo_label = torch.argmax(model.label(x, y), dim=0)
-            label = torch.argmax(label, dim=0)
-            # accuracy = (pseudo_label == label).long().sum() / label.shape[0]  * 100
+
+            pseudo_label = model.label(x, y)
+            assert pseudo_label.shape[0] == x.shape[0]
+            assert label.shape[0] == x.shape[0]
+
             sum_loss += loss
             sum_accuracy += (pseudo_label == label).long().sum()
+
             count += label.shape[0]
         epoch_loss.append(sum_loss.item())
 #        epoch_accuracy.append(sum_accuracy / count * 100)
@@ -88,8 +99,9 @@ if __name__ == "__main__":
             sum_accuracy = torch.tensor(0.0)
             count = torch.tensor(0.0)
             for (x, y, label) in test_loader:
-                pseudo_label = torch.argmax(model.label(x, y), dim=0)
-                label = torch.argmax(label, dim=0)
+                pseudo_label = model.label(x, y)
+                assert pseudo_label.shape[0] == x.shape[0]
+                assert label.shape[0] == x.shape[0]
 
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
