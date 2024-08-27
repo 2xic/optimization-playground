@@ -70,4 +70,8 @@ They made some data observations which was kinda intresting
 - Open source
 - Very impressive model :') 
 
+## [Operator Fusion in XLA: Analysis and Evaluation](https://danielsnider.ca/papers/Operator_Fusion_in_XLA_Analysis_and_Evaluation.pdf)
+- todo
 
+## [On Optimizing Machine Learning Workloads via Kernel Fusion](https://mboehm7.github.io/resources/ppopp2015.pdf)
+- todo

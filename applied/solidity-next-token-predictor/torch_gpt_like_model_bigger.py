@@ -4,6 +4,7 @@ import torch.optim as optim
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
 from optimization_playground_shared.nlp.SimpleVocab import splitter
@@ -14,7 +15,7 @@ from optimization_playground_shared.utils.General import save_model_atomic, load
 
 os.makedirs(".cache", exist_ok=True)
 
-BATCH_SIZE = 64
+BATCH_SIZE = 32
 SEQUENCE_LENGTH = 256
 CACHE_FILE = ".model_state.pkt"
 
@@ -56,6 +57,7 @@ def get_document_dataset(vocab: SimpleVocab, documents):
     entries_index = 0
     for document in documents:
         X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index)
+  #  print(torch.bincount(y).tolist())#, y.unique(sorted=True).float()))
     assert not torch.all(X == 0), "All zeros is bad"
     assert not torch.all(y == 0), "All zeros is bad"
     return X, y
@@ -67,7 +69,7 @@ def get_model(vocab):
         dropout=0.1,
         sequence_size=SEQUENCE_LENGTH,
         padding_index=vocab.vocab.PADDING_IDX,
-        transformer_layers=2,
+        transformer_layers=6,
         attention_heads=4,
         feed_forward=128,
     )
@@ -84,41 +86,39 @@ def get_cached_model(vocab):
 
 def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
     optimizer = optim.Adam(model.parameters(), lr=13e-4)
-    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
+#    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
+    trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
+
     dataloader = ZmqDataloader()
+    iterator = iter(dataloader)
     last_save = 0
     for _ in range(1024):
-        print("Starting batch ")
-        for document in dataloader:
-            # TODO: add batch checkpoints to the training loop?
-            X, y = get_document_dataset(vocab, [document])
-            raw_dataloader = get_raw_dataloader((
-                X.clone(),
-                y.clone()
-            ),
-                batch_size=BATCH_SIZE,
-                shuffle=True,
+        X, y = get_document_dataset(vocab, [
+            next(iterator) for _ in range(10)
+        ])
+        raw_dataloader = get_raw_dataloader((
+            X.clone(),
+            y.clone()
+        ),
+            batch_size=BATCH_SIZE,
+            shuffle=True,
+        )
+        _ = trainer.use_tqdm().train(raw_dataloader)
+        print(vocab.decode(
+            model.rollout(
+                vocab.get_tensor("contract ", sequence_length=-1)[0],
+                steps=100
             )
-            _ = trainer.use_tqdm().train(raw_dataloader)
-            print(vocab.decode(
-                model.rollout(
-                    vocab.get_tensor("contract ", sequence_length=-1)[0],
-                    steps=100
-                )
-            ))
-            """
-            X, y = next(iter(raw_dataloader))
-            print(torch.argmax(model(X.to(model.device)), 1))
-            print(y)
-            """
-            if (time.time() - last_save) > 60:
-                save_model_atomic(CACHE_FILE, model)
-                last_save = time.time()
+        ))
+
+        if (time.time() - last_save) > 60:
+            save_model_atomic(CACHE_FILE, model)
+            last_save = time.time()
     return model
 
 def save_model():
     print("STARTING TO SAVE MODEL")
-    save_model_atomic(CACHE_FILE, model)
+#    save_model_atomic(CACHE_FILE, model)
     print("DONE SAVING MODEL")
 
 atexit.register(save_model)

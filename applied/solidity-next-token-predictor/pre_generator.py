@@ -8,6 +8,7 @@ import os
 import pickle
 import glob
 from optimization_playground_shared.nlp.wordpiece.bpe import BPE
+from collections import defaultdict
 
 path = "/mnt/blockstorage/smart-contract-fiesta/organized_contracts/**/main.sol"
 source = ".source_vocab_metadata"
@@ -25,8 +26,14 @@ def create_vocab_dataset() -> SimpleVocab:
         source_vocab = SimpleVocab()
         for i in glob.iglob(path, recursive=True):
             print(i)
+            distributions = defaultdict(int)
             with open(i, "r") as file:
-                source_vocab.encode(file.read())
+                content = file.read()
+                source_vocab.encode(content)
+                for i in splitter(content):
+                    distributions[i] += 1
+            print(distributions)
+
         with open(source, "wb") as file:
             pickle.dump(source_vocab, file)
         return source_vocab
@@ -53,7 +60,8 @@ def create_vocab_dataset_bpe() -> SimpleVocab:
     return bpe
 
 if __name__ == "__main__":
-#    create_vocab_dataset()
-    results = create_vocab_dataset_bpe()
+    results = create_vocab_dataset()
+#    results = create_vocab_dataset_bpe()
 #    print(results.index.word_index)
     print(results.index.tokens_index)
+

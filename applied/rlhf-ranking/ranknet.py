@@ -5,6 +5,8 @@ from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
+from typing import List
+from results import Results, Input
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -24,6 +26,7 @@ class Model(nn.Module):
             nn.Linear(256, 1),
             nn.Sigmoid(),
         ])
+        self.model_file = ".ranknet.torch"
 
     def forward(self, item_1, item_2):
         delta = torch.concat((
@@ -35,6 +38,41 @@ class Model(nn.Module):
     def label(self, item_1, item_2):
         return (self.forward(item_1, item_2) >= torch.tensor(0.5)).long()
 
+    def rollout(self, items: List[Input]) -> List[Results]:
+        score: List[Results] = []
+        for i in items:
+            score.append(Results(
+                item_id=i.item_id,
+                item_score=0,
+                item_tensor=i.item_tensor,
+            ))
+        i = 0
+        for _ in range(100):
+            for i in range(len(score) - 1):
+                with torch.no_grad():
+                    score_item_1 = self.forward(items[i].item_tensor, items[i + 1].item_tensor).item()
+                    score_item_2 = 1 - score_item_1
+                    # Update the scores
+                    score[i].item_score = score_item_1
+                    score[i + 1].item_score = score_item_2
+                    # Now I need to update everything backwards also
+                    current_limit = max(score_item_1, score_item_2)
+                    for v in score[:i]:
+                        # we need to swap items ...
+                        if (current_limit - v.item_score) > 0.01:
+                            score = sorted(score, key=lambda x: x.item_score, reverse=True)
+                            break
+        return score
+    
+    def save(self):
+        torch.save({
+            "model_state": self.state_dict(),
+        }, self.model_file)
+    
+    def load(self):
+        state = torch.load(self.model_file)
+        self.load_state_dict(state["model_state"])
+        return self
 
 if __name__ == "__main__":
     batch_size = 32

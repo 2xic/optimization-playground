@@ -10,4 +10,4 @@ if __name__ == "__main__":
         X, y = get_document_dataset(vocab, [document])
         # print(y)
         a = y.reshape((-1)).tolist()
-#        print(vocab.decode(a))
+        print(vocab.decoded_tokens(a))

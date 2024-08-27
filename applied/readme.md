@@ -24,3 +24,5 @@ Some project they mention that seem cool
 - Training a simple driving simulator (https://arxiv.org/pdf/1608.01230.pdf) with same dataset as the speed challenge 
 - Train a GAN / Autoencoder to add invisible watermarks 
   - Similar to [this](https://github.com/ShieldMnt/invisible-watermark#supported-algorithms)
+- Writing some kernel fusions.
+  - I.e some clean version of [micrograd](https://github.com/karpathy/micrograd) with optimizations and such.

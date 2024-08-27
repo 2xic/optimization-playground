@@ -5,12 +5,25 @@ def splitter(sentence):
     tokenizer = []
     token = ""
     sentence = sentence.replace("\r\n", "\n")
+    is_white_space = False
     for i in sentence:
-        if i in string.punctuation or i in string.whitespace:
+        if is_white_space and i not in string.whitespace:
+            if len(token) > 0:
+                tokenizer.append(token)
+                token = ""
+            is_white_space = False
+        
+        if i in string.punctuation:
             if len(token) > 0:
                 tokenizer.append(token)
             tokenizer.append(i)
             token = ""
+        elif i in string.whitespace and not is_white_space:
+            if len(token) > 0:
+                tokenizer.append(token)
+                token = ""
+            token += i
+            is_white_space = True
         else:
             token += i
     if len(token) > 0:
@@ -49,10 +62,13 @@ class SimpleVocab:
         return X
     
     def decode(self, tokens):
+        return "".join(self.decoded_tokens(tokens))
+
+    def decoded_tokens(self, tokens):
         X = []
         for i in tokens:
             X.append(self.vocab.index_vocab[i])
-        return "".join(X)
+        return X
 
     def get_tensor(self, sentence, sequence_length):
         if sequence_length == -1:

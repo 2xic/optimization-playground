@@ -9,6 +9,8 @@ from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
+from results import Input, Results
+from typing import List
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -31,6 +33,7 @@ class Model(nn.Module):
             nn.Linear(128, n),
             nn.Softmax(dim=1),
         )
+        self.model_file = ".listnet_list.torch"
 
     def forward(self, item_1, item_2, item_3, item_4, item_5):
         delta = torch.concat((
@@ -44,8 +47,29 @@ class Model(nn.Module):
 
     def label(self, item_1, item_2, item_3, item_4, item_5):
         return (self.forward(item_1, item_2, item_3, item_4, item_5) >= torch.tensor(0.5)).long()
+    
+    def rollout(self, items: List[Input]) -> List[Results]:
+        with torch.no_grad():
+            scores: List[Results] = []
+            results = self.forward(*list(map(lambda x: x.item_tensor, items)))[0]
+            for index, i in enumerate(items):
+                scores.append(Results(
+                    item_id=i.item_id,
+                    item_score=results[index].item(),
+                    item_tensor=i.item_tensor,
+                ))
+            return scores
 
-
+    def save(self):
+        torch.save({
+            "model_state": self.state_dict(),
+        }, self.model_file)
+    
+    def load(self):
+        state = torch.load(self.model_file)
+        self.load_state_dict(state["model_state"])
+        return self
+    
 if __name__ == "__main__":
     batch_size = 32
     model = Model(embeddings_size=1536)
@@ -130,3 +154,4 @@ if __name__ == "__main__":
         ],
         name=f'training_listnet_list.png'
     )
+    model.save()

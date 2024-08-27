@@ -53,7 +53,13 @@ def get_items_to_compare():
                 description=results[f"candidate_{n}"]["description"],
             )
         )
-    return parsed_results
+    # Use supervised models to improve speed
+    status = requests.post("http://127.0.0.1:4232/rank", json=list(map(lambda x: x.__dict__, parsed_results)))
+    assert status.status_code == 200
+    item_position = {}
+    for index, i in enumerate(status.json()):
+        item_position[i["id"]] = index    
+    return sorted(parsed_results, key=lambda x: item_position[x.id])
     
 @app.route('/submit_results', methods=["POST"])
 def submit_results():
