@@ -10,6 +10,10 @@ from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
 import torch
+from results import Results, Input
+from typing import List
+import torch
+from utils import rollout_model_binary
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -29,6 +33,7 @@ class Model(nn.Module):
             nn.Linear(32 * n, 1),
             nn.Sigmoid(),
         ])
+        self.model_file = ".boltzrank.torch"
 
     def forward(self, item_1, item_2):
         assert not torch.all(item_1 == item_2)
@@ -42,6 +47,19 @@ class Model(nn.Module):
     def label(self, item_1, item_2):
         return ((self.forward(item_1, item_2)) > 0.5).long()
 
+
+    def rollout(self, items: List[Input]) -> List[Results]:
+        return rollout_model_binary(self, items)
+    
+    def save(self):
+        torch.save({
+            "model_state": self.state_dict(),
+        }, self.model_file)
+    
+    def load(self):
+        state = torch.load(self.model_file)
+        self.load_state_dict(state["model_state"])
+        return self
 
 def quality_component(expected, predicted, Rqi):
     return torch.nn.BCELoss()(expected, predicted) / Rqi
@@ -139,3 +157,4 @@ if __name__ == "__main__":
         ],
         name=f'training_boltzrank.png'
     )
+    model.save()
