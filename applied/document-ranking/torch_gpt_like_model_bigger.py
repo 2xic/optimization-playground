@@ -25,7 +25,7 @@ def get_model(vocab):
         vocab_size=vocab.size,
         embedding_dim=8,
         dropout=0.1,
-        sequence_size=SEQUENCE_LENGTH,
+        sequence_length=SEQUENCE_LENGTH,
         padding_index=vocab.vocab.PADDING_IDX,
         transformer_layers=2,
         attention_heads=4,

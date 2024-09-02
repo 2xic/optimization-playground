@@ -27,7 +27,6 @@ Some good links
 [Scaling Kubernetes to 2,500 nodes](https://openai.com/research/scaling-kubernetes-to-2500-nodes)
 - "largest-scale workloads manage bare cloud VMs directly"
 - Kubernetes clusters are nice for quick experimentation.
-- 
 
 # [Distributed deep learning](https://id2223kth.github.io/slides/2022/12_distributed_dl.pdf)
 - Data Parallelization 
@@ -38,3 +37,7 @@ Some good links
   - Model is split over multiple devices. Which can be tricky depending on the aritechture.
 
 There is also a good blogpost by [Lilian Weng](https://lilianweng.github.io/posts/2021-09-25-train-large/) on this topic and they also posted it on the [OpenAi blog](https://openai.com/research/techniques-for-training-large-neural-networks).
+
+## [Scaling AI Infrastructure at OpenAI](https://www.youtube.com/watch?v=cK7qFZ9J6k0)
+- Talks about the Kubernetes setup
+

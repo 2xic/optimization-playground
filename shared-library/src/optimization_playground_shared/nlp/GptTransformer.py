@@ -14,7 +14,7 @@ GPT is a decoder only
 class Config:
     vocab_size: int
     embedding_dim: int
-    sequence_size: int
+    sequence_length: int
     # transformer decoder config
     transformer_layers: int
     attention_heads: int
@@ -38,14 +38,15 @@ class GptTransformerModel(nn.Module):
 
         self.output = nn.Sequential(*[
             nn.Linear(config.embedding_dim *
-                      config.sequence_size, config.vocab_size),
+                      config.sequence_length, config.vocab_size),
         ])
         self.pos_encoder = PositionalEncoding(
             config.embedding_dim,
-            config.dropout
+            config.dropout,
+            max_len=config.sequence_length,
         )
         # self.dummy_param = nn.Parameter(torch.empty(0))
-        self.sequence_size = config.sequence_size
+        self.sequence_size = config.sequence_length
         # (SEQ_LEN, BATCH_SIZE, EMBEDDING_DIM)
 
     def forward(self, X: Tensor):
@@ -53,14 +54,18 @@ class GptTransformerModel(nn.Module):
         # embedding
         source = self.embedding(X) + self.pos_encoder(X)
         # forward
+        source = source.to(next(self.transformer_decoder.parameters()).device)
         transformer_out = self.transformer_decoder(source, source)
         transformer_out = transformer_out.reshape(X.shape[0], -1)
         # Remapping into
         # (SEQ_LEN, BATCH_SIZE, VOCAB_SIZE) -> (BATCH_SIZE, VOCAB_SIZE, SEQ_LEN)
-        return self.output(transformer_out)  # .permute(0, 2, 1)
+        transformer_out = transformer_out.to(next(self.output.parameters()).device)
+        results = self.output(transformer_out)  # .permute(0, 2, 1)
+        results = results.to(X.device)
+        return results
 
     def embeddings(self, X):
-        values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_size))
+        values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_length))
         for x in X:
             x = x.reshape((1, ) + X.shape[1:])
             assert len(X.shape) == 2

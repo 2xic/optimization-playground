@@ -12,10 +12,12 @@ from pre_generator import get_cache_file
 import atexit
 import time
 from optimization_playground_shared.utils.General import save_model_atomic, load_model
+from torch.cuda.amp import autocast
 
 os.makedirs(".cache", exist_ok=True)
 
-BATCH_SIZE = 32
+BATCH_SIZE = 4096
+# Need to try to tain model with long sequence size ....
 SEQUENCE_LENGTH = 256
 CACHE_FILE = ".model_state.pkt"
 
@@ -67,11 +69,11 @@ def get_model(vocab):
         vocab_size=vocab.size,
         embedding_dim=8,
         dropout=0.1,
-        sequence_size=SEQUENCE_LENGTH,
+        sequence_length=SEQUENCE_LENGTH,
         padding_index=vocab.vocab.PADDING_IDX,
-        transformer_layers=6,
+        transformer_layers=8,
         attention_heads=4,
-        feed_forward=128,
+        feed_forward=256,
     )
     model = GptTransformerModel(config)
     return model
@@ -92,6 +94,16 @@ def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
     dataloader = ZmqDataloader()
     iterator = iter(dataloader)
     last_save = 0
+
+    print("{:.3f}MB allocated".format(torch.cuda.memory_allocated()/1024**2))
+    model.embedding.cuda(0)
+    model.pos_encoder.cuda(0)
+    model.transformer_decoder.cuda(1)
+    # Output should match device of the dataloader ... 
+    model.output.cuda(2)
+    print("{:.3f}MB allocated".format(torch.cuda.memory_allocated()/1024**2))
+    print("")
+
     for _ in range(1024):
         X, y = get_document_dataset(vocab, [
             next(iterator) for _ in range(10)
@@ -103,10 +115,24 @@ def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
             batch_size=BATCH_SIZE,
             shuffle=True,
         )
-        _ = trainer.use_tqdm().train(raw_dataloader)
+        with autocast():
+            _ = trainer.use_tqdm().train(raw_dataloader, sharding=True)
+        # Try to predict something 
         print(vocab.decode(
             model.rollout(
                 vocab.get_tensor("contract ", sequence_length=-1)[0],
+                steps=100
+            )
+        ))
+        print(vocab.decode(
+            model.rollout(
+                vocab.get_tensor("contract Uniswap {", sequence_length=-1)[0],
+                steps=100
+            )
+        ))
+        print(vocab.decode(
+            model.rollout(
+                vocab.get_tensor("uint8 ", sequence_length=-1)[0],
                 steps=100
             )
         ))

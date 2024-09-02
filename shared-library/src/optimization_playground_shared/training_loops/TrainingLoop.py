@@ -23,12 +23,13 @@ class TrainingLoop:
         with torch.no_grad():
             return self._iterate(dataloader, train=False)
 
-    def train(self, dataloader):
-        return self._iterate(dataloader, train=True)
+    def train(self, dataloader, sharding=False):
+        return self._iterate(dataloader, train=True, sharding=sharding)
 
-    def _iterate(self, dataloader, train=True):
+    def _iterate(self, dataloader, train, sharding):
         device = self.device
-        self.model.to(device)
+        if not sharding:
+            self.model.to(device)
         total_loss = torch.tensor(0.0, device=device)
         accuracy = torch.tensor(0.0, device=device)
         length = 0

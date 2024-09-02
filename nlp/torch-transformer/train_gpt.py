@@ -75,7 +75,7 @@ class Trainer(MultipleGpuTrainWrapper):
             dropout=0.1,
             feed_forward=128,
             padding_index=source_vocab.vocab.PADDING_IDX,
-            sequence_size=SEQUENCE_LENGTH
+            sequence_length=SEQUENCE_LENGTH
         )
         model = GptTransformerModel(config)
         optimizer = optim.Adam(model.parameters())

@@ -7,39 +7,48 @@ This server expects the files to already been pre-processed and the dataloader o
 import zmq
 import argparse
 import glob
+from concurrent.futures import ThreadPoolExecutor
+import queue
 
-def serve_files(args):
+DATASET_SIZE = 1_000
+
+def fetch_files(files_queue: queue.Queue):
+    global DATASET_SIZE
+    actual_size = 0
+    predicted_dataset_size = 1_000
+    is_first_round = True
+    DATASET_SIZE = min(predicted_dataset_size, args.limit) if args.limit != None else predicted_dataset_size
+    while True:
+        files = glob.iglob(args.path, recursive=True)
+        next_item = None
+        try:
+            next_item = next(files)
+        except StopIteration as e:
+            print("Stop iterator ", e)
+            files = glob.iglob(args.path, recursive=True)                
+            next_item = next(files)
+            is_first_round = False
+            DATASET_SIZE = min(actual_size, args.limit) if args.limit != None else predicted_dataset_size
+        print(next_item)
+        with open(next_item, "rb") as file:
+            files_queue.put(file.read())
+        # So we can compare it later on.
+        if is_first_round:
+            actual_size += 1
+
+def serve_files(files_queue: queue.Queue):
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://*:5555")
 
-    files = glob.iglob(args.path, recursive=True)
-    actual_size = 0
-    is_first_round = True
-    predicted_dataset_size = 1_000
-    dataset_size = min(predicted_dataset_size, args.limit) if args.limit != None else predicted_dataset_size
-
     while True:
         message = socket.recv()
         if message == b"get":
-            next_item = None
-            try:
-                next_item = next(files)
-            except StopIteration as e:
-                print("Stop iterator ", e)
-                files = glob.iglob(args.path, recursive=True)                
-                next_item = next(files)
-                is_first_round = False
-                dataset_size = min(actual_size, args.limit) if args.limit != None else predicted_dataset_size
-            print(next_item)
-            with open(next_item, "rb") as file:
-                socket.send(file.read())
-            # So we can compare it later on.
-            if is_first_round:
-                actual_size += 1
+            next_item = files_queue.get()
+            socket.send(next_item)
         elif message == b"size":
             # Do I even want to do this ? I could just return a huge item while we figure it out
-            socket.send(str(dataset_size).encode())
+            socket.send(str(DATASET_SIZE).encode())
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -47,5 +56,7 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--limit", help="Limit the dataset size", type=int, required=False)
     
     args = parser.parse_args()
-
-    serve_files(args)
+    files_queue = queue.Queue()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        executor.submit(serve_files, args=(files_queue, ))
+        executor.submit(fetch_files, args=(files_queue, ))

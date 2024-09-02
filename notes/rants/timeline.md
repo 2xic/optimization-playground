@@ -157,7 +157,9 @@ They all still have problems with their planner. Credit where credit is due - bo
 - 
 
 [We actually had "self-driving" cars in 1989](https://www.theverge.com/2016/11/27/13752344/alvinn-self-driving-car-1989-cmu-navlab). Why hasn't things gotten further ? 
-Because the algorithms lack planning.
+Because the algorithms lack planning. Apparently [Tesla](https://x.com/comma_ai/status/1820262846221242405) had over 300K of C++ code for handling city-streets. 
+
+([Gwern](https://x.com/gwern/status/1818842977701151124) had some thread on this also, somewhat related.)
 
 ### Robotics
 So we are seeing some cool stuff here

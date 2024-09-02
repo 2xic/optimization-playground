@@ -814,4 +814,19 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 - [Trained with axlearn](https://github.com/apple/axlearn) and JAX
 - Used Google TPUs
 
+### [DeepSeek-V2](https://arxiv.org/pdf/2405.04434)
+- Mixture of experts (see Figure 2)
+- "Does well on Needle in the haystack"
+- It's in the top tier compared to other models, LLama/Mixtral still beats it on a few benchmarks
+- They use GRPO for RLHF.
+
+## [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/pdf/2404.19737)
+- Instead of predicting one next token, predict multiple 
+- No extra train time or memory overhead. They have evidecne to show that there was at least a 15% improvmenet on average when training models (up to 13B parameters) with this method.  
+- This method also had a ~3x inference speed up. 
+
+## [The Unreasonable Ineffectiveness of the Deeper Layers](https://arxiv.org/pdf/2403.17887)
+- todo
+
+
 

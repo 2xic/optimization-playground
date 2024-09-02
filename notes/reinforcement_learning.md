@@ -119,3 +119,11 @@ improves performance and scalability in a variety of domains."
 - Just using diffusions did give them SOTA though on the Atari benchmark.
 - 
 
+## [Efficient World Models with Context-Aware Tokenization](https://arxiv.org/pdf/2406.19320)
+- autoencoder + transformer
+  - the z vector is conditional on the previous action and frame, instead of just the frame which simplifies the tokens needed to store a frame
+  - autoencoder builds a vocabulary of image tokens to encode each frame
+  - transformer captures the environment dynamics
+- Does imagination rollouts.
+- The eval is very good - super human and SOTA.
+
