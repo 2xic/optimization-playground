@@ -34,8 +34,41 @@
             if (previousElement) {
                 element.parentNode.insertBefore(element, previousElement);
                 check();
+                return true;
             }
         }
+    }
+
+    function isValueUpOrDown(id){
+        const referenceElement = document.getElementById(id.toString());
+        const value = parseInt(document.getElementById("score_" + id).value);
+
+        if (referenceElement.previousElementSibling) {
+            const id = referenceElement.previousElementSibling.id;
+            const prevValue = parseInt(document.getElementById("score_" + id).value);
+            console.log({
+                value,
+                prevValue,
+                id,
+            })
+            if (prevValue < parseInt(value)) {
+                return down(id);
+            }
+        } 
+
+        if (referenceElement.nextElementSibling) {
+            const id = referenceElement.nextElementSibling.id;
+            const nextValue = parseInt(document.getElementById("score_" + id).value);
+            console.log({
+                value,
+                nextValue,
+                id,
+            })
+            if (parseInt(value) < nextValue) {
+                // Check if it's up
+                return up(id);
+            }
+        } 
     }
 
     function down(id) {
@@ -45,6 +78,7 @@
             if (previousElement) {
                 element.parentNode.insertBefore(previousElement, element);
                 check();
+                return true;
             }
         }
     }
@@ -62,6 +96,9 @@
             const theId = children[i].id
             document.getElementById("up_" + theId).disabled = i == 0;
             document.getElementById("down_" + theId).disabled = (i + 1) == children.length; 
+            if (document.getElementById("score_" + theId).getAttribute("touched") == null){
+                document.getElementById("score_" + theId).value = children.length - i;
+            }
         }
     }
 
@@ -69,7 +106,10 @@
         const order = getList();
         const ids = [];
         for(const item of order){
-            ids.push(item.id)
+            ids.push({
+                "id": item.id,
+                "score": document.getElementById("score_" + item.id).value,
+            })
         }
         const results = await fetch('/submit_results', {
             method: "POST",
@@ -89,6 +129,18 @@
         });
     }
 
+    function setTouched(id){
+        console.log(id)
+        document.getElementById("score_" + id).setAttribute("touched", true);
+       // isValueUpOrDown(id);
+    }
+
+    function position(id){
+        while(isValueUpOrDown(id)){
+            console.log("moving ... ")
+        }
+    }
+
     window.onload = () => {
         check();
     }
@@ -103,6 +155,7 @@
             <div class="score">
                 <button onclick="up({{ entry.id }})" id="up_{{ entry.id }}">up</button>
                 <button onclick="down({{ entry.id }})" id="down_{{ entry.id }}">down</button>
+                <input id="score_{{ entry.id }}"  placeholder="value" value="0" onblur="position({{ entry.id }})" oninput="setTouched({{ entry.id }})" />
             </div>
             <div>
                 <h4>{{ entry.title }}</h4>

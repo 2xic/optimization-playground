@@ -54,8 +54,12 @@ def get_items_to_compare():
             )
         )
     # Use supervised models to improve speed
-    status = requests.post("http://127.0.0.1:4232/rank", json=list(map(lambda x: x.__dict__, parsed_results)))
-    assert status.status_code == 200
+    try:
+        status = requests.post("http://127.0.0.1:4232/rank", json=list(map(lambda x: x.__dict__, parsed_results)))
+        assert status.status_code == 200
+    except Exception as e:
+        print(e)
+        print("\t Is the ranking endpoint running ? ")
     item_position = {}
     for index, i in enumerate(status.json()):
         item_position[i["id"]] = index    
@@ -64,18 +68,24 @@ def get_items_to_compare():
 @app.route('/submit_results', methods=["POST"])
 def submit_results():
     global lookup_db
-    result_ids = request.json["results"]
+    results = request.json["results"]
     print(lookup_db)
-    print(result_ids)
+    print(results)
 
     entries = []
-    for item_id in result_ids:
+    result_ids = []
+    for item in results:
+        item_id = item["id"]
+        score = item["score"]
         item_url = lookup_db[int(item_id)]
         entries.append({
             "id": item_id,
             "url": item_url,
+            # Score can be used if all rankings / some are bad 
+            "score": score,
         })
-
+        result_ids.append(item_id)
+    print(entries)
     name = get_name(result_ids)
     with open(name, "w") as file:
         json.dump(entries, file)

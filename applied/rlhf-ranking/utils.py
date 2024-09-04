@@ -11,16 +11,19 @@ def rollout_model_binary(model, items: List[Input]) -> List[Results]:
             item_tensor=i.item_tensor,
         ))
     with torch.no_grad():
-        for _ in range(100):
+        for index in range(100):
             i = 1
             swapped = False
             while i < len(items):
                 should_swap = model.forward(score[i - 1].item_tensor, score[i].item_tensor)
-                if should_swap.shape[-1] == 1:
-                    if should_swap.item() < 0.5:
+                is_single_tensor = should_swap.shape[-1] == 1
+                flatten_tensor = should_swap[0]
+                if is_single_tensor:
+                    if flatten_tensor.item() < 0.5:
                         score[i - 1], score[i] = score[i], score[i - 1]
                         swapped = True
-                elif should_swap[0][0] > should_swap[0][1]:
+                # if softmax
+                elif flatten_tensor[0] > flatten_tensor[1]:
                     score[i - 1], score[i] = score[i], score[i - 1]
                     swapped = True
                 i += 1
