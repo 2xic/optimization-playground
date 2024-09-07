@@ -4,7 +4,7 @@ Kinda like https://ai.meta.com/blog/billion-scale-semi-supervised-learning/
 We add a endpoint on each model (rollout) which takes a list of items and sort it back with scores. We sum the sores and then sort it again, highest score first.
 """
 from ranknet import Model as RanknetModel
-from listnet_list import Model as ListnetMOdel
+from listnet_list import Model as ListnetModel
 from listnet import Model as ListnetPlainModel
 from bolztrank import Model as BoltzrankModel
 from flask import Flask, request, jsonify
@@ -28,7 +28,7 @@ class SemiSupervisedMachine:
         self.embeddings = OpenAiEmbeddings()
         self.models: List[RankingModel] = [
             RanknetModel(embeddings_size=1536).load().eval(),
-            ListnetMOdel(embeddings_size=1536).load().eval(),
+            ListnetModel(embeddings_size=1536).load().eval(),
             ListnetPlainModel(embeddings_size=1536).load().eval(),
             BoltzrankModel(embeddings_size=1536).load().eval()
         ]
@@ -82,8 +82,11 @@ models = SemiSupervisedMachine()
 def rank_documents():
     data = request.json
     assert type(data) == list
+    list_ids = list(set([x["id"] for x in data]))
     # Expected to just be a list of documents
     results, _ = models.rank_documents(data)
+    sorted_list_ids = list(set([x["id"] for x in results]))
+    assert len(sorted_list_ids) == len(list_ids)
     return jsonify(list(map(lambda x: x, results)))
 
 if __name__ == "__main__":

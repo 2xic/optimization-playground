@@ -45,7 +45,6 @@ class SimpleVaeModel(nn.Module):
         self.decoder = self.get_decoder()
 
     def forward(self, image):
-        z = self.encode(image)
         raise Exception("Missing decoder")
 
     def encode(self, image):

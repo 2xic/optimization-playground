@@ -37,7 +37,6 @@ class Model(nn.Module):
         self.model_file = ".boltzrank.torch"
 
     def forward(self, item_1, item_2):
-        assert not torch.all(item_1 == item_2)
         delta = torch.concat((
             self.base_layers(item_1),
             self.base_layers(item_2),

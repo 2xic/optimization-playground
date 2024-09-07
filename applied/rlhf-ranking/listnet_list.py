@@ -16,7 +16,7 @@ from best_model import BestModel
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
         super().__init__()
-
+        self.embeddings_size = embeddings_size
         self.base_layers = nn.Sequential(*[
             nn.Linear(embeddings_size, 2048),
             nn.ReLU(),
@@ -27,11 +27,11 @@ class Model(nn.Module):
             nn.Linear(512, 256),
             nn.ReLU(),
         ])
-        n = 5
+        self.n = 5
         self.output_layers = nn.Sequential(
-            nn.Linear(256 * n, 128),
+            nn.Linear(256 * self.n, 128),
             nn.Sigmoid(),
-            nn.Linear(128, n),
+            nn.Linear(128, self.n),
             nn.Softmax(dim=1),
         )
         self.model_file = ".listnet_list.torch"
@@ -51,15 +51,50 @@ class Model(nn.Module):
     
     def rollout(self, items: List[Input]) -> List[Results]:
         with torch.no_grad():
-            scores: List[Results] = []
-            results = self.forward(*list(map(lambda x: x.item_tensor, items)))[0]
+            # TODO: note that this array could be smaller or larger than our expected size ...
+            for _ in range(len(items), self.n):
+                items.append(Input(
+                    item_id=-1,
+                    item_tensor=torch.zeros((1, self.embeddings_size))
+                ))
+            # For larger sizes we need to do n samples
+            # id -> score
+            scores = {}
+            for _ in range(100):
+                scores = {}
+                for batch_index in range(0, len(items) - self.n + 1):
+                    current_batch = items[batch_index:batch_index + self.n]
+                    entries = list(map(lambda x: x.item_tensor, current_batch))
+                    ids = list(map(lambda x: x.item_id, current_batch))
+                    results = self.forward(*entries)[0]
+                    # Assign scores
+                    for index, current_id in enumerate(ids):
+                        score = results[index].item()
+                        if current_id in scores:
+                            scores[current_id] = max(scores[current_id], score)
+                        else:
+                            scores[current_id] = score
+                # Assign after the batch
+                swap = False
+                for index, item_id in enumerate(sorted(scores.keys(), key=lambda x: scores[x], reverse=True)):
+                    if items[index].item_id != item_id:
+                        swap = True
+                        break
+                if not swap:
+                    break
+                items = sorted(items, key=lambda x: scores[x.item_id], reverse=True) 
+            # Then re_assign it.
+            results: List[Results] = []
             for index, i in enumerate(items):
-                scores.append(Results(
+                # skip empty tensors.
+                if i.item_id == -1:
+                    continue
+                results.append(Results(
                     item_id=i.item_id,
-                    item_score=results[index].item(),
+                    item_score=scores[i.item_id],
                     item_tensor=i.item_tensor,
                 ))
-            return scores
+            return results
 
     def save(self):
         torch.save({

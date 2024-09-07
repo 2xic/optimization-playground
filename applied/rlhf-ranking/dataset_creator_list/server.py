@@ -29,7 +29,7 @@ def get_name(ids):
 
 def get_items_to_compare(retry_counter=3):
     global lookup_db
-    n = 5
+    n = 10
     url = os.environ["host"] + f"?n={n}"
     print(url)
     results = requests.get(url, cookies={
@@ -60,7 +60,7 @@ def get_items_to_compare(retry_counter=3):
     try:
         status = requests.post("http://127.0.0.1:4232/rank", json=list(map(lambda x: x.__dict__, parsed_results)))
         #assert status.status_code == 200, "Bad status code"
-        if retry_counter > 0 and status.status_code == 200:
+        if retry_counter > 0 and status.status_code != 200:
             print(f"Bad status code, retrying ... {retry_counter}")
             return get_items_to_compare(
                 retry_counter=retry_counter-1

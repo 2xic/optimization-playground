@@ -45,6 +45,9 @@ class DocumentRankDataset(Dataset):
                     for row_index_size in range(0, row_size):
                         items.append(embeddings[index + row_index_size])
                         n_scores.append(scores[index + row_index_size])
+                    # if all the scores are zero, then we don't have any signal
+                    if sum(n_scores) == 0:
+                        continue
                     self._add_dataset(items, n_scores)
         print(f"Raw dataset rows : {len(self.raw_dataset)}")
         print(f"Dataset rows : {len(self.dataset)}")

@@ -826,7 +826,9 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 - This method also had a ~3x inference speed up. 
 
 ## [The Unreasonable Ineffectiveness of the Deeper Layers](https://arxiv.org/pdf/2403.17887)
-- todo
-
-
+- They removed layers form the networks and did some fientuning training to heal the network
+  - Threy removed layers based on similairty scores
+  - Method allowed to drop a large amount of layers with a minimal impact on performance
+  - Deeper layers of the network might not contribute much to the finale model results
+  - 
 

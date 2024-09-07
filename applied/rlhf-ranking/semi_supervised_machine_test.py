@@ -41,7 +41,7 @@ if __name__ == "__main__":
     verify_accuracy()
     batch_size = 32
     model = SemiSupervisedMachine()
-    test_dataset = DocumentRankDataset(train=False, dataset_format="softmax")
+    test_dataset = DocumentRankDataset(train=False, dataset_format="softmax", row_size=2)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     sum_accuracy = torch.tensor(0.0)

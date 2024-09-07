@@ -155,7 +155,7 @@
             <div class="score">
                 <button onclick="up({{ entry.id }})" id="up_{{ entry.id }}">up</button>
                 <button onclick="down({{ entry.id }})" id="down_{{ entry.id }}">down</button>
-                <input id="score_{{ entry.id }}"  placeholder="value" value="0" onblur="position({{ entry.id }})" oninput="setTouched({{ entry.id }})" />
+                <input type="number" id="score_{{ entry.id }}"  placeholder="value" value="0" onblur="position({{ entry.id }})" oninput="setTouched({{ entry.id }})" />
             </div>
             <div>
                 <h4>{{ entry.title }}</h4>

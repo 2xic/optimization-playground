@@ -22,7 +22,6 @@ betas = torch.linspace(B_0, B_T, T, device=device)
 alphas = 1 - betas
 alpha_bars = torch.tensor([torch.prod(alphas[:i + 1]) for i in range(len(alphas))], device=device)
 
-
 # Eq. 4
 def qt_sample(X_0, t, noise):
     a_bar = alpha_bars[t].reshape(X_0.shape[0], 1, 1, 1)

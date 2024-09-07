@@ -29,7 +29,6 @@ def forward(gan: GanModel, train_loader):
     avg_discriminator_real = 0
 
     loss = GanBceLabelLoss()
-#    loss = StandardLoss()
 
     for index, (X, y) in enumerate(train_loader):
         batch_size = X.shape[0]
