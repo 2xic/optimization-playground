@@ -8,6 +8,7 @@ from tqdm import tqdm
 from typing import List
 from results import Results, Input
 from utils import rollout_model_binary
+from best_model import BestModel
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -18,12 +19,14 @@ class Model(nn.Module):
             nn.ReLU(),
             nn.Linear(2048, 1024),
             nn.ReLU(),
+            nn.Dropout(p=0.1),
             nn.Linear(1024, 256),
             nn.ReLU(),
         ])
         n = 2
         self.output_layers = nn.Sequential(*[
             nn.Linear(256 * n, 256),
+            nn.ReLU(),
             nn.Linear(256, 1),
             nn.Sigmoid(),
         ])
@@ -37,6 +40,7 @@ class Model(nn.Module):
         return self.output_layers(delta)
 
     def label(self, item_1, item_2):
+        # 1 if item_1 is the best, 0 if item_2 is the best
         return (self.forward(item_1, item_2) >= torch.tensor(0.5)).long()
 
     def rollout(self, items: List[Input]) -> List[Results]:
@@ -61,6 +65,8 @@ if __name__ == "__main__":
 
     test_dataset = DocumentRankDataset(train=False, dataset_format="binary")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+    best_model = BestModel()
 
     epoch_accuracy = []
     epoch_loss = []
@@ -97,9 +103,11 @@ if __name__ == "__main__":
 
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
-            epoch_test_accuracy.append(sum_accuracy / count * 100)
+            test_acc = sum_accuracy / count * 100
+            epoch_test_accuracy.append(test_acc)
+            best_model.set_model(model, test_acc)
+            model = best_model.get_model()
         iterator.set_description(f"Training acc: {epoch_accuracy[-1]}, testing acc: {epoch_test_accuracy[-1]}, loss {epoch_loss[-1]}")
-
 
     plot = Plot()
     plot.plot_figures(
@@ -131,3 +139,5 @@ if __name__ == "__main__":
         ],
         name=f'training_ranknet.png'
     )
+    print(f"Finale model score: {best_model.score}%")
+    model.save()

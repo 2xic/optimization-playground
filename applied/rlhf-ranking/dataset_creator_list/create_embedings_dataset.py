@@ -19,8 +19,12 @@ def get_embeddings(link_id):
     results = requests.get(full_link, cookies={
         "credentials": os.environ["auth_header"]
     }).text
-    if len(results) < 500:
-        print(f"Skipping {link_id}")
+    if len(results) < 100:
+        full_link = url + f"/url/{link_id}"
+        results = requests.get(full_link, cookies={
+            "credentials": os.environ["auth_header"]
+        }).text
+        print(f"Skipping {link_id} ({results})")
         return None
     return results
 
@@ -31,19 +35,26 @@ def build():
         with open(i, "r") as file:
             data = json.load(file)
             text = []
-            for i in data:
-                winner_id = i["id"]
-                winner_text = get_embeddings(winner_id)
-                if winner_text is None:
+            scores = []
+            for index, i in enumerate(data):
+                item_id = i["id"]
+                item_score = i.get("score", len(data) - index)
+                item_text = get_embeddings(item_id)
+                if item_text is None:
                     break
-                text.append(winner_text)
+                text.append(item_text)
+                scores.append(item_score)
             if len(text) != len(data):
                 continue
+            # Embeddings
             embeddings = []
             for doc_text in text:
                 winner_embeddings = model.get_embedding(doc_text)
                 embeddings.append(winner_embeddings)
-            dataset.append(embeddings)
+            dataset.append({
+                "embeddings": embeddings,
+                "scores": scores,
+            })
     with open("dataset.json", "w") as file:
         json.dump(dataset, file)
 

@@ -41,3 +41,6 @@ There is also a good blogpost by [Lilian Weng](https://lilianweng.github.io/post
 ## [Scaling AI Infrastructure at OpenAI](https://www.youtube.com/watch?v=cK7qFZ9J6k0)
 - Talks about the Kubernetes setup
 
+## [Reinforcement Learning on Hundreds of Thousands of Cores](https://www.youtube.com/watch?v=ui4F_A46wN0)
+- OpenAI and the Redis setup they used for Dota 2
+

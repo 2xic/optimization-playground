@@ -14,6 +14,7 @@ from results import Results, Input
 from typing import List
 import torch
 from utils import rollout_model_binary
+from best_model import BestModel
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -45,9 +46,8 @@ class Model(nn.Module):
         return self.output(delta)
 
     def label(self, item_1, item_2):
-        return ((self.forward(item_1, item_2)) > 0.5).long()
-
-
+        return (self.forward(item_1, item_2) > 0.5).long()
+    
     def rollout(self, items: List[Input]) -> List[Results]:
         return rollout_model_binary(self, items)
     
@@ -61,31 +61,16 @@ class Model(nn.Module):
         self.load_state_dict(state["model_state"])
         return self
 
-def quality_component(expected, predicted, Rqi):
-    return torch.nn.BCELoss()(expected, predicted) / Rqi
-
-def cost_component(Rqi):
-    return Rqi
-
-def boltz_rank_optimization(expected, predicted):
-    Rqi = 1  # Rank of the item
-    P = 1.0  # Normalization factor
-    λ = 0.5  # Trade-off parameter
-    quality = λ * quality_component(expected, predicted, Rqi) / P
-    cost = (1 - λ) * cost_component(Rqi)
-    Oqi = quality - cost
-    return Oqi
-
 if __name__ == "__main__":
-
-    batch_size = 32
+    batch_size = 256
     model = Model(embeddings_size=1536)
     optimizer = torch.optim.Adam(model.parameters())
     train_dataset = DocumentRankDataset(train=True, dataset_format="binary")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-
     test_dataset = DocumentRankDataset(train=False, dataset_format="binary")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+    best_model = BestModel()
 
     epoch_accuracy = []
     epoch_loss = []
@@ -97,7 +82,8 @@ if __name__ == "__main__":
         for (x, y, label) in train_loader:
             predicted = model(x, y)
             model.zero_grad()
-            loss = boltz_rank_optimization(predicted, label)   
+            assert torch.all(predicted != torch.nan)
+            loss = torch.nn.functional.binary_cross_entropy(predicted, label)
             loss.backward()
             optimizer.step()
 
@@ -110,7 +96,6 @@ if __name__ == "__main__":
 
             count += label.shape[0]
         epoch_loss.append(sum_loss.item())
-#        epoch_accuracy.append(sum_accuracy / count * 100)
         epoch_accuracy.append(sum_accuracy / count * 100)
 
         with torch.no_grad():
@@ -124,8 +109,10 @@ if __name__ == "__main__":
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
 
-            epoch_test_accuracy.append(sum_accuracy / count * 100)
-
+            test_acc = sum_accuracy / count * 100
+            epoch_test_accuracy.append(test_acc)
+            best_model.set_model(model, test_acc)
+            model = best_model.get_model()
 
     plot = Plot()
     plot.plot_figures(
@@ -157,4 +144,5 @@ if __name__ == "__main__":
         ],
         name=f'training_boltzrank.png'
     )
+    print(f"Finale model score: {best_model.score}%")
     model.save()

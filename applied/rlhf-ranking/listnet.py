@@ -12,6 +12,7 @@ from utils import rollout_model_binary
 from results import Results, Input
 from typing import List
 import torch
+from best_model import BestModel
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -19,14 +20,16 @@ class Model(nn.Module):
 
         self.base_layers = nn.Sequential(*[
             nn.Linear(embeddings_size, 2048),
-            nn.Sigmoid(),
+            nn.ReLU(),
             nn.Linear(2048, 1024),
-            nn.Sigmoid(),
+            nn.ReLU(),
+            nn.Dropout(p=0.1),
             nn.Linear(1024, 512),
-            nn.Sigmoid(),
+            nn.ReLU(),
         ])
         self.output_layers = nn.Sequential(*[
             nn.Linear(512, 256),
+            nn.ReLU(),
             nn.Linear(256, 2),
             nn.Softmax(dim=1),
         ])
@@ -62,6 +65,8 @@ if __name__ == "__main__":
     test_dataset = DocumentRankDataset(train=False, dataset_format="softmax", row_size=2)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
+    best_model = BestModel()
+
     epoch_accuracy = []
     epoch_loss = []
     epoch_test_accuracy = []
@@ -73,8 +78,7 @@ if __name__ == "__main__":
         for (x, y, label) in train_loader:
             predicted = model(x, y)
             model.zero_grad()
-       #     print((predicted, label))
-            loss = nn.KLDivLoss(reduction="batchmean")(predicted, label)   
+            loss = nn.functional.kl_div(predicted.log(), label, reduction="batchmean")
             loss.backward()
             optimizer.step()
             
@@ -82,12 +86,11 @@ if __name__ == "__main__":
             label = torch.argmax(label, dim=1)
             assert pseudo_label.shape[0] == x.shape[0]
             assert label.shape[0] == x.shape[0]
-            # accuracy = (pseudo_label == label).long().sum() / label.shape[0]  * 100
             sum_loss += loss
             sum_accuracy += (pseudo_label == label).long().sum()
             count += label.shape[0]
+
         epoch_loss.append(sum_loss.item())
-#        epoch_accuracy.append(sum_accuracy / count * 100)
         epoch_accuracy.append(sum_accuracy / count * 100)
 
         with torch.no_grad():
@@ -102,7 +105,10 @@ if __name__ == "__main__":
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
 
-            epoch_test_accuracy.append(sum_accuracy / count * 100)
+            test_acc = sum_accuracy / count * 100
+            epoch_test_accuracy.append(test_acc)
+            best_model.set_model(model, test_acc)
+            model = best_model.get_model()
         iterator.set_description(f"Training acc: {epoch_accuracy[-1]}, testing acc: {epoch_test_accuracy[-1]}, loss {epoch_loss[-1]}")
 
     plot = Plot()
@@ -135,4 +141,5 @@ if __name__ == "__main__":
         ],
         name=f'training_listnet.png'
     )
+    print(f"Finale model score: {best_model.score}%")
     model.save()

@@ -27,10 +27,10 @@ class SemiSupervisedMachine:
     def __init__(self) -> None:
         self.embeddings = OpenAiEmbeddings()
         self.models: List[RankingModel] = [
-            RanknetModel(embeddings_size=1536).load(),
-            ListnetMOdel(embeddings_size=1536).load(),
-            ListnetPlainModel(embeddings_size=1536).load(),
-            BoltzrankModel(embeddings_size=1536).load()
+            RanknetModel(embeddings_size=1536).load().eval(),
+            ListnetMOdel(embeddings_size=1536).load().eval(),
+            ListnetPlainModel(embeddings_size=1536).load().eval(),
+            BoltzrankModel(embeddings_size=1536).load().eval()
         ]
     
     def rank_documents(self, items):

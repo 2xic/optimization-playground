@@ -27,7 +27,7 @@ def get_name(ids):
     name = f"{results_dirname}/{ids_name}.json"
     return name
 
-def get_items_to_compare():
+def get_items_to_compare(retry_counter=3):
     global lookup_db
     n = 5
     url = os.environ["host"] + f"?n={n}"
@@ -42,6 +42,7 @@ def get_items_to_compare():
         return get_items_to_compare()
     
     parsed_results = []
+    ids = []
     for n in range(1, len(results) + 1):
         lookup_db[int(results[f"candidate_{n}"]["id"])] = results[f"candidate_{n}"]["url"]
         print(lookup_db)
@@ -53,10 +54,17 @@ def get_items_to_compare():
                 description=results[f"candidate_{n}"]["description"],
             )
         )
+        ids.append(results[f"candidate_{n}"]["id"])
+    print(ids)
     # Use supervised models to improve speed
     try:
         status = requests.post("http://127.0.0.1:4232/rank", json=list(map(lambda x: x.__dict__, parsed_results)))
-        assert status.status_code == 200
+        #assert status.status_code == 200, "Bad status code"
+        if retry_counter > 0 and status.status_code == 200:
+            print(f"Bad status code, retrying ... {retry_counter}")
+            return get_items_to_compare(
+                retry_counter=retry_counter-1
+            )
     except Exception as e:
         print(e)
         print("\t Is the ranking endpoint running ? ")

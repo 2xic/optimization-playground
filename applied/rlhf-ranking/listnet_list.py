@@ -11,6 +11,7 @@ from optimization_playground_shared.plot.Plot import Plot, Figure
 from tqdm import tqdm
 from results import Input, Results
 from typing import List
+from best_model import BestModel
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -71,7 +72,7 @@ class Model(nn.Module):
         return self
     
 if __name__ == "__main__":
-    batch_size = 32
+    batch_size = 256
     model = Model(embeddings_size=1536)
     optimizer = torch.optim.Adam(model.parameters())
     train_dataset = DocumentRankDataset(train=True)
@@ -79,6 +80,8 @@ if __name__ == "__main__":
 
     test_dataset = DocumentRankDataset(train=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
+
+    best_model = BestModel()
 
     epoch_accuracy = []
     epoch_loss = []
@@ -92,12 +95,11 @@ if __name__ == "__main__":
             predicted = model(item_1, item_2, item_3, item_4, item_5)
             model.zero_grad()
 
-            loss = nn.KLDivLoss(reduction="batchmean")(predicted, label)   
+            loss = nn.functional.kl_div(predicted.log(), label, reduction="batchmean")
             loss.backward()
             optimizer.step()
 
-            # assert not torch.all(torch.argmax(label, dim=1) == 0)
-            
+            # assert not torch.all(torch.argmax(label, dim=1) == 0)            
             pseudo_label = torch.argmax(model.label(item_1, item_2, item_3, item_4, item_5), dim=1)
             label = torch.argmax(label, dim=1)
 
@@ -106,7 +108,6 @@ if __name__ == "__main__":
             count += label.shape[0]
 
         epoch_loss.append(sum_loss.item())
-#        epoch_accuracy.append(sum_accuracy / count * 100)
         epoch_accuracy.append(sum_accuracy / count * 100)
 
         with torch.no_grad():
@@ -119,8 +120,10 @@ if __name__ == "__main__":
                 sum_accuracy += (pseudo_label == label).long().sum()
                 count += label.shape[0]
 
-            epoch_test_accuracy.append(sum_accuracy / count * 100)
-
+            test_acc = sum_accuracy / count * 100
+            epoch_test_accuracy.append(test_acc)
+            best_model.set_model(model, test_acc)
+            model = best_model.get_model()
         iterator.set_description(f"Training acc: {epoch_accuracy[-1]}, testing acc: {epoch_test_accuracy[-1]}, loss {epoch_loss[-1]}")
 
 
@@ -154,4 +157,5 @@ if __name__ == "__main__":
         ],
         name=f'training_listnet_list.png'
     )
+    print(f"Finale model score: {best_model.score}%")
     model.save()

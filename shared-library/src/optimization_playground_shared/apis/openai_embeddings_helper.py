@@ -42,15 +42,14 @@ def get_embeddings(text, model):
     if cache is not None and "error" not in cache:
         return cache
     
-  #  print(payload)
-    print("Requesting ... ")
+    print("Requesting embedding ... ")
     results = requests.post("https://api.openai.com/v1/embeddings?model", 
         json=payload,
         headers={
             "Authorization": f"Bearer {token}" 
         }
     )
-    #print(results)
+
     cache_handler.save(
         payload=payload,
         results=results.json()
