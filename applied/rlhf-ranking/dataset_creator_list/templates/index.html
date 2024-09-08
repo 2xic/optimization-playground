@@ -141,6 +141,10 @@
         }
     }
 
+    function remove(id){
+        document.getElementById(id).remove();
+    }
+
     window.onload = () => {
         check();
     }
@@ -163,6 +167,9 @@
                 <p>
                     {{ entry.description }}
                 </p>
+            </div>
+            <div class="score">
+                <button onclick="remove({{ entry.id }})">Remove</button>
             </div>
         </div>
         {% endfor %}

@@ -30,10 +30,17 @@ def get_name(ids):
 def get_items_to_compare(retry_counter=3):
     global lookup_db
     n = 10
-    url = os.environ["host"] + f"?n={n}"
+    url = os.environ["host"]
     print(url)
-    results = requests.get(url, cookies={
-        "credentials": os.environ["auth_header"]
+    results = requests.post(url, cookies={
+        "credentials": os.environ["auth_header"],
+    }, json={
+        "n": n,
+        "filters": [
+            {
+                "netloc": "youtube.com"
+            }
+        ]
     }).json()
 
     name = get_name(())
@@ -56,6 +63,7 @@ def get_items_to_compare(retry_counter=3):
         )
         ids.append(results[f"candidate_{n}"]["id"])
     print(ids)
+    assert len(ids) == len(list(set(ids))), "Bad ids"
     # Use supervised models to improve speed
     try:
         status = requests.post("http://127.0.0.1:4232/rank", json=list(map(lambda x: x.__dict__, parsed_results)))
@@ -71,8 +79,9 @@ def get_items_to_compare(retry_counter=3):
     item_position = {}
     for index, i in enumerate(status.json()):
         item_position[i["id"]] = index    
+    assert len(list(set(item_position.keys()))) == len(list(set(ids)))
     return sorted(parsed_results, key=lambda x: item_position[x.id])
-    
+
 @app.route('/submit_results', methods=["POST"])
 def submit_results():
     global lookup_db

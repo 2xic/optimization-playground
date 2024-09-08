@@ -1,5 +1,9 @@
 """
-Idea from https://tommyc.xyz/posts/simple-diffusion
+Want to try a naive implementation with ideas from:
+
+https://tommyc.xyz/posts/simple-diffusion
+https://transferlab.ai/pills/2024/flow-matching/
+https://arxiv.org/pdf/2210.02747
 """
 
 import torch
@@ -9,6 +13,8 @@ from torchvision.utils import save_image
 import torch.nn as nn
 import math
 import torch.optim as optim
+import random
+from optimization_playground_shared.plot.Plot import Plot, Figure, Image
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
@@ -25,6 +31,7 @@ class SimpleFlowModel(nn.Module):
           nn.Linear(8, 2),
           nn.ReLU()
         )
+        z_shape = 256
         self.out = nn.Sequential(
           nn.Linear(math.prod(input_shape) + 2, 512),
           nn.Dropout(p=0.01),
@@ -33,9 +40,20 @@ class SimpleFlowModel(nn.Module):
           nn.ReLU(),
           nn.Linear(1024, 512),
           nn.ReLU(),
-          nn.Linear(512, math.prod(input_shape)),
+          nn.Linear(512, z_shape),
           nn.Tanh(),
         )
+        self.mean = nn.Linear(z_shape, math.prod(input_shape))
+        self.var = nn.Linear(z_shape, math.prod(input_shape))
+
+    def sample_image(self, x, shape):
+        x = self.out(x) 
+        mean = self.mean(x)
+        log_var = self.var(x)
+        var = torch.exp(0.5 * log_var)
+        epsilon = torch.randn_like(var)
+        z = mean + var * epsilon
+        return z.reshape(shape)
 
     def forward(self, x, label_time):
         x_label_time = self.label(label_time)
@@ -43,61 +61,92 @@ class SimpleFlowModel(nn.Module):
             x,
             x_label_time
         ), dim=1)
-        x = self.out(combined) 
-        x = x.reshape((x.shape[0], ) + self.input_shape)
+        x = self.sample_image(combined,  shape=((x.shape[0], ) + self.input_shape))
         return x
+
+    def make_noisy_image(self, image, noise, step):
+        return (image  * step / T) + noise * (1 - step / T)
+    
+    def simple_forward(self, x, y, index):
+        raw_index = index.reshape((-1, 1)) / T
+        combined = self.combined(y, raw_index)
+        delta = self.forward(x.reshape((x.shape[0], -1)), combined)
+        return delta
 
     def train(self, x, y):
         step_size = 1 / T
  
-       
         step_index_raw = torch.randint(0, T - 1, size=(y.shape[0], 1), device=device)
         step_index = step_index_raw.view(-1, 1, 1, 1).expand_as(x)
 
-        x_n = torch.randn(x.shape, device=device)
-        x_n = (x  * step_index / T) + x_n * (1 - step_index / T)
+        original_noise = torch.randn(x.shape, device=device)
+        x_n = self.make_noisy_image(x, original_noise, step_index)
+        delta = self.simple_forward(x_n, y, step_index_raw)
 
-        combined = torch.concat((
-            torch.nn.functional.one_hot(y, num_classes=10).to(device=device), 
-            step_index_raw / T
-        ), dim=1)
-        delta = self.forward(x_n.reshape((x.shape[0], -1)), combined)
-        x_n += delta * step_size
-
+        next_x_n = x_n + delta * step_size
+        # Compare
+        next_time_step = (step_index + 1)
+        next_time_step[next_time_step > T] = T
+     #   assert not torch.all(next_time_step == step_index[0][0].item())
+        target = self.make_noisy_image(x, original_noise, next_time_step)
         error = torch.nn.functional.mse_loss(
-            x_n,
-            # Image noise lowers over time and image gets more sharp
-            (x  * (step_index + 1) / T) + (torch.randn(x.shape, device=device) * (step_index + 1) / T)
-        )
+            next_x_n * 100,
+            target * 100
+        ) 
+        #+ torch.nn.functional.mse_loss(
+        #    self.sample(y),
+        #    x
+        #) * 0.5
         error.backward()
+
+        if random.randint(0, 100) == 10:
+            plot = Plot()
+            plot.plot_image(
+                images=[
+                    Image(
+                        image=x_n[:10],
+                        title="x_n"
+                    ),
+                    Image(
+                        image=delta[:10],
+                        title="Model"
+                    ),
+                    Image(
+                        image=target[:10],
+                        title="x_n + 1"
+                    ),
+                ],
+                name='training.png'
+            )
+
         return error
+    
+    def combined(self, y, time_step):
+        combined = torch.concat((
+            torch.nn.functional.one_hot(y, num_classes=10), 
+            time_step
+        ), dim=1)
+        return combined
 
     def sample(self, y):
-        steps = torch.linspace(0,1, T, device=device)
-        step_size = 1 / T
         n_sample = y.shape[0]
         x_n = torch.randn((n_sample, )+ self.input_shape, device=device)
-
-        for step in range(T):
-            step = torch.zeros((y.shape[0], 1), device=device).fill_(steps[step])
-            combined = torch.concat((
-                torch.nn.functional.one_hot(y, num_classes=10), 
-                step
-            ), dim=1)
-            delta = self.forward(x_n.reshape((n_sample, -1)), combined)
-            x_n += delta * step_size
-        # todo : should really try to trick a discriminator or something
+ 
+        for index in range(1, T):
+            step_index = torch.full((n_sample, 1), index, device=device).float()
+            delta = self.simple_forward(x_n, y, step_index)
+            x_n = x_n + delta # * (1 / T)
         return x_n / torch.max(x_n)
 
 def train():
-    progress = tqdm(range(1_000), desc='Training flow')
+    progress = tqdm(range(2_000), desc='Training flow')
     train, _ = get_dataloader(
-        subset=128,
-        batch_size=128
+        subset=256,
+        batch_size=32
     )
     model = SimpleFlowModel().to(device)
-    adam = optim.Adam(model.parameters(), lr=0.0002)
-  
+    adam = optim.Adam(model.parameters()) 
+    training_loss = []
     for epoch in progress:
         sum_loss = 0
         for _, (X, y) in enumerate(train):
@@ -110,9 +159,44 @@ def train():
 
         if epoch % 10 == 0:
             generated = model.sample(y)
-            save_image(X[:4], 'truth.png')
-            save_image(generated[:4], 'flow.png')
+            plot = Plot()
+            plot.plot_image(
+                images=[
+                    Image(
+                        image=generated[:10],
+                        title="generated"
+                    ),
+                    Image(
+                        image=X[:10],
+                        title="truth"
+                    ),
+                ],
+                name='inference.png'
+            )            
         progress.set_description(f'Loss {sum_loss.item()}')
+        training_loss.append(sum_loss.item())
+    plot = Plot()
+    plot.plot_figures(
+        figures=[
+            Figure(
+                plots={
+                    "Loss": training_loss,
+                },
+                title="Training loss",
+                x_axes_text="Epochs",
+                y_axes_text="Loss",
+            ),
+            Figure(
+                plots={
+                    "Loss": training_loss[-100:],
+                },
+                title="Training loss (n - 100)",
+                x_axes_text="Epochs",
+                y_axes_text="Loss",
+            ),
+        ],
+        name='loss.png'
+    )  
 
 if __name__ == "__main__":
     train()

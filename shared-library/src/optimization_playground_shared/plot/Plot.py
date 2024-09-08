@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 import torch
 from typing import List
 import os
+import torchvision
 
 @dataclass
 class Figure:
@@ -65,6 +66,9 @@ class Plot:
             if len(image.shape) == 3 and image.shape[0] == 1:
                 image = image.reshape(image.shape[1:])
             elif len(image.shape) == 3 and image.shape[0] == 3:
+                image = np.moveaxis(image, 0, 2)
+            elif len(image.shape) == 4:
+                image = torchvision.utils.make_grid(torch.from_numpy(image), normalize=True).numpy()
                 image = np.moveaxis(image, 0, 2)
 
             if len(image.shape) == 2:
