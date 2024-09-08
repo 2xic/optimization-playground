@@ -9,16 +9,17 @@ https://arxiv.org/pdf/2210.02747
 import torch
 from tqdm import tqdm
 from optimization_playground_shared.dataloaders.Mnist import get_dataloader
-from torchvision.utils import save_image
 import torch.nn as nn
 import math
 import torch.optim as optim
 import random
 from optimization_playground_shared.plot.Plot import Plot, Figure, Image
+from optimization_playground_shared.models.SimpleLabelDiscriminator import SimpleLabelDiscriminator
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
 T = 10
+STEP_SIZe = 1 / T
 
 class SimpleFlowModel(nn.Module):
     def __init__(self, input_shape=(1, 28, 28)):
@@ -45,7 +46,7 @@ class SimpleFlowModel(nn.Module):
         )
         self.mean = nn.Linear(z_shape, math.prod(input_shape))
         self.var = nn.Linear(z_shape, math.prod(input_shape))
-
+ 
     def sample_image(self, x, shape):
         x = self.out(x) 
         mean = self.mean(x)
@@ -73,9 +74,8 @@ class SimpleFlowModel(nn.Module):
         delta = self.forward(x.reshape((x.shape[0], -1)), combined)
         return delta
 
-    def train(self, x, y):
-        step_size = 1 / T
- 
+    def train(self, x, y, discriminator):
+
         step_index_raw = torch.randint(0, T - 1, size=(y.shape[0], 1), device=device)
         step_index = step_index_raw.view(-1, 1, 1, 1).expand_as(x)
 
@@ -83,21 +83,22 @@ class SimpleFlowModel(nn.Module):
         x_n = self.make_noisy_image(x, original_noise, step_index)
         delta = self.simple_forward(x_n, y, step_index_raw)
 
-        next_x_n = x_n + delta * step_size
+        next_x_n = x_n + delta * STEP_SIZe
         # Compare
         next_time_step = (step_index + 1)
         next_time_step[next_time_step > T] = T
-     #   assert not torch.all(next_time_step == step_index[0][0].item())
         target = self.make_noisy_image(x, original_noise, next_time_step)
         error = torch.nn.functional.mse_loss(
             next_x_n * 100,
             target * 100
-        ) 
-        #+ torch.nn.functional.mse_loss(
-        #    self.sample(y),
-        #    x
-        #) * 0.5
-        error.backward()
+        )
+        # Use discriminator to verify if the model seems reasonable
+        # if random.randint(0, 10) == 2:
+        (_, labels) = discriminator(self.sample(y))
+        error += torch.nn.functional.cross_entropy(
+            labels,
+            y
+        )
 
         if random.randint(0, 100) == 10:
             plot = Plot()
@@ -135,15 +136,32 @@ class SimpleFlowModel(nn.Module):
         for index in range(1, T):
             step_index = torch.full((n_sample, 1), index, device=device).float()
             delta = self.simple_forward(x_n, y, step_index)
-            x_n = x_n + delta # * (1 / T)
+            x_n += delta  * STEP_SIZe
+
         return x_n / torch.max(x_n)
 
 def train():
     progress = tqdm(range(2_000), desc='Training flow')
     train, _ = get_dataloader(
-        subset=256,
-        batch_size=32
+        subset=2048,
+        batch_size=128,
+        shuffle=True
     )
+    discriminator = SimpleLabelDiscriminator().to(device)
+    discriminator_optim = optim.Adam(discriminator.parameters())
+    for epoch in tqdm(range(5)):
+        for _, (X, y) in enumerate(train):
+            X = X.to(device)
+            y = y.to(device)
+            (_, y_predicted) = discriminator(X)
+            discriminator_optim.zero_grad()
+            loss = torch.nn.functional.cross_entropy(
+                y_predicted,
+                y
+            )
+            loss.backward()
+            discriminator_optim.step()
+
     model = SimpleFlowModel().to(device)
     adam = optim.Adam(model.parameters()) 
     training_loss = []
@@ -153,7 +171,8 @@ def train():
             X = X.to(device)
             y = y.to(device)
             adam.zero_grad()
-            loss = model.train(X, y)
+            loss = model.train(X, y, discriminator)
+            loss.backward()
             adam.step()
             sum_loss += loss
 
@@ -175,6 +194,7 @@ def train():
             )            
         progress.set_description(f'Loss {sum_loss.item()}')
         training_loss.append(sum_loss.item())
+
     plot = Plot()
     plot.plot_figures(
         figures=[
