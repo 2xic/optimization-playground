@@ -830,5 +830,15 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
   - Threy removed layers based on similairty scores
   - Method allowed to drop a large amount of layers with a minimal impact on performance
   - Deeper layers of the network might not contribute much to the finale model results
-  - 
 
+### [Non jailbroken models](https://x.com/danhendrycks/status/1832653587555742199)
+- [representation engineering](https://www.ai-transparency.org/) ([paper](https://arxiv.org/pdf/2310.01405))
+  - High / low utillity will cause different trajecotries within the representation space.
+  - Controlling of the emoition would results in the model do more harmful stuff (Figure 17).
+  - very cool, should look more into the details!
+- [Circuit Breakers](https://arxiv.org/pdf/2406.04313)
+  - [code](https://github.com/GraySwanAI/circuit-breakers)
+  - Builds on representation engineering (RepE - paper above)
+  - Beats refresual training by a lot (Figure 2), but without it reducing the models capabilitys
+  - Harmful states link to circuit breakers which allow early exiting.
+  - See algorithm 1

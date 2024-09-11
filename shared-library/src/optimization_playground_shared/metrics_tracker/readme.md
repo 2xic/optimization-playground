@@ -19,7 +19,7 @@ metrics_tracker.log(
 
 Then to start the consumer 
 ```bash
-python3 consumer.py # start the frontend interface and server used for tracking metrics.
+python3 -m optimization_playground_shared.metrics_tracker.consumer # start the frontend interface and server used for tracking metrics.
 ```
 
 

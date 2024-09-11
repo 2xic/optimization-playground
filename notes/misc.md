@@ -75,3 +75,10 @@ They made some data observations which was kinda intresting
 
 ## [On Optimizing Machine Learning Workloads via Kernel Fusion](https://mboehm7.github.io/resources/ppopp2015.pdf)
 - todo
+
+## [THE ADEMAMIX OPTIMIZER: BETTER, FASTER, OLDER](https://arxiv.org/pdf/2409.03137)
+- Paper from Apple on improving the Adam optimizer.
+- Improves training (LLM at least) by a lot.
+  - 1.3B parameter model trained with ADEMAMIX on 101B tokens beats the same model on 197B tokens
+  - The modifications done to the optimizer is also minimal
+  - Source code is also attached

@@ -18,4 +18,13 @@ So Dojo is the name of the super computer that tesla uses for training, but it's
 
 # [Tesla Dojo Technology](https://cdn.motor1.com/pdf-files/535242876-tesla-dojo-technology.pdf)
 - This only documents the floating points used. 
+
+# [Tesla’s TTPoE at Hot Chips 2024: Replacing TCP for Low Latency Applications](https://chipsandcheese.com/2024/08/27/teslas-ttpoe-at-hot-chips-2024-replacing-tcp-for-low-latency-applications/)
+- The size of a single tensor could be 1.7 GB, this is a bit ambiguous though.
+- They noticed a problem that computers could be slow at transferring data even if all they do is transfer over PCI
+  - Tesla solved it by adding more host
+  - They didn't use [Infiniband](https://en.wikipedia.org/wiki/InfiniBand) like many others. Instead they do Ethernet and a custom transport layer. [Infiniband tax](https://news.ycombinator.com/item?id=41379866) escape possibly.
+  - ^ Latency is reduced by removing wait status in TCP
+- [I found the slides](https://hc2024.hotchips.org/assets/program/conference/day2/17_HC2024_Tesla_TTPoE_v5.pdf), but they are password protected. Found them on some random chinese websites also, but also no way to download them.
+  - nvm the speaker [had posted about it on Twitter](https://x.com/divBy_zero/status/1830441307594174496)
 - 

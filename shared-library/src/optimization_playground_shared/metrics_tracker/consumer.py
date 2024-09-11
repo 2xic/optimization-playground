@@ -175,21 +175,27 @@ def index():
     """
     Shows the projects data
     """
-    with open(global_metadata, "r") as file:
-        data = json.load(file)
-        results = []
-        for (name, _) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
-            print(name)
-            results.append(
-                f"<a href={name}>{name}</a>".format(name=name)
-            )
-        return "<br>".join(results)
+    if os.path.isfile(global_metadata):
+        with open(global_metadata, "r") as file:
+            data = json.load(file)
+            results = []
+            for (name, _) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
+                print(name)
+                results.append(
+                    f"<a href={name}>{name}</a>".format(name=name)
+                )
+            return "<br>".join(results)
+    else:
+        return "No projects found, have you executed any experiments?"
 
 @app.route('/<project_name>', methods=['GET'])
 def runs(project_name):
     """
     Shows the project run data
     """
+    if not os.path.isfile(SimpleDatabase.metadata_file(project_name)):
+        return "Project name not found, have you executed the experiment yet?"
+
     results = []
     ids = SimpleDatabase.get_sorted_runs(project_name)
     for index, run_id in enumerate(ids):
