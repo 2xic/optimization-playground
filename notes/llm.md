@@ -12,7 +12,7 @@ Show that models are able to reason by just prompting it with "let's think step 
 Shows that using automated generated prompts outperforms the prior baseline.
 The automatic prompt engineer is trained by given an demostration (for instance some input + output), and the LLM outputs a set of instructions candiates, the output is scored and filtered then executed and evaluated.
 
-## [Modern LLMs: MT-NLG, Chinchilla, Gopher and More](https://cameronrwolfe.substack.com/p/modern-llms-mt-nlg-chinchilla-gopher)
+### [Modern LLMs: MT-NLG, Chinchilla, Gopher and More](https://cameronrwolfe.substack.com/p/modern-llms-mt-nlg-chinchilla-gopher)
 - Talks about various other large language models compared to GPT-3.
 - Megatron is a 530B parameters model (GPT-3 has "only" 175B), and does well on various tasks. Except on a reading comprehension task with few show ( Race-h ), interestingly enough.
     - It' also worth noting that a supervised model still beats Megatron on specific tasks, but one can clearly see (even if marginal) that bigger models produces better results.
@@ -346,7 +346,7 @@ Why RLHF ?
 Karpathy also referenced [Large Language Model Guided Tree-of-Thought](https://arxiv.org/pdf/2305.08291.pdf)
 
 
-## [Large Language Model Guided Tree-of-Thought](https://arxiv.org/pdf/2305.08291.pdf)
+### [Large Language Model Guided Tree-of-Thought](https://arxiv.org/pdf/2305.08291.pdf)
 Problems with LLMs today
 - Lack of correct checking
 - No backtracking (so if we get a bad token, there will be a bad path)
@@ -450,12 +450,12 @@ TLDR: GPT behavior has drastically changed over the last couple of months. Mostl
 - Using the classifier they are able to more robustly know if a statement is true or not
 - This also shows that the LLM is aware of the fact that it's lying.
 
-## [prompt-optimizer](https://github.com/vaibkumr/prompt-optimizer)
+### [prompt-optimizer](https://github.com/vaibkumr/prompt-optimizer)
 Just use less words to save money on the llm apis.
 
 It is just a wrapper around `nltk`.
 
-## [HYPOTHESIS SEARCH: INDUCTIVE REASONING WITH LANGUAGE MODELS](https://arxiv.org/pdf/2309.05660.pdf)
+### [HYPOTHESIS SEARCH: INDUCTIVE REASONING WITH LANGUAGE MODELS](https://arxiv.org/pdf/2309.05660.pdf)
 - Give the LLM some program examples
 - Have it generate a program for the examples
   - If it succeeds on all examples then return it
@@ -492,10 +492,10 @@ There is some back and forth in the discussion, but seems like it is susceptible
 - [Technical paper](https://storage.googleapis.com/deepmind-media/gemini/gemini_1_report.pdf)
 
 
-## [Mistral 7B](https://mistral.ai/news/announcing-mistral-7b/)
+### [Mistral 7B](https://mistral.ai/news/announcing-mistral-7b/)
 [Code](https://github.com/mistralai/mistral-src)
 
-## [Mixtral 8x7B](https://github.com/ml-explore/mlx-examples/tree/main/mixtral)
+### [Mixtral 8x7B](https://github.com/ml-explore/mlx-examples/tree/main/mixtral)
 [BlogPost](https://mistral.ai/news/mixtral-of-experts/)
 
 
@@ -590,7 +590,7 @@ Look at [this](https://twitter.com/VictorTaelin/status/1776096481704804789) of a
 ### [⚔️ Chess LLM Arena (preview)](https://huggingface.co/spaces/mlabonne/chessllm)
 Two LLms playing against each other, kinda fun.
 
-## [Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context](https://arxiv.org/pdf/2403.05530.pdf)
+### [Gemini 1.5: Unlocking multimodal understanding across millions of tokens of context](https://arxiv.org/pdf/2403.05530.pdf)
 - Mixture of experts models builds upon Gemini 1.0
 - Does okay on text in haystack, but not as good as Claude
   - They do something similar for audio and video 
@@ -770,14 +770,14 @@ They have a some good subsection under section 3 on hardware failures and things
 - They wrote various debug visluaizations to find issues in the clusters.
 
 
-## [Scaling and evaluating sparse autoencoders](https://arxiv.org/pdf/2406.04093)
+### [Scaling and evaluating sparse autoencoders](https://arxiv.org/pdf/2406.04093)
 [Blog post](https://openai.com/index/extracting-concepts-from-gpt-4/)
 - Use autoencoder to recover activation from a LM.
 - Model structure
   - Inputs are the dense activations
   - Outputs are the spare features
 
-## [Improving Model Safety Behavior with Rule-Based Rewards](https://cdn.openai.com/rule-based-rewards-for-language-model-safety.pdf)
+### [Improving Model Safety Behavior with Rule-Based Rewards](https://cdn.openai.com/rule-based-rewards-for-language-model-safety.pdf)
 [Blog post](https://openai.com/index/improving-model-safety-behavior-with-rule-based-rewards/)
 
 **The idea**
@@ -787,7 +787,7 @@ They have a some good subsection under section 3 on hardware failures and things
 - Uses synthetic data as part of the pipeline also.
 - 
 
-## [Prover-Verifier Games improve legibility of language model outputs](https://openai.com/index/prover-verifier-games-improve-legibility/)
+### [Prover-Verifier Games improve legibility of language model outputs](https://openai.com/index/prover-verifier-games-improve-legibility/)
 [Paper](https://arxiv.org/pdf/2407.13692)
 
 The idea
@@ -800,13 +800,13 @@ The verifier is also a much weaker model. Use this in a RL loop and boom you get
 
 Somehwat similiar to this [Self-playing Adversarial Language Game Enhances LLM Reasoning](https://arxiv.org/pdf/2404.10642) paper.
 
-## [RLHF is just a vibe check](https://x.com/karpathy/status/1821277264996352246)
+### [RLHF is just a vibe check](https://x.com/karpathy/status/1821277264996352246)
 Good post from Karpathy on why RLHF != RL.
 
-## [SQL injection like attacks in LLM](https://x.com/karpathy/status/1823418177197646104)
+### [SQL injection like attacks in LLM](https://x.com/karpathy/status/1823418177197646104)
 Another good post from Karpathy. Basically special tokens used by LLM models can be misused. I.e you can inject `<|endoftext|>` to trick a model that it's the end of the text.
 
-## [How does apple intelligence get a high quality LLM on mobile ?](https://x.com/awnihannun/status/1818648522805436553)
+### [How does apple intelligence get a high quality LLM on mobile ?](https://x.com/awnihannun/status/1818648522805436553)
 - ~3B parameters, so pretty small model (6gb in 16bit)
 - Quantized (mixed precision some weights are 2bit, some are 4bit)
 
@@ -820,12 +820,12 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 - It's in the top tier compared to other models, LLama/Mixtral still beats it on a few benchmarks
 - They use GRPO for RLHF.
 
-## [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/pdf/2404.19737)
+### [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/pdf/2404.19737)
 - Instead of predicting one next token, predict multiple 
 - No extra train time or memory overhead. They have evidecne to show that there was at least a 15% improvmenet on average when training models (up to 13B parameters) with this method.  
 - This method also had a ~3x inference speed up. 
 
-## [The Unreasonable Ineffectiveness of the Deeper Layers](https://arxiv.org/pdf/2403.17887)
+### [The Unreasonable Ineffectiveness of the Deeper Layers](https://arxiv.org/pdf/2403.17887)
 - They removed layers form the networks and did some fientuning training to heal the network
   - Threy removed layers based on similairty scores
   - Method allowed to drop a large amount of layers with a minimal impact on performance
@@ -842,3 +842,34 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
   - Beats refresual training by a lot (Figure 2), but without it reducing the models capabilitys
   - Harmful states link to circuit breakers which allow early exiting.
   - See algorithm 1
+
+### OpenAI o1 (strawberry?)
+- Spend more time thinking (trees search?)
+  - Actually COT
+
+[Learning to Reason with LLMs](https://openai.com/index/learning-to-reason-with-llms/)
+  - Uses `chain of thought` trained with RL, more RL = bigger improvment 
+  - [Reasoning tokens](https://x.com/jpohhhh/status/1834285590251974873)
+  - Beats existing models by a lot on evals
+  - ["When allowed 10,000 submissions per problem, the model achieved a score of 362.14 – above the gold medal threshold – even without any test-time selection strategy."](http://web.archive.org/web/20240912171926/https://openai.com/index/learning-to-reason-with-llms/)
+- [OpenAI o1 System Card](https://openai.com/index/openai-o1-system-card/)
+  - [Paper](https://assets.ctfassets.net/kftzwdyauwt9/2pON5XTkyX3o1NJmq4XwOz/a863fd35000b514887366623a5738b83/o1_system_card.pdf)
+  - Doesn't have anything useful
+- [Product](https://openai.com/o1/#snake-video)
+  - This is marketing, I cry, they should have done a livestream or something.
+  - ["it thinks"](https://vimeo.com/1008704014), not sure I would classify COT as that.
+    - unsure if that prompt is optimized also.
+  - [Some AI doomers take](https://x.com/AISafetyMemes/status/1834004918782624057)
+  - [Tyler Cowen](https://x.com/rapha_gl/status/1834290046754771435)
+    - idk, is this the same old stick
+- [Model is persuasive](https://x.com/swyx/status/1834284741610405965)
+- [Cost optimizations](https://x.com/leonjcoe/status/1834280348752249147) 
+- Peoples impressions
+  - [will depue](https://x.com/willdepue/status/1834294935497179633)
+    - "New Paradigm" and hype. Cool post on scaling inference time compute which is a fair point.
+  - [Good post by Jim Fan](https://x.com/DrJimFan/status/1834279865933332752)
+  - [O1 model no transperancy](https://x.com/abacaj/status/1834280155596132403)
+  - [More bullish on Claude](https://x.com/abacaj/status/1834316422417449228) 
+  - [Machine learnign street talk](https://x.com/MLStreetTalk/status/1834286363476476391)
+  - [A review of OpenAI o1 and how we evaluate coding agents](https://www.cognition.ai/blog/evaluating-coding-agents#first-impressions-of-openai-o1) 
+- 
