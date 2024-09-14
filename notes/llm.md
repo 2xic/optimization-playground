@@ -872,4 +872,8 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
   - [More bullish on Claude](https://x.com/abacaj/status/1834316422417449228) 
   - [Machine learnign street talk](https://x.com/MLStreetTalk/status/1834286363476476391)
   - [A review of OpenAI o1 and how we evaluate coding agents](https://www.cognition.ai/blog/evaluating-coding-agents#first-impressions-of-openai-o1) 
-- 
+  - [Terence Tao](https://x.com/MLStreetTalk/status/1834839716253864025) gave partial praise, but also mentioned it needed help with some of the math tasks he gave it.
+  - [François Chollet](https://x.com/fchollet/status/1834712338534220204) and arc is still unbeaten. Results show this new model is on par with Claude 3.5
+    - [Leaderboard](https://arcprize.org/leaderboard)
+    - [Blogpost on it](https://arcprize.org/blog/openai-o1-results-arc-prize)
+  - 

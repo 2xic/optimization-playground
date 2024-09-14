@@ -4,6 +4,7 @@ from torch import Tensor
 import torch
 from .PositionalEncoding import PositionalEncoding
 from .utils.sampling import temperature_sampling, argmax_sampling
+import math
 
 """
 GPT is a decoder only 
@@ -35,12 +36,15 @@ class GptTransformerModel(nn.Module):
             nhead=config.attention_heads, 
             dim_feedforward=config.feed_forward, 
             dropout=config.dropout,
-            batch_first=True
+            batch_first=True,
+            activation=nn.functional.gelu,
         )
 
         self.transformer_decoder = nn.TransformerDecoder(
-            decoder_layer, num_layers=config.transformer_layers)
-
+            decoder_layer, 
+            num_layers=config.transformer_layers,
+        )
+        self.layer_norm = nn.LayerNorm(self.config.embedding_dim) 
         self.output = nn.Sequential(*[
             nn.Linear(config.embedding_dim, config.vocab_size, bias=False),
 #            nn.Sigmoid()
@@ -53,23 +57,29 @@ class GptTransformerModel(nn.Module):
         # self.dummy_param = nn.Parameter(torch.empty(0))
         self.sequence_size = config.sequence_length
         # (SEQ_LEN, BATCH_SIZE, EMBEDDING_DIM)
+       # self.pos_encoder = nn.Embedding(config.sequence_length, config.embedding_dim)
+        self.dropout = nn.Dropout(config.dropout)
 
     def raw_forward(self, X: Tensor):
         assert len(X.shape) == 2
         # embedding -> positional tokens + pos encoder
         # (batch size, sequence size, embedding_size)
+       # pos = torch.arange(0, X.shape[1], dtype=torch.long, device=X.device).unsqueeze(0)
         source = self.embedding(X) + self.pos_encoder(X)
+        source = self.dropout(source)
         # forward
         # (batch size, sequence size, embedding_size)
-        transformer_out = self.transformer_decoder(source, source)
-        # (batch size, sequence size, embedding_size)
-        results = self.output(transformer_out)
+        source = self.transformer_decoder(source, torch.zeros_like(source))
+        # (batch size, sequence size, embedding)
+        source = self.layer_norm(source)
+        source = self.output(source)
         # (batch size, sequence size, vocab_size)
-        results = results.to(X.device)
-        return results
+        source = source.to(X.device)
+        return source
 
     def forward(self, X: Tensor):
         results = self.raw_forward(X)
+        # (batch size, sequence size, vocab_size)
         reshaped = results.view(-1, self.config.vocab_size)
 
         return reshaped
@@ -98,22 +108,20 @@ class GptTransformerModel(nn.Module):
     def rollout(self, seed, steps, sampling="argmax"):
         with torch.no_grad():
             output = []
+            prev = None
             for index in range(steps):
                 next_predicted = None
                 if len(seed) <= index:
                     X = torch.full((1, self.sequence_size), self.config.padding_index).reshape(1, -1).to(self.device).long()
                     context_tensor = torch.tensor(output[-self.sequence_size:]).long()
                     X[0, :context_tensor.shape[0]] = context_tensor
-                    # print(X[0, :context_tensor.shape[0]])
-                    # print(torch.all(X[0, context_tensor.shape[0]:] == self.config.padding_index))
+                    assert prev is None or torch.all(prev[0, 1:] == X[0, :-1])
 
-                    next_token = self.predict(X, next_token_location=(
+                    next_token_location = (
                         -1 if context_tensor.shape[0] == self.sequence_size else context_tensor.shape[0] - 1
-                    ))
+                    )
+                    next_token = self.predict(X, next_token_location=next_token_location)
                     next_predicted = None
-
-                    # top_values, top_indices = torch.topk(next_token, 5)
-                    # print((top_values, top_indices))
 
                     if sampling == "argmax":
                         next_predicted = argmax_sampling(
@@ -125,6 +133,7 @@ class GptTransformerModel(nn.Module):
                         ).item()
                     assert type(next_predicted) == int, next_predicted
                     output.append(next_predicted)
+                    prev = X
                 else:
                     next_predicted = seed[index].item()
                     assert type(next_predicted) == int, next_predicted

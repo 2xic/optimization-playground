@@ -6,17 +6,18 @@ from optimization_playground_shared.dataloaders.RawTensorToDataloader import get
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 from optimization_playground_shared.metrics_tracker.metrics import Prediction
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
-from optimization_playground_shared.distributed.TrainWrapper import MultipleGpuTrainWrapper
 from torch.utils.data.distributed import DistributedSampler
 from optimization_playground_shared.nlp.SimpleVocab import splitter
-from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
+import random
+import json
 
-SEQUENCE_LENGTH = 128
-batch_size = 32
+SEQUENCE_LENGTH = 64
+batch_size = 128
 source_vocab = SimpleVocab()
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-metrics_tracker = Tracker("train_gpt_shakespare")
+metrics_tracker = Tracker("train_gpt_shakespeare") if __name__ == "__main__" else None
 
 def get_document_words(text):
     # todo: create a good tokenizer, this does not really work for code tokens
@@ -64,17 +65,25 @@ def get_document_dataset(vocab: SimpleVocab, documents):
     return X[indices], y[indices]
 
 
-def get_text_prediction(model: GptTransformerModel):
+def get_text_prediction(model: GptTransformerModel, seed: torch.Tensor):
     results = []
-    seed = source_vocab.get_tensor("second citizen : ", sequence_length=-1).reshape(-1)
+    raw_tokens = []
+#    seed = source_vocab.get_tensor("second citizen : ", sequence_length=-1).reshape(-1)
     with torch.no_grad():
         y = model.rollout(
             seed=seed,
             steps=512,
+            sampling="temperature"
         )
-        for i in y:
+        for index, i in enumerate(y):
+            if index == seed.shape[-1]:
+                results.append("*model output start*")
+                raw_tokens.append(-42)
+            #    print((index, seed.shape[-1]))
+            #    print(results[-1])
             results.append(source_vocab.vocab.index_vocab[i])
-    return " ".join(results)
+            raw_tokens.append(i)
+    return " ".join(results), raw_tokens
 
 def get_dataloader():
     text = None
@@ -82,6 +91,8 @@ def get_dataloader():
         text = file.read()
 
     X, y = get_document_dataset(source_vocab, [text])
+    print(X)
+    print(y)
     source_vocab.lock()
 
     return X, y
@@ -91,19 +102,21 @@ def flatten_view(x, y):
 
 def train_model():
     X, y = get_dataloader()
-
+    embedding_dim = 256
     config = Config(
         vocab_size=source_vocab.size,
-        embedding_dim=128,
-        transformer_layers=2,
+        embedding_dim=embedding_dim,
+        transformer_layers=4,
         attention_heads=4,
-        dropout=0.1,
-        feed_forward=128,
+        dropout=0.05,
+        feed_forward=embedding_dim * 4,
         padding_index=source_vocab.vocab.PADDING_IDX,
         sequence_length=SEQUENCE_LENGTH
     )
     model = GptTransformerModel(config)
-    optimizer = optim.Adam(model.parameters())    
+    epochs = 1024
+    optimizer = optim.Adam(model.parameters(), lr=0.00004, weight_decay=0.01)
+
     dataloader = get_raw_dataloader((
         X.clone(),
         y.clone()
@@ -111,21 +124,30 @@ def train_model():
         batch_size=batch_size,
         shuffle=False,
     )
-    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=source_vocab.vocab.PADDING_IDX))
-    for epoch in range(128):
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(dataloader) * epochs)
+    trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=source_vocab.vocab.PADDING_IDX))
+    for epoch in range(epochs):
         (loss, accuracy) = trainer.use_tqdm().train(
             dataloader,
             callback=flatten_view,
         )
+        text, raw_tokens = get_text_prediction(model, X[random.randint(0, X.shape[0] - 1)])
         metrics_tracker.log(
             Metrics(
                 epoch=epoch,
                 loss=loss,
                 training_accuracy=accuracy,
                 prediction=Prediction.text_prediction(
-                    get_text_prediction(model))
+                    "\n".join([
+                        "text: ",
+                        text,
+                        "tokens: ",
+                        json.dumps(raw_tokens)
+                    ])
+                )
             )
         )
+        scheduler.step()
 
 if __name__ == "__main__":
     train_model()

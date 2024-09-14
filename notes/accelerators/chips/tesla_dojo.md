@@ -27,4 +27,4 @@ So Dojo is the name of the super computer that tesla uses for training, but it's
   - ^ Latency is reduced by removing wait status in TCP
 - [I found the slides](https://hc2024.hotchips.org/assets/program/conference/day2/17_HC2024_Tesla_TTPoE_v5.pdf), but they are password protected. Found them on some random chinese websites also, but also no way to download them.
   - nvm the speaker [had posted about it on Twitter](https://x.com/divBy_zero/status/1830441307594174496)
-- 
+- [Github code](https://github.com/teslamotors/ttpoe)

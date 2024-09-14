@@ -39,8 +39,8 @@ class TrainingLoop:
         for (X, y) in training_loop:
             if callback is not None:
                 X, y = callback(X, y)
-            X = X.to(device)
-            y = y.to(device)
+            X: torch.Tensor = X.to(device)
+            y: torch.Tensor = y.to(device)
             y_pred = self.model(X)
 
             if not self.loss is None:
@@ -60,6 +60,7 @@ class TrainingLoop:
                   set_to_none=True
                 )
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 self.optimizer.step()
 
             # TODO: Maybe instead add a custom accuracy metric field

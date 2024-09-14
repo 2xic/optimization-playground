@@ -23,7 +23,7 @@ class Tracker:
         self.name = project_name
         self.run_id = uuid.uuid4()
         # sending resource updates :O
-        t1 = threading.Thread(target=self.start_background_thread)
+        t1 = threading.Thread(target=self.start_background_thread, daemon=True)
         t1.start()
         # we send feedback -> feedback is good
 
