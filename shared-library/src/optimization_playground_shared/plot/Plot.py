@@ -86,7 +86,7 @@ class Plot:
 
         return name
 
-    def plot_figures(self, figures, name):
+    def plot_figures(self, figures, name, show_legend=True):
         n_cols = len(figures)
         n_rows = 1
 
@@ -105,7 +105,8 @@ class Plot:
             axes[index].set_title(i.title)
             axes[index].set_xlabel(i.x_axes_text)
             axes[index].set_ylabel(i.y_axes_text)
-            axes[index].legend(loc="upper left")
+            if show_legend:
+                axes[index].legend(loc="upper left")
             if i.x_scale is not None:
                 axes[index].set_xscale(i.x_scale)
             if i.y_scale is not None:

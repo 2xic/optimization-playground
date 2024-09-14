@@ -2,8 +2,9 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 
 class _RawTensorDataset(Dataset):
-    def __init__(self, tuple_list):
+    def __init__(self, tuple_list, callback=None):
         self.tuple_list = tuple_list
+        self.callback = callback
 
     def __len__(self):
         return self.tuple_list[0].shape[0]

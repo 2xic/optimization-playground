@@ -17,6 +17,9 @@ assert "HOST" in os.environ, "Missing host keyword"
 
 class Tracker:
     def __init__(self, project_name) -> None:
+        self.hostname = os.environ["HOST"]
+        if not "http://" in self.hostname:
+            self.hostname = "http://" + self.hostname
         self.name = project_name
         self.run_id = uuid.uuid4()
         # sending resource updates :O
@@ -25,16 +28,19 @@ class Tracker:
         # we send feedback -> feedback is good
 
     def start_background_thread(self):
+        print("Starting to send resource usage")
         while True:
             try:
-                requests.post(os.environ["HOST"] + "/resource_usage", json={
+                response = requests.post(self.hostname + "/resource_usage", json={
                     "cpu": get_cpu_resource_usage(),
                     "ram": get_ram_resource_usage(),
                     "gpu": get_gpu_resource_usage(),
                 })
+                assert response.status_code == 200, "bad status code"
                 time.sleep(30)
             except Exception as e:
                 print("Exception in background thread", e)
+                time.sleep(5)
 
     def send_code_state(self, folders: List[str]):
         files = {}
@@ -57,7 +63,7 @@ class Tracker:
                         root_name
                     ) 
                     files[name] = file.read()
-        print(requests.post(os.environ["HOST"], json={
+        print(requests.post(self.hostname, json={
             "name": self.name,
             "run_id": str(self.run_id),
             "code": files,
@@ -66,7 +72,7 @@ class Tracker:
         return self
 
     def log(self, metrics: Metrics):
-        print(requests.post(os.environ["HOST"], json={
+        print(requests.post(self.hostname, json={
             "name": self.name,
             "run_id": str(self.run_id),
             "metrics": dataclasses.asdict(metrics),

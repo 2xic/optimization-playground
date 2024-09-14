@@ -40,7 +40,6 @@ def create_vocab_dataset() -> SimpleVocab:
 
 def create_vocab_dataset_bpe() -> SimpleVocab:
     print("Creating BPE dataset")
-    """
     bpe = BPE()
     for i in glob.iglob(path, recursive=True):
         print(i)
@@ -50,7 +49,6 @@ def create_vocab_dataset_bpe() -> SimpleVocab:
     print("Add tokens ... starting merger")
     with open(source_bpe + "_pre_merge", "wb") as file:
         pickle.dump(bpe, file)
-    """
     bpe = None
     with open(source_bpe + "_pre_merge", "rb") as file:
         bpe = pickle.load(file)
@@ -60,7 +58,7 @@ def create_vocab_dataset_bpe() -> SimpleVocab:
     return bpe
 
 if __name__ == "__main__":
-    results = create_vocab_dataset()
+    results = create_vocab_dataset_bpe()
 #    results = create_vocab_dataset_bpe()
 #    print(results.index.word_index)
     print(results.index.tokens_index)

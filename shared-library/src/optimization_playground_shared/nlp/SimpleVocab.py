@@ -70,10 +70,10 @@ class SimpleVocab:
             X.append(self.vocab.index_vocab[i])
         return X
 
-    def get_tensor(self, sentence, sequence_length):
+    def get_tensor(self, sentence, sequence_length) -> torch.Tensor:
         if sequence_length == -1:
             output = []
-            for index, i in enumerate(splitter(sentence)[:sequence_length]):
+            for index, i in enumerate(splitter(sentence)):
                 output.append(self.vocab.add(i))
             return torch.tensor([output])
 

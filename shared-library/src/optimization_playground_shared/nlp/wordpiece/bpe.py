@@ -13,6 +13,7 @@ class VocabIndex:
 
         # Stores the actual full token mapping index. Needs to be recalculated later on.
         self.tokens_index = {}
+        self.update_index = {}
 
     def add_sentence(self, sentence):
         for i in sentence.split(" "):
@@ -43,7 +44,9 @@ class VocabIndex:
         if pair[0] in self.tokens_index:
             # del self.tokens_index[pair[0]]
             # adds a new token pair.
-            self.tokens_index[pair[0] +pair[1]] = None
+            self.tokens_index[pair[0] + pair[1]] = None
+            # Delete the old token as we have optimized
+            del self.tokens_index[pair[0]]
 
     def encode(self, words):
         # Need to iteratively check the tokens_index + 1 -> fallback to old current token
@@ -54,9 +57,9 @@ class VocabIndex:
         return " ".join(list(word.lower()))
 
 class BPE:
-    def __init__(self) -> None:
+    def __init__(self, show_progress=True) -> None:
         self.index = VocabIndex()
-        self.merges = 50_000
+        self.progress = tqdm.tqdm if show_progress else list
 
     # Allows usage of custom tokenizer
     def add_tokens(self, input: List[str]):
@@ -73,35 +76,51 @@ class BPE:
             self.index.add_sentence(word)
         return self
 
-    def merge(self):
-        for _ in range(self.merges):
-            pairs = self._get_stats()
-            if len(pairs) == 0:
+    def merge(self, n=50_000):
+        for _ in self.progress(range(n)):
+            if not self.run_merge_step():
                 break
-            pair = max(
-                pairs,
-                key=lambda x: pairs[x]
-            )
-            for index in self.index.index_word:
-                word = self.index.index_word[index]
-                output = word
-                joined = "".join(pair)
-                splitted = " ".join(pair)
-                output = output.replace(splitted, joined)
-                if word != output:
-                    self.index.update(
-                        word,
-                        output,
-                        pair
-                    )
         return self
+
+    def merge_until(self, token_size=10_000):
+        last_token_count = float('inf')
+        counter = 0
+        while token_size < last_token_count and (counter < 10):
+            if not self.run_merge_step() or len(self.index.tokens_index) == last_token_count:
+                counter += 1
+            else:
+                counter = 0
+                last_token_count = len(self.index.tokens_index)
+        return self
+
+    def run_merge_step(self):
+        pairs = self._get_stats()
+        if len(pairs) == 0:
+            return False
+        pair = max(
+            pairs,
+            key=lambda x: pairs[x]
+        )
+        for index in self.index.index_word:
+            word = self.index.index_word[index]
+            joined = "".join(pair)
+            splitted = " ".join(pair)
+            output = word.replace(splitted, joined)
+            # Pair got jointed need to update
+            if word != output:
+                self.index.update(
+                    word,
+                    output,
+                    pair
+                )            
+        return True
 
     def _get_stats(self):
         """
         We get the frequency of word pairs in the total vocab
         """
         pairs = defaultdict(int)
-        for word in tqdm.tqdm(self.index.word_index):
+        for word in self.index.word_index:
             frequency = self.index.word_frequency[word]
             symbols = word.split()
             for i in range(len(symbols) - 1):
@@ -110,7 +129,9 @@ class BPE:
 
 if __name__ == "__main__":
     # example word form the paper
-    results = BPE().add_word(
+    results = BPE(
+        show_progress=False,
+    ).add_word(
         "low",
         5
     ).add_word(
@@ -122,6 +143,12 @@ if __name__ == "__main__":
     ).add_word(
         "wider",
         3
-    ).merge()
+    ).merge_until(
+        token_size=5
+    )
+    print("word_index")
     print(results.index.word_index)
+    print("tokens_index")
     print(results.index.tokens_index)
+    print("index_word")
+    print(results.index.index_word)

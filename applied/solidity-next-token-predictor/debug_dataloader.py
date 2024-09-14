@@ -10,4 +10,16 @@ if __name__ == "__main__":
         X, y = get_document_dataset(vocab, [document])
         # print(y)
         a = y.reshape((-1)).tolist()
-        print(vocab.decoded_tokens(a))
+   #     print(vocab.decoded_tokens(a))
+        stats = {}
+        for index, item in enumerate(X.tolist()):
+            for token in item:
+                if token not in stats:
+                    stats[token] =1
+                else:
+                    stats[token] += 1
+#        print(stats)
+#        print(vocab.decoded_tokens([0]))
+        print(stats[0])
+
+        break

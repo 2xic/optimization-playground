@@ -15,3 +15,8 @@ def load_model(base_name):
     final_path = f"{base_name}.pth"
     checkpoint = torch.load(final_path, map_location='cpu')
     return checkpoint
+
+def does_model_exists(base_name):
+    final_path = f"{base_name}.pth"
+    checkpoint = os.path.isfile(final_path)
+    return checkpoint

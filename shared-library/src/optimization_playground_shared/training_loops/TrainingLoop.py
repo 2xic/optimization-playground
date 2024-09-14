@@ -23,10 +23,10 @@ class TrainingLoop:
         with torch.no_grad():
             return self._iterate(dataloader, train=False)
 
-    def train(self, dataloader, sharding=False):
-        return self._iterate(dataloader, train=True, sharding=sharding)
+    def train(self, dataloader, sharding=False, callback=None):
+        return self._iterate(dataloader, train=True, sharding=sharding, callback=callback)
 
-    def _iterate(self, dataloader, train, sharding):
+    def _iterate(self, dataloader, train, sharding, callback=None):
         device = self.device
         if not sharding:
             self.model.to(device)
@@ -37,6 +37,8 @@ class TrainingLoop:
 
         training_loop = self.iterator_loop(dataloader, train)
         for (X, y) in training_loop:
+            if callback is not None:
+                X, y = callback(X, y)
             X = X.to(device)
             y = y.to(device)
             y_pred = self.model(X)
@@ -66,7 +68,8 @@ class TrainingLoop:
                 accuracy += ((y_pred - y).abs() < 0.001).sum()
             else:
                 accuracy += (torch.argmax(y_pred, 1) == y).sum()
-            length += X.shape[0]
+            # Shape of y would be equal to the number of predictions if we flatten
+            length += y.shape[0]
 
             # Fallback
             if isinstance(training_loop, tqdm):

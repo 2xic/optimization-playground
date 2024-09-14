@@ -332,21 +332,25 @@ def resource_usage():
                     "percentage":resource_tracker.cpu,
                 },
                 title="Cpu usage",
+                y_axes_text="%",
             ),
             Figure(
                 plots={
                     "percentage":resource_tracker.ram,
                 },
                 title="ram usage",
+                y_axes_text="%",
             ),
             Figure(
                 plots={
                     "percentage":resource_tracker.gpu,
                 },
                 title="gpu usage",
+                y_axes_text="%",
             ),
         ],
-        name='.training.png'
+        name='.training.png',
+        show_legend=False,
     )
     with open(path, "rb") as file:
         encoded_data = base64.b64encode(file.read()).decode("ascii")

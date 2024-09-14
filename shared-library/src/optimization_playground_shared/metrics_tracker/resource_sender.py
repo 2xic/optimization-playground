@@ -1,6 +1,4 @@
 import nvidia_smi
-import threading
-import random
 import psutil
 
 def get_gpu_resource_usage():
@@ -15,7 +13,7 @@ def get_gpu_resource_usage():
         # print(f"|Device {i}| Mem Free: {mem.free/1024**2:5.2f}MB / {mem.total/1024**2:5.2f}MB | gpu-util: {util.gpu/100.0:3.1%} | gpu-mem: {util.memory/100.0:3.1%} |")
         total_gpu_ram += mem.total
         total_gpu_ram_usage += mem.used
-    return total_gpu_ram_usage / total_gpu_ram
+    return total_gpu_ram_usage / total_gpu_ram * 100
 
 def get_cpu_resource_usage():
     return psutil.cpu_percent()

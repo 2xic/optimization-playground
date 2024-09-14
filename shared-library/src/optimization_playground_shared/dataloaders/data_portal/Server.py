@@ -9,8 +9,11 @@ import argparse
 import glob
 from concurrent.futures import ThreadPoolExecutor
 import queue
+import time
+import threading
 
 DATASET_SIZE = 1_000
+
 
 def fetch_files(files_queue: queue.Queue):
     global DATASET_SIZE
@@ -29,7 +32,8 @@ def fetch_files(files_queue: queue.Queue):
             next_item = next(files)
             is_first_round = False
             DATASET_SIZE = min(actual_size, args.limit) if args.limit != None else predicted_dataset_size
-        print(next_item)
+        
+     #   print(next_item)
         with open(next_item, "rb") as file:
             files_queue.put(file.read())
         # So we can compare it later on.
@@ -40,7 +44,7 @@ def serve_files(files_queue: queue.Queue):
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.bind("tcp://*:5555")
-
+    print("Serving files now ")
     while True:
         message = socket.recv()
         if message == b"get":
@@ -56,7 +60,10 @@ if __name__ == "__main__":
     parser.add_argument("-l", "--limit", help="Limit the dataset size", type=int, required=False)
     
     args = parser.parse_args()
-    files_queue = queue.Queue()
-    with ThreadPoolExecutor(max_workers=2) as executor:
-        executor.submit(serve_files, args=(files_queue, ))
-        executor.submit(fetch_files, args=(files_queue, ))
+    files_queue = queue.Queue(maxsize=100)
+    thread = threading.Thread(target=fetch_files, args=(files_queue,  ))
+    thread.start()
+
+    thread = threading.Thread(target=serve_files, args=(files_queue, ))
+    thread.start()
+    thread.join()

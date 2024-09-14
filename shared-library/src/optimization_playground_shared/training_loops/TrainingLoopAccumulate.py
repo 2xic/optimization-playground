@@ -17,14 +17,14 @@ class TrainingLoopAccumulate:
             (_loss, acc) = self._iterate(dataloader, train=False)
             return acc
     
-    def train(self, dataloader):
-        return self._iterate(dataloader, train=True)
+    def train(self, dataloader, callback=None):
+        return self._iterate(dataloader, train=True, callback=callback)
 
     def use_tqdm(self):
         self.iterator_loop = lambda x, train: tqdm(x, desc="Training" if train else "Testing")
         return self
 
-    def _iterate(self, dataloader, train=True):
+    def _iterate(self, dataloader, train=True, callback=None):
         self.model.to(self.device)
         total_loss = torch.tensor(0.0, device=self.device)
         accuracy = torch.tensor(0.0, device=self.device)
@@ -33,9 +33,14 @@ class TrainingLoopAccumulate:
         has_nan_loss = None
         training_loop = self.iterator_loop(dataloader, train)
         for index, (X, y) in enumerate(training_loop):
+            if callback is not None:
+                X, y = callback(X, y)
+
             X = X.to(self.device)
             y = y.to(self.device)
             y_pred = self.model(X)
+
+            assert torch.all(y_pred != torch.nan), "Found nan in output"
 
             if train:
                 loss = self.loss(y_pred, y)
@@ -46,13 +51,13 @@ class TrainingLoopAccumulate:
                 if (0 < index) and index % self.accumulate_steps:
                     self._step()
             accuracy += (torch.argmax(y_pred, 1) == y).sum()
-            length += X.shape[0]
+            length += y.shape[0]
             # Fallback
             if isinstance(training_loop, tqdm):
                 if has_nan_loss:
-                    training_loop.set_description(f"({self.device.type}) Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
+                    training_loop.set_description(f"({self.device.type}) Epoch: {self.epoch} Loss: {total_loss.item()} (last loss was nan), Accuracy: {(accuracy / length) * 100}%")                    
                 else:
-                    training_loop.set_description(f"({self.device.type}) Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
+                    training_loop.set_description(f"({self.device.type}) Epoch: {self.epoch} Loss: {total_loss.item()}, Accuracy: {(accuracy / length) * 100}%")
         
         self._step()
         accuracy = (accuracy / length) * 100 

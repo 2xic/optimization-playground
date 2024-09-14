@@ -10,8 +10,12 @@ if __name__ == "__main__":
 
     # Predict the next tokens for contract keyword
     text = vocab.get_tensor(
-        "contract ",
-        SEQUENCE_LENGTH
+        "// This ",
+        -1
     )
-    output = (model.rollout(text[0], 10, torch.device("cpu")))
+    print(text[0])
+    output = model.rollout(text[0], 10, sampling="argmax")
+    print(vocab.decode(output))
+
+    output = model.rollout(text[0], 10, sampling="temperature")
     print(vocab.decode(output))
