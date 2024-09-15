@@ -1,3 +1,8 @@
+"""
+This trains the same model n times and have teh data be distributed,
+then we synchronize the parameters.
+"""
+
 import torch
 import torch.optim as optim
 from optimization_playground_shared.dataloaders.Mnist import get_dataloader

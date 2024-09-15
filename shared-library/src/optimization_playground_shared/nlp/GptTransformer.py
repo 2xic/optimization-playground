@@ -60,12 +60,12 @@ class GptTransformerModel(nn.Module):
        # self.pos_encoder = nn.Embedding(config.sequence_length, config.embedding_dim)
         self.dropout = nn.Dropout(config.dropout)
 
-    def raw_forward(self, X: Tensor):
-        assert len(X.shape) == 2
+    def raw_forward(self, x: Tensor):
+        assert len(x.shape) == 2
         # embedding -> positional tokens + pos encoder
         # (batch size, sequence size, embedding_size)
-       # pos = torch.arange(0, X.shape[1], dtype=torch.long, device=X.device).unsqueeze(0)
-        source = self.embedding(X) + self.pos_encoder(X)
+       # pos = torch.arange(0, x.shape[1], dtype=torch.long, device=x.device).unsqueeze(0)
+        source = self.embedding(x) + self.pos_encoder(x)
         source = self.dropout(source)
         # forward
         # (batch size, sequence size, embedding_size)
@@ -74,11 +74,11 @@ class GptTransformerModel(nn.Module):
         source = self.layer_norm(source)
         source = self.output(source)
         # (batch size, sequence size, vocab_size)
-        source = source.to(X.device)
+   #     source = source.to(x.device)
         return source
 
-    def forward(self, X: Tensor):
-        results = self.raw_forward(X)
+    def forward(self, x: Tensor):
+        results = self.raw_forward(x)
         # (batch size, sequence size, vocab_size)
         reshaped = results.view(-1, self.config.vocab_size)
 
