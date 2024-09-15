@@ -1,8 +1,4 @@
-"""
-Train to predict next pixel from the previous batch of pixels
-"""
-import torch
-import torch.optim as optim
+import torch.optim as optic
 from optimization_playground_shared.dataloaders.Mnist import get_dataloader
 from optimization_playground_shared.distributed.PipelineDistrubted import MultipleGpuBigModelWrapper
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
@@ -13,6 +9,10 @@ from torch.utils.data.distributed import DistributedSampler
 Running the following should work.
 
 torchrun --nproc-per-node 2 train_across_gpus.py
+
+Good references 
+- https://github.com/pytorch/PiPPy/blob/main/examples/huggingface/pippy_gpt2.py
+- https://huggingface.co/docs/transformers/en/perf_train_gpu_many
 """
 
 class Trainer(MultipleGpuBigModelWrapper):
@@ -22,7 +22,7 @@ class Trainer(MultipleGpuBigModelWrapper):
 
 if __name__ == "__main__":
     train, _ = get_dataloader(
-        batch_size=1
+        batch_size=16
     )
     trainer = Trainer()
     trainer.start()

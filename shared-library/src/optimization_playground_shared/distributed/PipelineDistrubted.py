@@ -16,9 +16,9 @@ from torch.distributed.pipelining.microbatch import split_args_kwargs_into_chunk
 class MultipleGpuBigModelWrapper(abc.ABC):
     def start(self, is_debug_mode=False) -> None:
         self.rank = int(os.getenv("RANK", -1))
-        self.world_size = int(os.getenv("WORLD_SIZE", 1))
-        self.chunks = 1
-        self._main(gpu_id=0, world_size=None, is_debug_mode=is_debug_mode)
+        self.world_size = int(os.getenv("WORLD_SIZE", 4))
+        self.chunks = 4
+        self._main()
 
     def run(self, module, inputs):
         X, y = inputs
@@ -30,11 +30,14 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
        # print((next(module.parameters()).device, X.device))
 
+        input_X = X[:X.shape[0] // self.chunks].reshape((X.shape[0] // self.chunks, ) + tuple(X.shape[1:]))
+        assert input_X.shape[0] == X.shape[0] // self.chunks
+
         pipe: Pipe = pipeline(
             module=module,
             mb_args=(),
             mb_kwargs={
-                "x": X[0].reshape((1, 1, 28, 28)),
+                "x": input_X,
             },
             split_spec={
                 "conv1": SplitPoint.BEGINNING,
@@ -55,17 +58,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         )
         
         if self.rank == 0:            
-            _, kwargs_split = split_args_kwargs_into_chunks(
-                args=(),
-                kwargs={
-                    "x": X# [0].reshape((1, 1, 28, 28)),
-                },
-                chunks=self.chunks,
-                #args_chunk_spec=args_chunk_spec,
-                #kwargs_chunk_spec=kwargs_chunk_spec
-            )
             schedule.step(
-                x=X, #kwargs_split
+                x=X
             )
         else:
             out = schedule.step()
@@ -75,9 +69,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         dist.barrier()
         dist.destroy_process_group()
         
-    def _main(self, gpu_id, world_size, is_debug_mode):
+    def _main(self):
         backend = "nccl"
-        print(gpu_id)
         dev_id = self.rank % torch.cuda.device_count()
         self.device = torch.device(f"cuda:{dev_id}")
         dist.init_process_group(

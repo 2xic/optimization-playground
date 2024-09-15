@@ -1,6 +1,3 @@
-"""
-Train to predict next pixel from the previous batch of pixels
-"""
 import torch
 import torch.optim as optim
 from optimization_playground_shared.dataloaders.Mnist import get_dataloader
