@@ -4,10 +4,8 @@ import torch.optim as optim
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
-from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
-from optimization_playground_shared.nlp.SimpleVocab import splitter
 from pre_generator import get_cache_file
 import atexit
 import time
@@ -16,8 +14,8 @@ from torch.cuda.amp import autocast
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 from optimization_playground_shared.metrics_tracker.metrics import Prediction
 import json
-import random
 import optimization_playground_shared
+from optimization_playground_shared.nlp.DocumentEncoder import get_document_dataset
 
 metrics_tracker = Tracker("solidity_next_token_predictor").send_code_state([
     __file__,
@@ -30,52 +28,6 @@ BATCH_SIZE = 8
 # Need to try to tain model with long sequence size ....
 SEQUENCE_LENGTH = 256
 CACHE_FILE = ".model_state.pkt"
-
-def get_document_words(text):
-    # todo: create a good tokenizer, this does not really work for code tokens
-    if type(text) == bytes:
-        return splitter(text.decode())
-    else:
-        return splitter(text)
-
-def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_index):
-    words = get_document_words(text)
-    count_words = len(words)
-    vocab_add = vocab.vocab.get 
-    # preload all the words fast
-    words = torch.tensor(list(map(lambda x: vocab_add(x), words)), dtype=torch.long)
-    range_start_index = 1 if random.randint(0, 2) == 1 else SEQUENCE_LENGTH 
-    for i in range(range_start_index, count_words - 1):
-        start_index = 0
-        if i > SEQUENCE_LENGTH:
-            start_index = i - SEQUENCE_LENGTH
-        context = words[start_index:i]
-        next_token = words[i+1:i+SEQUENCE_LENGTH + 1]
-        # add the entries
-        tensor_x[entries_index, :context.shape[-1]] = context
-        tensor_y[entries_index, :next_token.shape[-1]] = next_token
-        entries_index += 1
-    return tensor_x, tensor_y, entries_index
-
-def get_document_dataset(vocab: SimpleVocab, documents):
-    assert type(documents) == list
-    entries_count = 0
-    for i in documents:
-        # -2 as we need the first token to be placed and the last token
-        entries_count += len(get_document_words(i)) - 2
-
-    X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-    y = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-    entries_index = 0
-    for document in documents:
-        X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index)
-  #  print(torch.bincount(y).tolist())#, y.unique(sorted=True).float()))
-    assert not torch.all(X == 0), "All zeros is bad"
-    assert not torch.all(y == 0), "All zeros is bad"
-
-    # Random sampling out of the dataset for better coverage
-    indices = torch.randint(0, X.size(0), (entries_count // 32,))
-    return X[indices], y[indices]
 
 def get_model(vocab):
     config = Config(

@@ -10,7 +10,8 @@ import os
 import tqdm 
 import random
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
-from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_dataset
+from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset
+from optimization_playground_shared.nlp.DocumentEncoder import get_document_dataset
 import time
 
 os.makedirs(".cache", exist_ok=True)

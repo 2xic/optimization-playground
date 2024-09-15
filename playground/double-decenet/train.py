@@ -5,7 +5,7 @@ import time
 from optimization_playground_shared.process_pools.MultipleGpus import run_on_multiple_gpus, ddp_setup
 # from optimization_playground_shared.training_loops.TrainingLoopProfile import TrainingLoopProfile
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
-from optimization_playground_shared.distributed.TrainingLoopDistributedAccumulate import TrainingLoopDistributedAccumulate
+from optimization_playground_shared.distributed.MultipleGPUsTrainingLoopDistributedAccumulate import MultipleGPUsTrainingLoopDistributedAccumulate
 from optimization_playground_shared.utils.GlobalTimeSpentInFunction import GlobalTimeSpentInFunction
 import time
 from torch.distributed import destroy_process_group
@@ -58,7 +58,7 @@ def core(gpu_id, size):
 
     trainer = None
     if RUN_ON_MULTIPLE_GPUS:
-        trainer = TrainingLoopDistributedAccumulate(
+        trainer = MultipleGPUsTrainingLoopDistributedAccumulate(
             model,
             optimizer,
             gpu_id=gpu_id

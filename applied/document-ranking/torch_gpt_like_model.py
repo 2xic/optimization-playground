@@ -10,7 +10,8 @@ from dataset import get_dataset
 import torch
 import os
 import tqdm 
-from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset, get_document_dataset
+from torch_shared_helpers import encode_document_embed_text, create_vocab_dataset
+from optimization_playground_shared.nlp.DocumentEncoder import get_document_dataset
 
 BATCH_SIZE = 256
 SEQUENCE_LENGTH = 128

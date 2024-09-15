@@ -2,11 +2,13 @@
 All the setup code you need to start training on multiple GPUs
 """
 from ..process_pools.MultipleGpus import run_on_multiple_gpus, ddp_setup
-from .TrainingLoopDistributedAccumulate import TrainingLoopDistributedAccumulate
+from .MultipleGPUsTrainingLoopDistributedAccumulate import MultipleGPUsTrainingLoopDistributedAccumulate
 from ..training_loops.TrainingLoop import TrainingLoop
 import abc
-import torch
 
+"""
+This does distributed data training
+"""
 class MultipleGpuTrainWrapper(abc.ABC):
     def start(self, is_debug_mode=False) -> None:
         if not is_debug_mode:
@@ -25,22 +27,23 @@ class MultipleGpuTrainWrapper(abc.ABC):
 
     def _core(self, gpu_id, is_debug_mode):
         # Get dataloader first to init global variables
-        dataloader = self._get_dataloader(gpu_id, is_debug_mode)
-        model, optimizer = self._get_model_and_optimizer()
+        dataloader = self.get_dataloader(gpu_id)
+        model, optimizer, loss = self.get_training_parameters()
         trainer = None 
         
+        # if not debug mode use the distributed version, else test on single GPU
         if not is_debug_mode:
-            trainer = TrainingLoopDistributedAccumulate(
+            trainer = MultipleGPUsTrainingLoopDistributedAccumulate(
                 model=model,
                 optimizer=optimizer,
                 gpu_id=gpu_id,
-                loss=self._loss()
+                loss=loss,
             )
         else:
             trainer = TrainingLoop(
                 model=model,
                 optimizer=optimizer,
-                loss=self._loss()
+                loss=loss,
             )
         print(f"Starting to train on {gpu_id}")
         for epoch in range(1_000):
@@ -48,18 +51,15 @@ class MultipleGpuTrainWrapper(abc.ABC):
             if results is not None:
                 (loss, accuracy) = results
                 print(f"loss: {loss}, accuracy: {accuracy}")
-                self._epoch_done(epoch, model, loss, accuracy, gpu_id)
+                self.epoch_done(epoch, model, loss, accuracy, gpu_id)
 
     @abc.abstractmethod
-    def _get_model_and_optimizer(self):
+    def get_training_parameters(self):
         pass
 
     @abc.abstractmethod
-    def _get_dataloader(self, device):
+    def get_dataloader(self, device):
         pass
-
-    def _loss(self):
-        return torch.nn.CrossEntropyLoss()
     
-    def _epoch_done(self, epoch, model, loss, accuracy, device):
+    def epoch_done(self, epoch, model, loss, accuracy, device):
         pass

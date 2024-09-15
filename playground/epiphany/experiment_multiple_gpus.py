@@ -3,7 +3,7 @@ Training on multiple GPUs
 """
 from optimization_playground_shared.dataloaders.Cifar10 import get_dataloader
 from optimization_playground_shared.models.BasicConvModel import BasicConvModel
-from optimization_playground_shared.distributed.TrainingLoopDistributed import TrainingLoopDistributed
+from optimization_playground_shared.distributed.MultipleGPUsTrainingLoop import MultipleGPUsTrainingLoop
 import torch.optim as optim
 import time
 import torch.multiprocessing as mp
@@ -34,7 +34,7 @@ def main(gpu_id, world_size):
         shuffle=False,
         sampler=lambda dataset: DistributedSampler(dataset),
     )
-    trainer = TrainingLoopDistributed(
+    trainer = MultipleGPUsTrainingLoop(
         model,
         optimizer,
         gpu_id=gpu_id

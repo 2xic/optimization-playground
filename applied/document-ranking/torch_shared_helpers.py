@@ -33,38 +33,3 @@ def create_vocab_dataset(documents) -> SimpleVocab:
     else:
         with open(source, "rb") as file:
             return pickle.load(file)
-
-# @jit()
-def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_index, sequence_length):
-    words = get_document_words(text)
-    count_words = len(words)
-    vocab_add = vocab.vocab.get 
-    # preload all the words fast
-    words = torch.tensor(list(map(lambda x: vocab_add(x), words)), dtype=torch.long)
- #   print(words)
-    for i in range(count_words - 1):
-        start_index = 0
-        if i > sequence_length:
-            start_index = i - sequence_length
-        context = words[start_index:i]
-        next_token = words[i]
-        # add the entries
-        tensor_x[entries_index, :context.shape[-1]] = context
-        tensor_y[entries_index] = next_token
-        entries_index += 1
-    return tensor_x, tensor_y, entries_index
-
-def get_document_dataset(vocab: SimpleVocab, documents, sequence_length):
-    assert type(documents) == list
-    entries_count = 0
-    for i in documents:
-        entries_count += len(get_document_words(i))
-
-    X = torch.full(size=(entries_count, sequence_length), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-    y = torch.full(size=(entries_count, ), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-    entries_index = 0
-    for document in documents:
-        X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index, sequence_length)
-    assert not torch.all(X == 0), "All zeros is bad"
-    assert not torch.all(y == 0), "All zeros is bad"
-    return X, y
