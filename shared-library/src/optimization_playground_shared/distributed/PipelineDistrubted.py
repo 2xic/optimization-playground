@@ -9,15 +9,14 @@ import abc
 import torch.distributed as dist
 import os
 from ..utils.GetParameterCoumt import get_parameter_count
-from torch.distributed.pipelining.microbatch import split_args_kwargs_into_chunks
 import os
-import itertools
+import time
 
 class MultipleGpuBigModelWrapper(abc.ABC):
     def start(self) -> None:
         self.rank = int(os.getenv("RANK", -1))
         self.world_size = int(os.getenv("WORLD_SIZE", 4))
-        self.chunks = 4
+        self.chunks = self.world_size
         self._main()
 
         self.losses = []
@@ -34,8 +33,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             str(first_trainable_parameter): SplitPoint.BEGINNING,
         }
 
-    def run(self, module: torch.nn.Module, datloader, split_spec, view_function=lambda x: x):
-        X, y = next(iter(datloader))
+    def run(self, module: torch.nn.Module, dataloader, split_spec, view_function=lambda x: x):
+        X, y = next(iter(dataloader))
 
         X = X.to(self.device)
         y = y.to(self.device)
@@ -60,7 +59,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             split_spec=split_spec
         )
         smod = pipe.get_stage_module(self.rank)
-        print(f"Pipeline stage {self.rank} {get_parameter_count(smod) / 10 ** 6}M params")
+      #  print(f"Pipeline stage {self.rank} {get_parameter_count(smod) / 10 ** 6}M params")
 
         stage = pipe.build_stage(
             self.rank,
@@ -70,36 +69,46 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         optimizer = torch.optim.Adam(smod.parameters())
 
         # Attach to a schedule
+        train = True
         schedule = ScheduleGPipe(
             stage, 
             self.chunks,
-            loss_fn=torch.nn.functional.cross_entropy
+            loss_fn=(torch.nn.functional.cross_entropy if train else None)
         )
 
         # turn training back on so we can train this model ... 
         smod.train()
-        for index, (X, y) in enumerate(datloader):
+
+        for index, (X, y) in enumerate(dataloader):
             X = X.to(self.device)
             y = y.to(self.device)
-            optimizer.zero_grad(set_to_none=True)
 
-            if self.rank == 0:            
-                assert X.shape[0] == y.shape[0]
+            # TODO: Figure out why it doesn't work without the batch size
+            if X.shape[0] != dataloader.batch_size:
+                break
+
+            assert X.shape[0] == y.shape[0]
+            if self.rank == 0:
+                optimizer.zero_grad(set_to_none=True)
+
                 schedule.step(
                     x=X,
-                    target=view_function(y),
-                    losses=self.losses,
+                    target=(view_function(y) if train else None),
+                    losses=(self.losses if train else None),
                 )
             else:
                 out = schedule.step(
-                    target=view_function(y),
-                    losses=self.losses,
+                    target=(view_function(y) if train else None),
+                    losses=(self.losses if train else None),
                 )
-                self.batch_done(self.losses, view_function(y), out)
-                    
+                if stage.is_last:
+                 #  assert out.shape[0] == X.shape[0], f"Mismatch with view input {X.shape} / {out.shape[0]}"
+                    assert out.shape[0] == view_function(y).shape[0], f"Mismatch with view function {out.shape} / {view_function(y).shape} and X ({X.shape})"
+                    self.batch_done(self.losses, view_function(y), out)
+            
             optimizer.step()
-
-        dist.barrier()
+            dist.barrier()
+        print("Done")
         dist.destroy_process_group()
         
     def _main(self):
@@ -108,14 +117,14 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             print(f"torchrun --nproc-per-node 2 [file.py]")
             exit(0)
 
-        backend = "nccl"
         dev_id = self.rank % torch.cuda.device_count()
         self.device = torch.device(f"cuda:{dev_id}")
+
         dist.init_process_group(
-            backend=backend,
+            backend="nccl",
             rank=self.rank,
             world_size=self.world_size,
-            device_id=self.device
+            device_id=self.device,
         )
 
     def batch_done(self, losses, y: torch.Tensor , y_predicted: torch.Tensor):

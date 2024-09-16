@@ -1,20 +1,19 @@
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 import torch
-import torch.optim as optim
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
-from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
-from optimization_playground_shared.metrics_tracker.metrics import Prediction
+from optimization_playground_shared.metrics_tracker.producer import Tracker
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
-from torch.utils.data.distributed import DistributedSampler
 from optimization_playground_shared.nlp.DocumentEncoder import get_document_dataset
-from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
-import random
-import json
-from torch.distributed.pipelining import pipeline, SplitPoint, Pipe
+from torch.distributed.pipelining import SplitPoint
+from torch.utils.data.distributed import DistributedSampler
+import time
+import torch.multiprocessing as mp
+from torch.distributed import init_process_group, destroy_process_group
+import os
 
-SEQUENCE_LENGTH = 1024
-batch_size = 128
+SEQUENCE_LENGTH = 512
+batch_size = 32
 source_vocab = SimpleVocab()
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -44,10 +43,12 @@ def get_dataloader():
 
     X, y = get_document_dataset(source_vocab, [
         "\n".join(
-            text.split("\n")[:10]
+            text.split("\n")[:3005]
         )
     ], SEQUENCE_LENGTH)
     source_vocab.lock()
+
+    assert X.shape[0] == y.shape[0]
 
     return X, y
 
@@ -68,6 +69,8 @@ class Trainer(MultipleGpuBigModelWrapper):
         print(f"Accuracy {accuracy}")
 
 def train_model():
+    torch.manual_seed(0)
+    torch.cuda.manual_seed(0)
     trainer = Trainer()
     trainer.start()
 
@@ -75,11 +78,11 @@ def train_model():
 
     assert X.shape[0] == y.shape[0]
 
-    embedding_dim = 256
+    embedding_dim = 1024
     config = Config(
         vocab_size=source_vocab.size,
         embedding_dim=embedding_dim,
-        transformer_layers=2,
+        transformer_layers=4,
         attention_heads=4,
         dropout=0.05,
         feed_forward=embedding_dim * 4,
@@ -92,23 +95,19 @@ def train_model():
         y.clone()
     ),
         batch_size=batch_size,
-        shuffle=False,
+        shuffle=True,
+        # num_replicas=trainer.world_size, rank=trainer.rank,
+       # sampler=lambda dataset: DistributedSampler(dataset, drop_last=False, seed=0, shuffle=False),
     )
 
-
     model = GptTransformerModel(config)
-    print(model)
     trainer.run(
         model,
         dataloader,
         {
-         #   "embedding": SplitPoint.BEGINNING,
-            "transformer_decoder": SplitPoint.BEGINNING,
-        #    "transformer_decoder.layers.0": SplitPoint.BEGINNING,
-        #    "transformer_decoder.layers.1": SplitPoint.BEGINNING,
-        #    "transformer_decoder.layers.2": SplitPoint.BEGINNING,
-        #    "transformer_decoder.layers.3": SplitPoint.BEGINNING,
-    #            "layer_norm": SplitPoint.BEGINNING,
+            "transformer_decoder.layers.1": SplitPoint.BEGINNING,
+            "transformer_decoder.layers.2": SplitPoint.BEGINNING,
+            "transformer_decoder.layers.3": SplitPoint.BEGINNING,
         },
         view_function=lambda x: x.view(-1)
     )
