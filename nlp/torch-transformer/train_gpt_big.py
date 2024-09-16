@@ -42,9 +42,11 @@ def get_dataloader():
     with open("shakespeare.txt", "r") as file:
         text = file.read()
 
-    X, y = get_document_dataset(source_vocab, [text], SEQUENCE_LENGTH)
-    print(X)
-    print(y)
+    X, y = get_document_dataset(source_vocab, [
+        "\n".join(
+            text.split("\n")[:10]
+        )
+    ], SEQUENCE_LENGTH)
     source_vocab.lock()
 
     return X, y
@@ -59,14 +61,25 @@ class Trainer(MultipleGpuBigModelWrapper):
     def __init__(self) -> None:
         super().__init__()
 
+    def batch_done(self, losses, y: torch.Tensor, y_prediction: torch.Tensor):
+        super().batch_done(losses, y, y_prediction)
+        predicted_formatted = torch.argmax(y_prediction, dim=1)
+        accuracy = ((y == predicted_formatted).sum() / predicted_formatted.shape[0] * 100)
+        print(f"Accuracy {accuracy}")
 
 def train_model():
+    trainer = Trainer()
+    trainer.start()
+
     X, y = get_dataloader()
+
+    assert X.shape[0] == y.shape[0]
+
     embedding_dim = 256
     config = Config(
         vocab_size=source_vocab.size,
         embedding_dim=embedding_dim,
-        transformer_layers=4,
+        transformer_layers=2,
         attention_heads=4,
         dropout=0.05,
         feed_forward=embedding_dim * 4,
@@ -82,8 +95,6 @@ def train_model():
         shuffle=False,
     )
 
-    trainer = Trainer()
-    trainer.start()
 
     model = GptTransformerModel(config)
     print(model)
@@ -91,43 +102,16 @@ def train_model():
         model,
         dataloader,
         {
-            "embedding": SplitPoint.BEGINNING,
-            "transformer_decoder": SplitPoint.END,
-            "transformer_decoder.layers.0": SplitPoint.BEGINNING,
-            "transformer_decoder.layers.1": SplitPoint.BEGINNING,
+         #   "embedding": SplitPoint.BEGINNING,
+            "transformer_decoder": SplitPoint.BEGINNING,
+        #    "transformer_decoder.layers.0": SplitPoint.BEGINNING,
+        #    "transformer_decoder.layers.1": SplitPoint.BEGINNING,
+        #    "transformer_decoder.layers.2": SplitPoint.BEGINNING,
+        #    "transformer_decoder.layers.3": SplitPoint.BEGINNING,
     #            "layer_norm": SplitPoint.BEGINNING,
-        }
+        },
+        view_function=lambda x: x.view(-1)
     )
-
-    """
-    epochs = 1024
-    optimizer = optim.Adam(model.parameters(), lr=0.00004, weight_decay=0.01)
-
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=len(dataloader) * epochs)
-    trainer = TrainingLoop(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=source_vocab.vocab.PADDING_IDX))
-    for epoch in range(epochs):
-        (loss, accuracy) = trainer.use_tqdm().train(
-            dataloader,
-            callback=flatten_view,
-        )
-        text, raw_tokens = get_text_prediction(model, X[random.randint(0, X.shape[0] - 1)])
-        metrics_tracker.log(
-            Metrics(
-                epoch=epoch,
-                loss=loss,
-                training_accuracy=accuracy,
-                prediction=Prediction.text_prediction(
-                    "\n".join([
-                        "text: ",
-                        text,
-                        "tokens: ",
-                        json.dumps(raw_tokens)
-                    ])
-                )
-            )
-        )
-        scheduler.step()
-    """
 
 if __name__ == "__main__":
     train_model()

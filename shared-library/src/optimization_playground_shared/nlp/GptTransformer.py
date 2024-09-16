@@ -25,56 +25,60 @@ class Config:
     padding_index: int
 
 
+class TransformerDecoderWrapper(nn.Module):
+    def __init__(self, layers) -> None:
+        super(TransformerDecoderWrapper, self).__init__()
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x, torch.zeros_like(x))
+        return x
+    
 class GptTransformerModel(nn.Module):
     def __init__(self, config: Config) -> None:
         super(GptTransformerModel, self).__init__()
         self.config = config
 
         self.embedding = nn.Embedding(config.vocab_size, config.embedding_dim)
-        decoder_layer = nn.TransformerDecoderLayer(
-            d_model=config.embedding_dim, 
-            nhead=config.attention_heads, 
-            dim_feedforward=config.feed_forward, 
-            dropout=config.dropout,
-            batch_first=True,
-            activation=nn.functional.gelu,
-        )
+        layers = []
+        for _ in range(config.transformer_layers):
+            layers.append(nn.TransformerDecoderLayer(
+                d_model=config.embedding_dim, 
+                nhead=config.attention_heads, 
+                dim_feedforward=config.feed_forward, 
+                dropout=config.dropout,
+                batch_first=True,
+                activation=nn.functional.gelu,
+            ))
 
-        self.transformer_decoder = nn.TransformerDecoder(
-            decoder_layer, 
-            num_layers=config.transformer_layers,
-        )
+        self.transformer_decoder = TransformerDecoderWrapper(layers)
         self.layer_norm = nn.LayerNorm(self.config.embedding_dim) 
         self.output = nn.Sequential(*[
             nn.Linear(config.embedding_dim, config.vocab_size, bias=False),
-#            nn.Sigmoid()
         ])
         self.pos_encoder = PositionalEncoding(
             config.embedding_dim,
             config.dropout,
             max_len=config.sequence_length,
         )
-        # self.dummy_param = nn.Parameter(torch.empty(0))
         self.sequence_size = config.sequence_length
         # (SEQ_LEN, BATCH_SIZE, EMBEDDING_DIM)
-       # self.pos_encoder = nn.Embedding(config.sequence_length, config.embedding_dim)
         self.dropout = nn.Dropout(config.dropout)
 
     def raw_forward(self, x: Tensor):
         assert len(x.shape) == 2
         # embedding -> positional tokens + pos encoder
         # (batch size, sequence size, embedding_size)
-       # pos = torch.arange(0, x.shape[1], dtype=torch.long, device=x.device).unsqueeze(0)
         source = self.embedding(x) + self.pos_encoder(x)
         source = self.dropout(source)
         # forward
         # (batch size, sequence size, embedding_size)
-        source = self.transformer_decoder(source, torch.zeros_like(source))
+        source = self.transformer_decoder(source)#, torch.zeros_like(source))
         # (batch size, sequence size, embedding)
         source = self.layer_norm(source)
         source = self.output(source)
         # (batch size, sequence size, vocab_size)
-   #     source = source.to(x.device)
         return source
 
     def forward(self, x: Tensor):

@@ -34,7 +34,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             str(first_trainable_parameter): SplitPoint.BEGINNING,
         }
 
-    def run(self, module: torch.nn.Module, datloader, split_spec):
+    def run(self, module: torch.nn.Module, datloader, split_spec, view_function=lambda x: x):
         X, y = next(iter(datloader))
 
         X = X.to(self.device)
@@ -75,7 +75,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             self.chunks,
             loss_fn=torch.nn.functional.cross_entropy
         )
-        # tunr training back on so we can train this model ... 
+
+        # turn training back on so we can train this model ... 
         smod.train()
         for index, (X, y) in enumerate(datloader):
             X = X.to(self.device)
@@ -86,18 +87,16 @@ class MultipleGpuBigModelWrapper(abc.ABC):
                 assert X.shape[0] == y.shape[0]
                 schedule.step(
                     x=X,
-                    target=y,
+                    target=view_function(y),
                     losses=self.losses,
                 )
             else:
                 out = schedule.step(
-                    target=y,
+                    target=view_function(y),
                     losses=self.losses,
                 )
-                if index % 32 == 0:
-                    print(sum([i.item() for i in self.losses]), (torch.sum(
-                        torch.argmax(out, dim=1) == y
-                    )) / y.shape[0] * 100)
+                self.batch_done(self.losses, view_function(y), out)
+                    
             optimizer.step()
 
         dist.barrier()
@@ -118,3 +117,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             world_size=self.world_size,
             device_id=self.device
         )
+
+    def batch_done(self, losses, y: torch.Tensor , y_predicted: torch.Tensor):
+        loss = sum([i.item() for i in losses])
+        print(f"Loss {loss}")
