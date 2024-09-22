@@ -11,6 +11,7 @@ import os
 from ..utils.GetParameterCoumt import get_parameter_count
 import os
 import time
+from tqdm import tqdm
 
 class MultipleGpuBigModelWrapper(abc.ABC):
     def start(self) -> None:
@@ -19,7 +20,9 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         self.chunks = self.world_size
         self._main()
 
+
         self.losses = []
+        self.train = True
 
     def get_parameters_split_name(self, module: torch.nn.Module):
         parameters = module.named_modules()
@@ -33,7 +36,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             str(first_trainable_parameter): SplitPoint.BEGINNING,
         }
 
-    def run(self, module: torch.nn.Module, dataloader, split_spec, view_function=lambda x: x):
+    def setup(self, module: torch.nn.Module, dataloader, split_spec):
         X, y = next(iter(dataloader))
 
         X = X.to(self.device)
@@ -61,60 +64,72 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         smod = pipe.get_stage_module(self.rank)
       #  print(f"Pipeline stage {self.rank} {get_parameter_count(smod) / 10 ** 6}M params")
 
-        stage = pipe.build_stage(
+        self.stage = pipe.build_stage(
             self.rank,
             device=self.device,
         )
 
-        optimizer = torch.optim.Adam(smod.parameters())
+        self.optimizer = torch.optim.Adam(smod.parameters())
 
         # Attach to a schedule
-        train = True
-        schedule = ScheduleGPipe(
-            stage, 
+        self.schedule = ScheduleGPipe(
+            self.stage, 
             self.chunks,
-            loss_fn=(torch.nn.functional.cross_entropy if train else None)
+            loss_fn=(torch.nn.functional.cross_entropy if self.train else None)
         )
 
         # turn training back on so we can train this model ... 
         smod.train()
 
-        for index, (X, y) in enumerate(dataloader):
-            X = X.to(self.device)
-            y = y.to(self.device)
+    def run_epoch(self, dataloader, epochs, view_function=lambda x: x):
+        for epoch in range(epochs):
+            dataloader_iterator = tqdm(dataloader) if self.rank == 0 else dataloader
+            for _, (X, y) in enumerate(dataloader_iterator):
+                X = X.to(self.device)
+                y = y.to(self.device)
 
-            # TODO: Figure out why it doesn't work without the batch size
-            if X.shape[0] != dataloader.batch_size:
-                break
+                # TODO: Figure out why it doesn't work without the batch size
+                if X.shape[0] != dataloader.batch_size:
+                    break
 
-            assert X.shape[0] == y.shape[0]
-            if self.rank == 0:
-                optimizer.zero_grad(set_to_none=True)
+                assert X.shape[0] == y.shape[0]
 
-                schedule.step(
-                    x=X,
-                    target=(view_function(y) if train else None),
-                    losses=(self.losses if train else None),
-                )
-            else:
-                out = schedule.step(
-                    target=(view_function(y) if train else None),
-                    losses=(self.losses if train else None),
-                )
-                if stage.is_last:
-                 #  assert out.shape[0] == X.shape[0], f"Mismatch with view input {X.shape} / {out.shape[0]}"
-                    assert out.shape[0] == view_function(y).shape[0], f"Mismatch with view function {out.shape} / {view_function(y).shape} and X ({X.shape})"
+                out = self.forward(X, y, view_function)
+                if out is not None:
                     self.batch_done(self.losses, view_function(y), out)
-            
-            optimizer.step()
-            dist.barrier()
-        print("Done")
+
+                self.optimizer.step()
+                dist.barrier()
+
+            if self.stage.is_last:
+                self.epoch_done(epoch)
+
         dist.destroy_process_group()
+
+    def forward(self, X, y=None, view_function=lambda x: x):
+        train = y != None
+        if self.rank == 0:
+            self.optimizer.zero_grad(set_to_none=True)
+            self.schedule.step(
+                x=X,
+                target=(view_function(y) if train else None),
+                losses=(self.losses if train else None),
+            )
+        else:
+            out = self.schedule.step(
+                target=(view_function(y) if train else None),
+                losses=(self.losses if train else None),
+            )
+            if self.stage.is_last:
+            #  assert out.shape[0] == X.shape[0], f"Mismatch with view input {X.shape} / {out.shape[0]}"
+                assert out.shape[0] == view_function(y).shape[0], f"Mismatch with view function {out.shape} / {view_function(y).shape} and X ({X.shape})"
+                return out
+        return None
         
     def _main(self):
         if not "RANK" in os.environ:
             print(f"Not executed correctly. Instead run: ")
-            print(f"torchrun --nproc-per-node 2 [file.py]")
+            print(f"torchrun --nproc-per-node {torch.cuda.device_count()} [file.py]")
             exit(0)
 
         dev_id = self.rank % torch.cuda.device_count()
@@ -130,3 +145,6 @@ class MultipleGpuBigModelWrapper(abc.ABC):
     def batch_done(self, losses, y: torch.Tensor , y_predicted: torch.Tensor):
         loss = sum([i.item() for i in losses])
         print(f"Loss {loss}")
+
+    def epoch_done(self, epoch):
+        pass

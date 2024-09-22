@@ -52,8 +52,15 @@ class Vocab:
         return self.PADDING_IDX
 
 class SimpleVocab:
-    def __init__(self) -> None:
-        self.vocab = Vocab()
+    def __init__(self, vocab=Vocab()) -> None:
+        self.vocab = vocab
+
+    @classmethod
+    def from_words(self, tokens):
+        vocab = Vocab()
+        for i in tokens:
+            vocab.add(i)
+        return SimpleVocab(vocab)
 
     def encode(self, sentence):
         X = []

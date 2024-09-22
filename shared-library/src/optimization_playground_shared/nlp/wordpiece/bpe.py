@@ -4,6 +4,7 @@ Partially based off algorithm in "Neural Machine Translation of Rare Words with 
 from collections import defaultdict
 from typing import List
 import tqdm 
+from ..SimpleVocab import splitter
 
 class VocabIndex:
     def __init__(self) -> None:
@@ -13,10 +14,10 @@ class VocabIndex:
 
         # Stores the actual full token mapping index. Needs to be recalculated later on.
         self.tokens_index = {}
-        self.update_index = {}
+        self.index_tokens = {}
 
     def add_sentence(self, sentence):
-        for i in sentence.split(" "):
+        for i in splitter(sentence):
             self.add_word(i)
 
     def add_word(self, word):
@@ -34,7 +35,7 @@ class VocabIndex:
                 self.tokens_index[symbol] = None
 
     def update(self, from_word, to_word, pair):
-        print(f"{from_word} -> {to_word}")
+        # print(f"{from_word} -> {to_word}")
         self.word_index[to_word] = self.word_index[from_word]
         self.index_word[self.word_index[to_word]] = to_word
         self.word_frequency[to_word] = self.word_frequency[from_word]
@@ -46,25 +47,28 @@ class VocabIndex:
             # adds a new token pair.
             self.tokens_index[pair[0] + pair[1]] = None
             # Delete the old token as we have optimized
-            del self.tokens_index[pair[0]]
-
-    def encode(self, words):
-        # Need to iteratively check the tokens_index + 1 -> fallback to old current token
-        # or padding index 
-        pass
 
     def _tokenize_words(self, word: str):
-        return " ".join(list(word.lower()))
+        return " ".join(list(word))
 
 class BPE:
     def __init__(self, show_progress=True) -> None:
         self.index = VocabIndex()
         self.progress = tqdm.tqdm if show_progress else list
+        self.merged_pairs = []
+        self.system_tokens = [
+            "<PADDING>"
+        ]
+    
+    def get_system_token_index(self, token):
+        assert token in self.system_tokens
+        return self.index.tokens_index[token]
 
     # Allows usage of custom tokenizer
     def add_tokens(self, input: List[str]):
         for i in input:
             self.index.add_sentence(i)
+        return self
 
     # Uses the built in tokenizer
     def add_vocab(self, input: str):
@@ -76,7 +80,7 @@ class BPE:
             self.index.add_sentence(word)
         return self
 
-    def merge(self, n=50_000):
+    def merge(self, n=10):
         for _ in self.progress(range(n)):
             if not self.run_merge_step():
                 break
@@ -101,6 +105,7 @@ class BPE:
             pairs,
             key=lambda x: pairs[x]
         )
+        self.merged_pairs.append(pair)
         for index in self.index.index_word:
             word = self.index.index_word[index]
             joined = "".join(pair)
@@ -112,7 +117,12 @@ class BPE:
                     word,
                     output,
                     pair
-                )            
+                )
+        
+        for index, value in enumerate(self.system_tokens + list(self.index.tokens_index.keys())):
+            self.index.tokens_index[value] = index
+            self.index.index_tokens[index] = value
+
         return True
 
     def _get_stats(self):
@@ -126,6 +136,33 @@ class BPE:
             for i in range(len(symbols) - 1):
                 pairs[symbols[i], symbols[i + 1]] += frequency
         return pairs
+    
+    def encode_sentences(self, documents):
+        output = []
+        for v in splitter(documents):
+            for word in self.encode(v):
+                output.append(self.index.tokens_index[word])
+        return output
+    
+    def encode(self, word):
+        assert type(word) == str
+        word = list(word) + ['</w>']  # Add end-of-word token
+        for pair in self.merged_pairs:
+            i = 0
+            while i < len(word) - 1:
+                if (word[i], word[i + 1]) == pair:
+                    word[i] = word[i] + word[i + 1]  # Merge
+                    del word[i + 1]  # Remove the merged part
+                else:
+                    i += 1
+        return word[:-1]
+    
+    def decode(self, tokens):
+        assert type(tokens) == list
+        output = []
+        for token in tokens:
+            output.append(self.index.index_tokens[token])
+        return "".join(output)
 
 if __name__ == "__main__":
     # example word form the paper
@@ -143,12 +180,11 @@ if __name__ == "__main__":
     ).add_word(
         "wider",
         3
+    ).add_tokens(
+        "I love bagels"
     ).merge_until(
-        token_size=5
+        token_size=1
     )
-    print("word_index")
-    print(results.index.word_index)
-    print("tokens_index")
-    print(results.index.tokens_index)
-    print("index_word")
-    print(results.index.index_word)
+    print(results.encode(
+        "lowest"
+    ))

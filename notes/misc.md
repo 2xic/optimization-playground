@@ -82,3 +82,18 @@ They made some data observations which was kinda intresting
   - 1.3B parameter model trained with ADEMAMIX on 101B tokens beats the same model on 197B tokens
   - The modifications done to the optimizer is also minimal
   - Source code is also attached
+
+## [1X World Model](https://www.1x.tech/discover/1x-world-model)
+[Thread](https://x.com/ericjang11/status/1836096888178987455)
+
+- Learning a simulation
+  - Useful for many things. One of them - reproducible test environments.
+- It's also able to do long-horizon tasks
+- Still some failure modes, but the results also look very promising.
+  - Model against mirror being the most funny one probably.
+- Challenges
+  - Compression Challenge -> 
+    - https://huggingface.co/datasets/1x-technologies/worldmodel
+- [Scaling laws](https://x.com/ericjang11/status/1836162649425678846)
+
+$$

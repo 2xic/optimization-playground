@@ -7,13 +7,12 @@ This server expects the files to already been pre-processed and the dataloader o
 import zmq
 import argparse
 import glob
-from concurrent.futures import ThreadPoolExecutor
 import queue
-import time
 import threading
+import time 
+import json
 
 DATASET_SIZE = 1_000
-
 
 def fetch_files(files_queue: queue.Queue):
     global DATASET_SIZE
@@ -21,6 +20,7 @@ def fetch_files(files_queue: queue.Queue):
     predicted_dataset_size = 1_000
     is_first_round = True
     DATASET_SIZE = min(predicted_dataset_size, args.limit) if args.limit != None else predicted_dataset_size
+    starrt = time.time()
     while True:
         files = glob.iglob(args.path, recursive=True)
         next_item = None
@@ -32,7 +32,9 @@ def fetch_files(files_queue: queue.Queue):
             next_item = next(files)
             is_first_round = False
             DATASET_SIZE = min(actual_size, args.limit) if args.limit != None else predicted_dataset_size
-        
+        if (time.time() - starrt) > 30:
+            print(actual_size)
+            starrt = time.time()
      #   print(next_item)
         with open(next_item, "rb") as file:
             files_queue.put(file.read())
@@ -45,12 +47,19 @@ def serve_files(files_queue: queue.Queue):
     socket = context.socket(zmq.REP)
     socket.bind("tcp://*:5555")
     print("Serving files now ")
+    lookup = {}
     while True:
-        message = socket.recv()
-        if message == b"get":
-            next_item = files_queue.get()
-            socket.send(next_item)
-        elif message == b"size":
+        payload = socket.recv_json()
+        command = payload["command"]
+        arguments = payload.get("arguments", {})
+        if command == b"get":
+            if command[1] in lookup:
+                socket.send(lookup[arguments["index"]])
+            else:
+                next_item = files_queue.get()
+                lookup[arguments["index"]] = next_item
+                socket.send(next_item)
+        elif command == b"size":
             # Do I even want to do this ? I could just return a huge item while we figure it out
             socket.send(str(DATASET_SIZE).encode())
 
