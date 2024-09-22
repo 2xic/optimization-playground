@@ -2,7 +2,7 @@ import zmq
 from torch.utils.data import Dataset, DataLoader
 from dotenv import load_dotenv
 import os
-import json
+import hashlib
 
 load_dotenv()
 
@@ -13,32 +13,41 @@ class ZmqDataloader(Dataset):
     def __init__(self) -> None:
         super().__init__()
         self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
+        self.socket = self.context.socket(zmq.DEALER)
         host = os.environ["ZMQ_HOST"]
         assert ":" not in host, "Expected host to not be defined"
         self.socket.connect(f"tcp://{host}:5555")
+        # 5 second timeout on sending and receive
+        self.socket.setsockopt(zmq.SNDTIMEO, 5_000)
+        self.socket.setsockopt(zmq.RCVTIMEO, 5_000)
 
     def __len__(self):
         self.socket.send_json({
             "command": "size"
         })
+        print("SENT")
         message = self.socket.recv()
+        print(message)
         return int(message)
 
     # You want to do fancy stuff, you do it here.
     def process_message(self, message):
-        return message
+        return message.replace(b"\r\n", b"\n")
 
     def __getitem__(self, idx):
-        # TODO cache based on idx ? 
-        self.socket.send_json({
-            "command": "get",
-            "arguments": {
-                "index": idx,
-            }
-        })
-        message = self.socket.recv()
-        return self.process_message(message)
+        # TODO cache based on idx ?
+        try:
+            self.socket.send_json({
+                "command": "get",
+                "arguments": {
+                    "index": idx,
+                }
+            })
+            message = self.socket.recv()
+            return self.process_message(message)
+        except zmq.Again as e:
+            return self.__getitem__(idx)
+
 
 def get_dataloader():
     train_ds = ZmqDataloader()
@@ -47,6 +56,8 @@ def get_dataloader():
 
 
 if __name__ == "__main__":
-    for X in get_dataloader():
-        print(X)
+    dataloader = get_dataloader()
+    for index, X in enumerate(dataloader):
+        for y in range(len(X)):
+            print(f"{index}_{y}", len(X[y]), hashlib.sha256(X[y]).hexdigest())
 

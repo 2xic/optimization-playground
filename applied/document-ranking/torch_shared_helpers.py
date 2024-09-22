@@ -3,7 +3,7 @@ import pickle
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 import os
 
-def get_document_words(text):
+def get_document_words(text: str):
     words = text.lower().replace(":", " : ").strip().split(" ")
     words = list(filter(lambda x: len(x), words))
     return words

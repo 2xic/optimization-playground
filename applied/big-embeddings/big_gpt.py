@@ -9,9 +9,10 @@ from optimization_playground_shared.nlp.wordpiece.bpeDocumentDecoder import get_
 from torch.distributed.pipelining import SplitPoint
 from pre_generator import get_bpe
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
+from optimization_playground_shared.distributed.PipelineDistrubted import MultipleGpuBigModelWrapper
 
 SEQUENCE_LENGTH = 512
-batch_size = 32
+batch_size = 128
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 metrics_tracker = Tracker("train_gpt_big_embeddings") if __name__ == "__main__" else None
@@ -19,9 +20,6 @@ metrics_tracker = Tracker("train_gpt_big_embeddings") if __name__ == "__main__" 
 
 def flatten_view(x, y):
     return x, y.view(-1)
-
-from optimization_playground_shared.distributed.PipelineDistrubted import MultipleGpuBigModelWrapper
-
 
 class Trainer(MultipleGpuBigModelWrapper):
     def __init__(self) -> None:
@@ -65,14 +63,8 @@ def forward_dataloader(bpe, iterator, batch=32):
     )
     return raw_dataloader
 
-def train_model():
-    torch.manual_seed(0)
-    torch.cuda.manual_seed(0)
-    trainer = Trainer()
-    trainer.start()
-
+def get_model():
     bpe = get_bpe()
-
 
     embedding_dim = 1024
     config = Config(
@@ -85,7 +77,17 @@ def train_model():
         padding_index=bpe.get_system_token_index("<PADDING>"),
         sequence_length=SEQUENCE_LENGTH
     )
+    model = GptTransformerModel(config)
 
+    return bpe, model
+
+def train_model():
+    torch.manual_seed(0)
+    torch.cuda.manual_seed(0)
+    trainer = Trainer()
+    trainer.start()
+
+    bpe, model = get_model()
 
     dataloader = ZmqDataloader()
     iterator = iter(dataloader)
@@ -95,8 +97,6 @@ def train_model():
         iterator,
         batch=1,
     )
-
-    model = GptTransformerModel(config)
     trainer.setup(
         model,
         raw_dataloader,
@@ -106,6 +106,7 @@ def train_model():
             "transformer_decoder.layers.3": SplitPoint.BEGINNING,
         },
     )
+    trainer.load()
     for _ in range(100):
         raw_dataloader = forward_dataloader(
             bpe,
@@ -117,7 +118,8 @@ def train_model():
             epochs=1,
             view_function=lambda x: x.view(-1)
         )
-
+        # For each epoch we save the model
+        trainer.save()    
 
 if __name__ == "__main__":
     train_model()

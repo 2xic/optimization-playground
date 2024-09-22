@@ -8,9 +8,8 @@ import torch
 import abc
 import torch.distributed as dist
 import os
-from ..utils.GetParameterCoumt import get_parameter_count
 import os
-import time
+import atexit
 from tqdm import tqdm
 
 class MultipleGpuBigModelWrapper(abc.ABC):
@@ -22,7 +21,10 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
 
         self.losses = []
+        self.epoch = 0
         self.train = True
+
+        atexit.register(self.destroy)
 
     def get_parameters_split_name(self, module: torch.nn.Module):
         parameters = module.named_modules()
@@ -53,7 +55,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         assert input_Y.shape[0] == y.shape[0] // self.chunks
 
       #  print((first_trainable_parameter, split_start))
-        pipe: Pipe = pipeline(
+        self.pipe: Pipe = pipeline(
             module=module,
             mb_args=(),
             mb_kwargs={
@@ -61,14 +63,13 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             },
             split_spec=split_spec
         )
-        smod = pipe.get_stage_module(self.rank)
+        smod = self.pipe.get_stage_module(self.rank)
       #  print(f"Pipeline stage {self.rank} {get_parameter_count(smod) / 10 ** 6}M params")
 
-        self.stage = pipe.build_stage(
+        self.stage = self.pipe.build_stage(
             self.rank,
             device=self.device,
         )
-
         self.optimizer = torch.optim.Adam(smod.parameters())
 
         # Attach to a schedule
@@ -82,7 +83,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         smod.train()
 
     def run_epoch(self, dataloader, epochs, view_function=lambda x: x):
-        for epoch in range(epochs):
+        for _ in range(epochs):
             dataloader_iterator = tqdm(dataloader) if self.rank == 0 else dataloader
             for _, (X, y) in enumerate(dataloader_iterator):
                 X = X.to(self.device)
@@ -102,8 +103,25 @@ class MultipleGpuBigModelWrapper(abc.ABC):
                 dist.barrier()
 
             if self.stage.is_last:
-                self.epoch_done(epoch)
+                # In the case you are just running a single epoch multiple times, we want to just accumulate it here
+                self.epoch_done(self.epoch)
+                self.epoch += 1
 
+    def load(self):
+        if os.path.isfile(self.stage_name):
+            state = torch.load(self.stage_name, weights_only=True)
+            smod = self.pipe.get_stage_module(self.rank)
+            smod.load_state_dict(state)
+
+    def save(self):
+        smod = self.pipe.get_stage_module(self.rank)
+        torch.save(smod.state_dict(), self.stage_name)
+
+    @property
+    def stage_name(self):
+        return f"model_stage_{self.rank}_state_dict.pth"
+
+    def destroy(self):
         dist.destroy_process_group()
 
     def forward(self, X, y=None, view_function=lambda x: x):

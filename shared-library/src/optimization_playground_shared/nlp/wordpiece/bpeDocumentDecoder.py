@@ -5,8 +5,12 @@ import torch
 def get_document_words(bpe: BPE, text):
     # todo: create a good tokenizer, this does not really work for code tokens
     if type(text) == bytes:
+        text = text.replace(b"\r\n", b"\n")
+        text = text.replace(b"\r", b"\n")
         return bpe.encode_sentences(text.decode())
     else:
+        text = text.replace(b"\r\n", b"\n")
+        text = text.replace(b"\r", b"\n")
         return bpe.encode_sentences(text)
 
 def encode_document_text(vocab: BPE, text, tensor_x, tensor_y, entries_index, SEQUENCE_LENGTH):

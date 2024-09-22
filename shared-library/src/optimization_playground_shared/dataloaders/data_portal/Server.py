@@ -20,22 +20,28 @@ def fetch_files(files_queue: queue.Queue):
     predicted_dataset_size = 1_000
     is_first_round = True
     DATASET_SIZE = min(predicted_dataset_size, args.limit) if args.limit != None else predicted_dataset_size
-    starrt = time.time()
+    last_printed = time.time()
+    files = glob.iglob(args.path, recursive=True)
+    is_glob_mode = True
+    unique_files = set()
     while True:
-        files = glob.iglob(args.path, recursive=True)
         next_item = None
         try:
             next_item = next(files)
+            if not is_glob_mode:
+                unique_files.add(next_item)
         except StopIteration as e:
             print("Stop iterator ", e)
-            files = glob.iglob(args.path, recursive=True)                
+            # Disable glob and use the unique files!
+            is_glob_mode = False
+            files = unique_files
             next_item = next(files)
             is_first_round = False
             DATASET_SIZE = min(actual_size, args.limit) if args.limit != None else predicted_dataset_size
-        if (time.time() - starrt) > 30:
+        if (time.time() - last_printed) > 30:
             print(actual_size)
-            starrt = time.time()
-     #   print(next_item)
+            last_printed = time.time()
+        # print(next_item)
         with open(next_item, "rb") as file:
             files_queue.put(file.read())
         # So we can compare it later on.
@@ -44,24 +50,34 @@ def fetch_files(files_queue: queue.Queue):
 
 def serve_files(files_queue: queue.Queue):
     context = zmq.Context()
-    socket = context.socket(zmq.REP)
+    socket = context.socket(zmq.ROUTER)
     socket.bind("tcp://*:5555")
     print("Serving files now ")
     lookup = {}
     while True:
-        payload = socket.recv_json()
-        command = payload["command"]
-        arguments = payload.get("arguments", {})
-        if command == b"get":
-            if command[1] in lookup:
-                socket.send(lookup[arguments["index"]])
+        try:
+            request = socket.recv_multipart()
+            [clientId, payload] = request
+           # print(clientId.hex())
+           # print(payload)
+            payload = json.loads(payload)
+            command = payload["command"]
+            arguments = payload.get("arguments", {})
+            if command == "get":
+                index = arguments["index"]
+                if index in lookup:
+                    socket.send_multipart((clientId, lookup[index]))
+                else:
+                    next_item = files_queue.get()
+                    lookup[index] = next_item
+                    socket.send_multipart((clientId, next_item))
+            elif command == "size":
+                # Do I even want to do this ? I could just return a huge item while we figure it out
+                socket.send_multipart((clientId, str(DATASET_SIZE).encode()))
             else:
-                next_item = files_queue.get()
-                lookup[arguments["index"]] = next_item
-                socket.send(next_item)
-        elif command == b"size":
-            # Do I even want to do this ? I could just return a huge item while we figure it out
-            socket.send(str(DATASET_SIZE).encode())
+                print("Unknown command")
+        except Exception as e:
+            print(e)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

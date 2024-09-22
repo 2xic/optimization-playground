@@ -25,7 +25,7 @@ def create_vocab_dataset_bpe() -> SimpleVocab:
     # we create it no files are found
     bpe = BPE()
     test_tokens = None
-    for index, i in enumerate(glob.iglob(path, recursive=True)):
+    for _, i in enumerate(glob.iglob(path, recursive=True)):
         print(i)
         with open(i, "r") as file:
             content = file.read()
