@@ -7,7 +7,7 @@ from optimization_playground_shared.metrics_tracker.producer import Tracker, Met
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.nlp.wordpiece.bpeDocumentDecoder import get_document_dataset
 from torch.distributed.pipelining import SplitPoint
-from pre_generator import get_bpe
+from .pre_generator import get_bpe
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
 from optimization_playground_shared.distributed.PipelineDistrubted import MultipleGpuBigModelWrapper
 

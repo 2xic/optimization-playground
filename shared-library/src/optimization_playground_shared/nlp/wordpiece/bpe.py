@@ -141,7 +141,7 @@ class BPE:
         output = []
         for v in splitter(documents):
             for word in self.encode(v):
-                output.append(self.index.tokens_index[word])
+                output.append(self.index.tokens_index.get(word, self.get_system_token_index("<PADDING>")))
         return output
     
     def encode(self, word):

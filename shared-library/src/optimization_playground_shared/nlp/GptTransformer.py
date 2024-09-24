@@ -89,13 +89,28 @@ class GptTransformerModel(nn.Module):
         return reshaped
 
     def embeddings(self, X):
-        values = torch.zeros((1, self.config.embedding_dim * self.config.sequence_length))
-        for x in X:
-            x = x.reshape((1, ) + X.shape[1:])
-            assert len(X.shape) == 2
-            with torch.no_grad():
-                values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
-        return values
+        if torch.is_tensor(X):
+            values = torch.zeros((1, 1024))
+            for i in range(0, X.shape[0], 1024):
+                current_x = X[i:i+1024]
+                sum_tensor = ((self.embedding(current_x) + self.pos_encoder(current_x)))
+                if len(sum_tensor.shape) != 4:
+                    sum_tensor = sum_tensor.reshape((1, ) + sum_tensor.shape)
+                sum_tensor = sum_tensor.sum(dim=2)
+                if sum_tensor.shape[1] > 1:
+                    sum_tensor = sum_tensor.sum(dim=1)
+                else:
+                    sum_tensor = sum_tensor.sum(dim=0)
+                values += sum_tensor
+            return values / X.shape[0]
+        else:
+            values = torch.zeros((1, self.config.embedding_dim))
+            for x in X:
+                x = x.reshape((1, ) + X.shape[1:])
+                assert len(X.shape) == 2
+                with torch.no_grad():
+                    values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
+            return values
 
     def forward_argmax(self, x):
         prediction = self.forward(x)

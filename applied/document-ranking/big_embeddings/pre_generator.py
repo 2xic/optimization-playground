@@ -16,8 +16,12 @@ source_bpe = ".source_vocab_metadata_bpe"
 bpe_pre_merge = source_bpe + "_pre_merge"
 
 def get_bpe() -> BPE:
-    assert os.path.isfile(source_bpe)
-    with open(source_bpe, "rb") as file:
+    path = os.path.join(
+        os.path.dirname(__file__),
+        source_bpe
+    )
+    assert os.path.isfile(path)
+    with open(path, "rb") as file:
         return pickle.load(file)
 
 def create_vocab_dataset_bpe() -> SimpleVocab:

@@ -13,6 +13,7 @@ from torch_contrastive_model import ContrastiveEmbeddingWrapper
 from torch_gpt_like_model_bigger import EmbeddingWrapperBigger
 from xgboost import XGBRegressor
 from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_classes
+from big_embeddings.Wrapper import Wrapper
 
 def evaluation():
     X, y = get_dataset()
@@ -23,6 +24,9 @@ def evaluation():
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
+        "big_gpt": [
+            Wrapper(),
+        ],
         "BM25": [
             BM25(),
         ],
