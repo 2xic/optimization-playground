@@ -23,6 +23,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         self.losses = []
         self.epoch = 0
         self.train = True
+        self.stage = None
 
         atexit.register(self.destroy)
 
@@ -71,18 +72,20 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             device=self.device,
         )
         self.optimizer = torch.optim.Adam(smod.parameters())
+        self.loss_func = torch.nn.functional.cross_entropy
 
         # Attach to a schedule
         self.schedule = ScheduleGPipe(
             self.stage, 
             self.chunks,
-            loss_fn=(torch.nn.functional.cross_entropy if self.train else None)
+            loss_fn=(self.loss_func if self.train else None)
         )
 
         # turn training back on so we can train this model ... 
         smod.train()
 
     def run_epoch(self, dataloader, epochs, view_function=lambda x: x):
+        self.schedule._has_backward = True
         for _ in range(epochs):
             dataloader_iterator = tqdm(dataloader) if self.rank == 0 else dataloader
             for _, (X, y) in enumerate(dataloader_iterator):
@@ -102,9 +105,9 @@ class MultipleGpuBigModelWrapper(abc.ABC):
                 self.optimizer.step()
                 dist.barrier()
 
+            # Need to do the first epoch to make sure we are at a good stage
+            self.epoch_done(self.epoch, self.stage.is_last)
             if self.stage.is_last:
-                # In the case you are just running a single epoch multiple times, we want to just accumulate it here
-                self.epoch_done(self.epoch)
                 self.epoch += 1
 
     def load(self):
@@ -126,6 +129,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
     def forward(self, X, y=None, view_function=lambda x: x):
         train = y != None
+        # disable the loss calculation if not used
+        self.schedule._has_backward = train
         if self.rank == 0:
             self.optimizer.zero_grad(set_to_none=True)
             self.schedule.step(
@@ -139,9 +144,9 @@ class MultipleGpuBigModelWrapper(abc.ABC):
                 losses=(self.losses if train else None),
             )
             if self.stage.is_last:
-            #  assert out.shape[0] == X.shape[0], f"Mismatch with view input {X.shape} / {out.shape[0]}"
-                assert out.shape[0] == view_function(y).shape[0], f"Mismatch with view function {out.shape} / {view_function(y).shape} and X ({X.shape})"
+                assert y is None or out.shape[0] == view_function(y).shape[0], f"Mismatch with view function {out.shape} / {view_function(y).shape} and X ({X.shape})"
                 return out
+
         return None
         
     def _main(self):
@@ -164,5 +169,5 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         loss = sum([i.item() for i in losses])
         print(f"Loss {loss}")
 
-    def epoch_done(self, epoch):
+    def epoch_done(self, epoch, is_last_stage):
         pass

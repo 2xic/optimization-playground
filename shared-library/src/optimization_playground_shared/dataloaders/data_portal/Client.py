@@ -20,6 +20,7 @@ class ZmqDataloader(Dataset):
         # 5 second timeout on sending and receive
         self.socket.setsockopt(zmq.SNDTIMEO, 5_000)
         self.socket.setsockopt(zmq.RCVTIMEO, 5_000)
+        self.documents = {}
 
     def __len__(self):
         self.socket.send_json({
@@ -37,6 +38,8 @@ class ZmqDataloader(Dataset):
     def __getitem__(self, idx):
         # TODO cache based on idx ?
         try:
+            if idx in self.documents:
+                return self.documents[idx]
             self.socket.send_json({
                 "command": "get",
                 "arguments": {
@@ -44,10 +47,11 @@ class ZmqDataloader(Dataset):
                 }
             })
             message = self.socket.recv()
-            return self.process_message(message)
+            self.documents[idx] = self.process_message(message)
+            processed_message = self.documents[idx]
+            return processed_message
         except zmq.Again as e:
             return self.__getitem__(idx)
-
 
 def get_dataloader():
     train_ds = ZmqDataloader()

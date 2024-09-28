@@ -30,21 +30,21 @@ def evaluation():
         "BM25": [
             BM25(),
         ],
-        "torch_next_token_bigger": [
-            EmbeddingWrapperBigger(),
+#        "torch_next_token_bigger": [
+#            EmbeddingWrapperBigger(),
 #            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
-            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
-        ],
-        "torch_contrastive": [
-            ContrastiveEmbeddingWrapper(),
-        ],
-        "untrained reference": [
-            EmbeddingWrapper(trained=False),
-        ],
-        "torch_next_token": [
-            EmbeddingWrapper(),
-            EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
-        ],
+#            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
+#        ],
+#        "torch_contrastive": [
+#            ContrastiveEmbeddingWrapper(),
+#        ],
+#        "untrained reference": [
+#            EmbeddingWrapper(trained=False),
+#        ],
+#        "torch_next_token": [
+#            EmbeddingWrapper(),
+#            EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
+#        ],
         "mixedbread-ai":[
             HuggingFaceWrapper(
                 "mixedbread-ai/mxbai-embed-large-v1"
@@ -72,7 +72,9 @@ def evaluation():
         best_local_config_score = 0
         best_local_config_string = None
         for index, embedding in enumerate(model_pipeline_configs[base_config_name]):
-            (X_train, X_test, y_train, y_test) = Pipeline().transform(
+            (X_train, X_test, y_train, y_test) = Pipeline(
+                sample_size=1
+            ).transform(
                 X_train_original, X_test_original, y_train_original, y_test_original, embedding
             )
             # TODO: Add more fancy models also

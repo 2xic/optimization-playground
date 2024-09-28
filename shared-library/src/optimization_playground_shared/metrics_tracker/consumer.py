@@ -67,8 +67,15 @@ class SimpleDatabase:
             self.project_path,
             epoch + ".json"
         )
+        previous_data = {}
+        if os.path.isfile(file_path):
+            with open(file_path, "r") as file:
+                previous_data = json.load(file)
+        for key, value in dataclasses.asdict(metric).items():
+            if value is not None:
+                previous_data[key] = value
         with open(file_path, "w") as file:
-            json.dump(dataclasses.asdict(metric), file)
+            json.dump(previous_data, file)
         self.store_config(metric.timestamp)
 
     def add_code_state(self, files: Dict[str, str]):

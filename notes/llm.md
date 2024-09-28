@@ -769,6 +769,11 @@ They have a some good subsection under section 3 on hardware failures and things
 - [MAST](https://www.usenix.org/system/files/osdi24-choudhury.pdf)
 - They wrote various debug visluaizations to find issues in the clusters.
 
+[Llama 3.2](https://ai.meta.com/blog/llama-3-2-connect-2024-vision-edge-mobile-devices/)
+- First llama model with multimodal (vision) support
+- [Llama stack](https://github.com/meta-llama/llama-stack)
+- 
+
 
 ### [Scaling and evaluating sparse autoencoders](https://arxiv.org/pdf/2406.04093)
 [Blog post](https://openai.com/index/extracting-concepts-from-gpt-4/)
