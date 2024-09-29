@@ -21,15 +21,17 @@ class ZmqDataloader(Dataset):
         self.socket.setsockopt(zmq.SNDTIMEO, 5_000)
         self.socket.setsockopt(zmq.RCVTIMEO, 5_000)
         self.documents = {}
+        self.max_document_size = -1
 
     def __len__(self):
-        self.socket.send_json({
-            "command": "size"
-        })
-        print("SENT")
-        message = self.socket.recv()
-        print(message)
-        return int(message)
+        if self.max_document_size == -1:
+            self.socket.send_json({
+                "command": "size"
+            })
+            message = self.socket.recv()
+            print(message)
+            return int(message)
+        return self.max_document_size
 
     # You want to do fancy stuff, you do it here.
     def process_message(self, message):

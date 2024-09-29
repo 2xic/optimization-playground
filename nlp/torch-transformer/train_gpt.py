@@ -1,5 +1,6 @@
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
+from optimization_playground_shared.nlp.utils.sampling import argmax_sampling
 import torch
 import torch.optim as optim
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
@@ -12,7 +13,7 @@ from optimization_playground_shared.training_loops.TrainingLoop import TrainingL
 import random
 import json
 
-SEQUENCE_LENGTH = 64
+SEQUENCE_LENGTH = 4
 batch_size = 128
 source_vocab = SimpleVocab()
 
@@ -25,8 +26,8 @@ def get_text_prediction(model: GptTransformerModel, seed: torch.Tensor):
     with torch.no_grad():
         y = model.rollout(
             seed=seed,
-            steps=512,
-            sampling="temperature"
+            steps=32,
+            sampling="argmax"
         )
         for index, i in enumerate(y):
             if index == seed.shape[-1]:
@@ -36,10 +37,38 @@ def get_text_prediction(model: GptTransformerModel, seed: torch.Tensor):
             raw_tokens.append(i)
     return " ".join(results), raw_tokens
 
+
+def get_debug_prediction(model: GptTransformerModel, seed: torch.Tensor):
+    results = []
+
+    for i in seed.tolist():
+        results.append(source_vocab.vocab.index_vocab[i])
+
+    # print(seed.shape)
+    with torch.no_grad():
+        new_X = seed.clone()
+        output = model(new_X.reshape((1, -1)).to(model.device))
+        for i in range(output.shape[0]):
+            pred_i = output[i, :].reshape((1, -1))
+            index = argmax_sampling(
+                pred_i
+            )
+            results.append(
+                str((str(i), source_vocab.vocab.index_vocab[index.item()]))
+            )
+
+    return " ".join(results)
+
 def get_dataloader():
     text = None
-    with open("shakespeare.txt", "r") as file:
-        text = file.read()
+#    with open("shakespeare.txt", "r") as file:
+#        text = file.read()
+    text = """
+    I love bagels, this is just a test to make sure the model is doing something reasonable. How reasonable is all of this ?
+
+
+    I think the model should learn this text when overfitting.
+    """
 
     X, y = get_document_dataset(source_vocab, [text], SEQUENCE_LENGTH)
     print(X)
@@ -82,7 +111,9 @@ def train_model():
             dataloader,
             callback=flatten_view,
         )
-        text, raw_tokens = get_text_prediction(model, X[random.randint(0, X.shape[0] - 1)])
+        debug_x = X[random.randint(0, X.shape[0] - 1)]
+        text, raw_tokens = get_text_prediction(model, debug_x)
+        debug_text = get_debug_prediction(model, debug_x)
         metrics_tracker.log(
             Metrics(
                 epoch=epoch,
@@ -93,7 +124,9 @@ def train_model():
                         "text: ",
                         text,
                         "tokens: ",
-                        json.dumps(raw_tokens)
+                        json.dumps(raw_tokens),
+                        "debug_text:",
+                        debug_text
                     ])
                 )
             )

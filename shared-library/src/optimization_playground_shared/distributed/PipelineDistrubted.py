@@ -13,6 +13,10 @@ import atexit
 from tqdm import tqdm
 
 class MultipleGpuBigModelWrapper(abc.ABC):
+    def __init__(self, loss_function) -> None:
+        super().__init__()
+        self.loss_function = loss_function
+
     def start(self) -> None:
         self.rank = int(os.getenv("RANK", -1))
         self.world_size = int(os.getenv("WORLD_SIZE", 4))
@@ -72,13 +76,14 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             device=self.device,
         )
         self.optimizer = torch.optim.Adam(smod.parameters())
-        self.loss_func = torch.nn.functional.cross_entropy
+       #  self.loss_func = self.loss_function
+        # torch.nn.functional.cross_entropy
 
         # Attach to a schedule
         self.schedule = ScheduleGPipe(
             self.stage, 
             self.chunks,
-            loss_fn=(self.loss_func if self.train else None)
+            loss_fn=(self.loss_function if self.train else None)
         )
 
         # turn training back on so we can train this model ... 
@@ -95,12 +100,12 @@ class MultipleGpuBigModelWrapper(abc.ABC):
                 # TODO: Figure out why it doesn't work without the batch size
                 if X.shape[0] != dataloader.batch_size:
                     break
-
                 assert X.shape[0] == y.shape[0]
 
                 out = self.forward(X, y, view_function)
                 if out is not None:
-                    self.batch_done(self.losses, view_function(y), out)
+                    self.batch_done(self.losses, X, view_function(y), out)
+                    self.losses = []
 
                 self.optimizer.step()
                 dist.barrier()
@@ -165,7 +170,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             device_id=self.device,
         )
 
-    def batch_done(self, losses, y: torch.Tensor , y_predicted: torch.Tensor):
+    def batch_done(self, losses, X: torch.Tensor, y: torch.Tensor, y_predicted: torch.Tensor):
         loss = sum([i.item() for i in losses])
         print(f"Loss {loss}")
 

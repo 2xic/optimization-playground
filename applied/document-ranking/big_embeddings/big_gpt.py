@@ -29,54 +29,74 @@ def flatten_view(x, y):
     return x, y.view(-1)
 
 class Trainer(MultipleGpuBigModelWrapper):
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, padding_index) -> None:
+        self.ignore_index = padding_index
+        super().__init__(
+            loss_function=torch.nn.CrossEntropyLoss(
+                ignore_index=self.ignore_index
+            )
+        )
         self.clear_params()
+
+        self.batch = None
 
     def clear_params(self):
         self.batch_count = 0
         self.batch_loss = 0
         self.batch_accuracy = 0
 
-    def batch_done(self, losses, y: torch.Tensor, y_prediction: torch.Tensor):
+    def batch_done(self, losses, X: torch.Tensor, y: torch.Tensor, y_prediction: torch.Tensor):
       #  super().batch_done(losses, y, y_prediction)
         predicted_formatted = torch.argmax(y_prediction, dim=1)
-        accuracy = ((y == predicted_formatted).sum())
+        print("y_prediction ", y_prediction.shape)
 
+        indices = torch.where(y != self.ignore_index)
+        y_filtered = y[indices]
+        accuracy = ((y[indices] == predicted_formatted[indices]).sum())
+
+        """
+        indices = torch.randint(0, y.size(0), size=(32,)).long()
+        print(indices, y.shape)
+        self.batch = (
+            X[indices].detach(),
+            y[indices].detach(),
+            torch.argmax(y_prediction[indices].detach(), dim=1)
+        )
+        """
         self.batch_loss += sum([i.item() for i in losses])
         self.batch_accuracy += accuracy
-        self.batch_count += predicted_formatted.shape[0]
+        self.batch_count += y_filtered.shape[0]
 
     def epoch_done(self, epoch, is_last_stage):
         dist.barrier()
         # Only last stage is useful
         old_microbatches = self.schedule._n_microbatches
         self.schedule._n_microbatches = 1
-        input_tensor_temperature = self.get_predictions(
+        input_tensor_temperature = self.single_rollout(
             "hello world"
         )
-        input_tensor_argmax = self.get_predictions(
+        input_tensor_argmax = self.single_rollout(
             "hello world",
             sample="argmax"
         )
         dist.barrier()
         self.schedule._n_microbatches = old_microbatches
-
         if is_last_stage:
+            output = Prediction.text_prediction(
+                        "\n".join([
+                            "temperature:\n",
+                            bpe.decode(input_tensor_temperature)[:1024],
+                            "\n\n",
+                            "argmax:\n",
+                            bpe.decode(input_tensor_argmax)[:1024],
+                        ])  
+                    )
             metrics_tracker.log(
                 Metrics(
                     epoch=epoch,
                     loss=self.batch_loss,
                     training_accuracy=self.batch_accuracy / self.batch_count * 100,
-                    prediction=Prediction.text_prediction(
-                        "\n".join([
-                            "temperature:\n",
-                            bpe.decode(input_tensor_temperature),
-                            "\n\n",
-                            "argmax:\n",
-                            bpe.decode(input_tensor_argmax),
-                        ])  
-                    ),
+                    prediction=output,
                 )
             )
             self.clear_params()
@@ -104,10 +124,29 @@ class Trainer(MultipleGpuBigModelWrapper):
         return input_tensor
 
     def small_rollout(self, X):
+        # 32 also works ? 
         X_tensor = torch.full((32, SEQUENCE_LENGTH), bpe.get_system_token_index("<PADDING>")).to(self.device)
         X_tensor[:, :len(X)] = torch.tensor(X[-SEQUENCE_LENGTH:])
 #        assert X_tensor.shape[0] > 1, X_tensor.shape[0] 
         return self.predict(X_tensor)
+
+    def single_rollout(self, seed_text, sample="temperature"):
+        X = bpe.encode_sentences(
+            seed_text
+        )
+        # 32 also works ? 
+        X_tensor = torch.full((32, SEQUENCE_LENGTH), bpe.get_system_token_index("<PADDING>")).to(self.device)
+        X_tensor[:, :len(X)] = torch.tensor(X[-SEQUENCE_LENGTH:])
+#        assert X_tensor.shape[0] > 1, X_tensor.shape[0] 
+        output = self.forward(X_tensor)
+        if output is not None:
+            for index in range(output.shape[0]):
+                output_t = output[index].reshape((1, -1))
+                if sample == "temperature":
+                    X.append(temperature_sampling(F.softmax(output_t, dim=1)).item())
+                else:
+                    X.append(argmax_sampling(F.softmax(output_t, dim=1)).item())
+        return X
 
     def predict(self, X, next_token_location=-1):
         results = self.forward(X)
@@ -120,9 +159,8 @@ class Trainer(MultipleGpuBigModelWrapper):
 def forward_dataloader(bpe, iterator, zmq: ZmqDataloader, batch=32):
     # sequence is the previously loaded data + a new batch so the dataset is always increasing.
     sequence = [
-        next(iterator) for _ in range(batch)
-    ] + [
-        zmq.documents[i] for i in zmq.documents
+        "hello world, I love bagels. Maybe if I try to overfit the model then this thing will work."
+        for _ in range(batch_size)
     ]
     X, y = get_document_dataset(bpe, sequence, SEQUENCE_LENGTH)
     raw_dataloader = get_raw_dataloader((
@@ -132,6 +170,7 @@ def forward_dataloader(bpe, iterator, zmq: ZmqDataloader, batch=32):
         batch_size=batch_size,
         shuffle=True,
     )
+    assert X.shape[0] > 0
     return raw_dataloader
 
 def get_model():
@@ -163,12 +202,16 @@ def start_dataloader_background_thread(data_queue: queue.Queue, bpe, iterator, d
 def train_model():
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
-    trainer = Trainer()
-    trainer.start()
-
     bpe, model = get_model()
 
+    trainer = Trainer(
+        padding_index=bpe.get_system_token_index("<PADDING>")
+    )
+    trainer.start()
+
     dataloader = ZmqDataloader()
+    dataloader.max_document_size = 1
+    print(len(dataloader))
     iterator = iter(dataloader)
 
     dataloader_queue = queue.Queue(maxsize=1)
@@ -190,7 +233,7 @@ def train_model():
             "transformer_decoder.layers.3": SplitPoint.BEGINNING,
         },
     )
-    trainer.load()
+#    trainer.load()
 
     for _ in range(100):
         raw_dataloader = dataloader_queue.get()

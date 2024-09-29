@@ -44,8 +44,10 @@ def create_vocab_dataset_bpe() -> SimpleVocab:
     for i in glob.iglob(path, recursive=True):
         print(i)
         with open(i, "r") as file:
-            tokens = splitter(file.read())
+            content = file.read()
+            tokens = splitter(content)
             bpe.add_tokens(tokens)
+
     print("Add tokens ... starting merger")
     with open(source_bpe + "_pre_merge", "wb") as file:
         pickle.dump(bpe, file)

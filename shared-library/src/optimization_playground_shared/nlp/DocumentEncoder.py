@@ -43,6 +43,7 @@ def get_document_dataset(vocab: SimpleVocab, documents, SEQUENCE_LENGTH) -> tupl
     assert not torch.all(y == 0), "All zeros is bad"
 
     # Random sampling out of the dataset for better coverage
-    indices = torch.randint(0, X.size(0), (entries_count // 32,))
-    return X[indices], y[indices]
+#    indices = torch.randint(0, X.size(0), (entries_count // 32,))
+#    return X[indices], y[indices]
+    return X, y
 

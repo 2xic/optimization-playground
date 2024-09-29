@@ -10,7 +10,7 @@ import glob
 from optimization_playground_shared.nlp.wordpiece.bpe import BPE
 import time
 
-path = "/mnt/blockstorage/text-dataset/**/*.txt"
+path = "/mnt/blockstorage/text-dataset-2/**/*.txt"
 source = ".source_vocab_metadata"
 source_bpe = ".source_vocab_metadata_bpe"
 bpe_pre_merge = source_bpe + "_pre_merge"
