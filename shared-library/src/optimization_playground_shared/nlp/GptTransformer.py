@@ -40,7 +40,11 @@ class GptTransformerModel(nn.Module):
         super(GptTransformerModel, self).__init__()
         self.config = config
 
-        self.embedding = nn.Embedding(config.vocab_size, config.embedding_dim)
+        self.embedding = nn.Embedding(
+            config.vocab_size, 
+            config.embedding_dim,
+            padding_idx=config.padding_index
+        )
         layers = []
         for _ in range(config.transformer_layers):
             layers.append(nn.TransformerDecoderLayer(
@@ -129,7 +133,27 @@ class GptTransformerModel(nn.Module):
 
     def rollout(self, seed, steps, sampling="argmax"):
         with torch.no_grad():
-            output = []
+            output = seed
+            for _ in range(steps):
+                X = torch.full((1, self.sequence_size), self.config.padding_index).reshape(1, -1).to(self.device).long()                                    
+                context_tensor = torch.tensor(output[-self.sequence_size:]).long()
+                X[0, :context_tensor.shape[0]] = context_tensor
+                next_predicted_token = self.raw_forward(X)
+                next_predicted_token = next_predicted_token[:, 2 ,:]
+                next_predicted_token = torch.nn.functional.softmax(next_predicted_token, dim=1)
+                print("output ", next_predicted_token)
+                samplings = {
+                    "argmax": argmax_sampling,
+                    "temperature": temperature_sampling
+                }   
+                next_predicted_token = samplings[sampling](
+                    next_predicted_token
+                ).item()
+           #     print(next_predicted_token)
+                assert type(next_predicted_token) == int, next_predicted_token
+                output.append(next_predicted_token)
+
+            """
             prev = None
             for index in range(steps):
                 next_predicted = None
@@ -157,7 +181,12 @@ class GptTransformerModel(nn.Module):
                     output.append(next_predicted)
                     prev = X
                 else:
-                    next_predicted = seed[index].item()
+                    if torch.is_tensor(seed[index]):
+                        next_predicted = seed[index].item()
+                    else:
+                        next_predicted = seed[index]
                     assert type(next_predicted) == int, next_predicted
                     output.append(next_predicted)
             return output
+            """
+        return output
