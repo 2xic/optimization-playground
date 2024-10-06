@@ -53,3 +53,17 @@ The most interesting results from this paper imo is the fact that you cna tradeo
     - Key, value storage like the transformer :D 
 - The results are on par with current transformer like models.
 
+## [Were RNNs All We Needed?](https://arxiv.org/pdf/2410.01201)
+- Make some modifications so that the RNNs don't need to backpropagate through time.
+  - which makes them parallelizable
+- Source code attached
+- Results are comparable to other methods with Transformers
+ 
+[Fchollet](https://x.com/fchollet/status/1841902521717293273)
+- Deep learning tries to find a curve that describes the dataset.
+- As you long as the dataset can fit on a curve - "all architectures will convergence to the same performance in the large-data paradigm"
+-  
+[Same as QRNN?](https://x.com/Smerity/status/1842012433281646606)
+- at least close to.
+
+

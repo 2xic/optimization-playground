@@ -28,6 +28,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         self.epoch = 0
         self.train = True
         self.stage = None
+        self.batch = None
 
         atexit.register(self.destroy)
 
@@ -58,7 +59,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         input_Y = y[:y.shape[0] // self.chunks].reshape((y.shape[0] // self.chunks, ) + tuple(y.shape[1:]))
         assert input_X.shape[0] == X.shape[0] // self.chunks
         assert input_Y.shape[0] == y.shape[0] // self.chunks
-
+      #  print(input_X.shape)
       #  print((first_trainable_parameter, split_start))
         self.pipe: Pipe = pipeline(
             module=module,
@@ -76,8 +77,6 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             device=self.device,
         )
         self.optimizer = torch.optim.Adam(smod.parameters())
-       #  self.loss_func = self.loss_function
-        # torch.nn.functional.cross_entropy
 
         # Attach to a schedule
         self.schedule = ScheduleGPipe(
@@ -109,20 +108,25 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
                 self.optimizer.step()
                 dist.barrier()
-
+            # Store the last batch so we can use it for predictions
+            self.batch = X
             # Need to do the first epoch to make sure we are at a good stage
             self.epoch_done(self.epoch, self.stage.is_last)
             if self.stage.is_last:
                 self.epoch += 1
 
+    @property
+    def module(self):
+        return self.pipe.get_stage_module(self.rank)
+
     def load(self):
         if os.path.isfile(self.stage_name):
             state = torch.load(self.stage_name, weights_only=True)
-            smod = self.pipe.get_stage_module(self.rank)
+            smod = self.module
             smod.load_state_dict(state)
 
     def save(self):
-        smod = self.pipe.get_stage_module(self.rank)
+        smod = self.module
         torch.save(smod.state_dict(), self.stage_name)
 
     @property
@@ -151,13 +155,13 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             if self.stage.is_last:
                 assert y is None or out.shape[0] == view_function(y).shape[0], f"Mismatch with view function {out.shape} / {view_function(y).shape} and X ({X.shape})"
                 return out
-
         return None
-        
+
     def _main(self):
         if not "RANK" in os.environ:
             print(f"Not executed correctly. Instead run: ")
             print(f"torchrun --nproc-per-node {torch.cuda.device_count()} [file.py]")
+            print(f"torchrun --nproc-per-node {torch.cuda.device_count()} -m module.file")
             exit(0)
 
         dev_id = self.rank % torch.cuda.device_count()

@@ -89,9 +89,9 @@ class GptTransformerModel(nn.Module):
         results = self.raw_forward(x)
         # (batch size, sequence size, vocab_size)
         #print(results.shape)
-        #reshaped = results.view(-1, self.config.vocab_size)
+        reshaped = results.view(-1, self.config.vocab_size)
         #print(reshaped.shape)
-        return results
+        return reshaped
 
     def embeddings(self, X):
         with torch.no_grad():

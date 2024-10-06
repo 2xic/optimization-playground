@@ -55,3 +55,8 @@ Not that useful of an paper (technically speaking and that is just my opinion), 
 Adds multi-modal functionality to grok. It's SOTA on Math benchmark (mathvista) and text reading (TextVQA). 
 There are some examples from driving scene which the model is also able to correctly decode which is cool. These are from the RealWorldQA dataset which the model also is SOTA on.
 
+## [Movie Gen: A Cast of Media Foundation Models](https://ai.meta.com/static-resource/movie-gen-research-paper)
+[Blog post](https://ai.meta.com/blog/movie-gen-media-foundation-models-generative-ai-video/)
+- (Foundation) models on models 
+- Transformer
+- Video editing, video generation (16 seconds, 16 frames per second), audio generation

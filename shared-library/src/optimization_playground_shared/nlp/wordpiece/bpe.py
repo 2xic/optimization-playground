@@ -16,11 +16,14 @@ class VocabIndex:
         self.tokens_index = {}
         self.index_tokens = {}
 
+        self.is_readonly = False
+
     def add_sentence(self, sentence):
         for i in splitter(sentence):
             self.add_word(i)
 
     def add_word(self, word):
+        assert not self.is_readonly
         word = self._tokenize_words(word)
         if not word in self.word_index:
             idx =  len(self.word_index)
@@ -160,9 +163,16 @@ class BPE:
     def decode(self, tokens):
         assert type(tokens) == list
         output = []
+        padding_token = self.get_system_token_index("<PADDING>")
         for token in tokens:
+            if padding_token == token:
+                continue
             output.append(self.index.index_tokens[token])
         return "".join(output)
+    
+    @property
+    def size(self):
+        return len(self.index.tokens_index) + 1
 
 if __name__ == "__main__":
     # example word form the paper

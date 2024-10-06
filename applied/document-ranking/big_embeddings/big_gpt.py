@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 SEQUENCE_LENGTH = 512
-batch_size = 128
+batch_size = 256
 bpe = get_bpe()
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -38,15 +38,12 @@ class Trainer(MultipleGpuBigModelWrapper):
         )
         self.clear_params()
 
-        self.batch = None
-
     def clear_params(self):
         self.batch_count = 0
         self.batch_loss = 0
         self.batch_accuracy = 0
 
     def batch_done(self, losses, X: torch.Tensor, y: torch.Tensor, y_prediction: torch.Tensor):
-      #  super().batch_done(losses, y, y_prediction)
         predicted_formatted = torch.argmax(y_prediction, dim=1)
         print("y_prediction ", y_prediction.shape)
 
@@ -54,41 +51,27 @@ class Trainer(MultipleGpuBigModelWrapper):
         y_filtered = y[indices]
         accuracy = ((y[indices] == predicted_formatted[indices]).sum())
 
-        """
-        indices = torch.randint(0, y.size(0), size=(32,)).long()
-        print(indices, y.shape)
-        self.batch = (
-            X[indices].detach(),
-            y[indices].detach(),
-            torch.argmax(y_prediction[indices].detach(), dim=1)
-        )
-        """
         self.batch_loss += sum([i.item() for i in losses])
         self.batch_accuracy += accuracy
         self.batch_count += y_filtered.shape[0]
 
     def epoch_done(self, epoch, is_last_stage):
         dist.barrier()
+        self.module.eval()
+        # already done per stage ... in the step function
+        torch.cuda.empty_cache()   
         # Only last stage is useful
         old_microbatches = self.schedule._n_microbatches
         self.schedule._n_microbatches = 1
-        input_tensor_temperature = self.single_rollout(
-            "hello world"
-        )
-        input_tensor_argmax = self.single_rollout(
-            "hello world",
-            sample="argmax"
+        input_tensor_temperature = self.get_predictions(
+            bpe.decode(self.batch[0].tolist()[:32])
         )
         dist.barrier()
-        self.schedule._n_microbatches = old_microbatches
         if is_last_stage:
             output = Prediction.text_prediction(
                         "\n".join([
                             "temperature:\n",
                             bpe.decode(input_tensor_temperature)[:1024],
-                            "\n\n",
-                            "argmax:\n",
-                            bpe.decode(input_tensor_argmax)[:1024],
                         ])  
                     )
             metrics_tracker.log(
@@ -100,13 +83,16 @@ class Trainer(MultipleGpuBigModelWrapper):
                 )
             )
             self.clear_params()
+        # re-enable training
+        self.schedule._n_microbatches = old_microbatches
+        self.module.train()
 
     def get_predictions(self, seed_text, sample="temperature"):
         input_tensor = bpe.encode_sentences(
             seed_text
         )
         with torch.no_grad():
-            for _ in tqdm(range(1024), desc="predictions"):
+            for _ in tqdm(range(64), desc="predictions"):
                 next_input_tensor = torch.zeros((1)).long().to(self.device)
                 output = self.small_rollout(input_tensor)
                 if output is not None:
@@ -124,43 +110,21 @@ class Trainer(MultipleGpuBigModelWrapper):
         return input_tensor
 
     def small_rollout(self, X):
-        # 32 also works ? 
-        X_tensor = torch.full((32, SEQUENCE_LENGTH), bpe.get_system_token_index("<PADDING>")).to(self.device)
+        X_tensor = torch.full((batch_size // self.world_size, SEQUENCE_LENGTH), bpe.get_system_token_index("<PADDING>"), device=self.device)
         X_tensor[:, :len(X)] = torch.tensor(X[-SEQUENCE_LENGTH:])
-#        assert X_tensor.shape[0] > 1, X_tensor.shape[0] 
         return self.predict(X_tensor)
 
-    def single_rollout(self, seed_text, sample="temperature"):
-        X = bpe.encode_sentences(
-            seed_text
-        )
-        # 32 also works ? 
-        X_tensor = torch.full((32, SEQUENCE_LENGTH), bpe.get_system_token_index("<PADDING>")).to(self.device)
-        X_tensor[:, :len(X)] = torch.tensor(X[-SEQUENCE_LENGTH:])
-#        assert X_tensor.shape[0] > 1, X_tensor.shape[0] 
-        output = self.forward(X_tensor)
-        if output is not None:
-            for index in range(output.shape[0]):
-                output_t = output[index].reshape((1, -1))
-                if sample == "temperature":
-                    X.append(temperature_sampling(F.softmax(output_t, dim=1)).item())
-                else:
-                    X.append(argmax_sampling(F.softmax(output_t, dim=1)).item())
-        return X
-
-    def predict(self, X, next_token_location=-1):
+    def predict(self, X):
         results = self.forward(X)
         if results is None:
             return
-        if next_token_location == -1:
-            next_token_location = results.shape[0] -1
-        return results[next_token_location, :].reshape((1, -1))
+        results = results.reshape((results.shape[0] // SEQUENCE_LENGTH, SEQUENCE_LENGTH, bpe.size))
+        return results[0, SEQUENCE_LENGTH - 1, :].reshape((1, -1))
 
-def forward_dataloader(bpe, iterator, zmq: ZmqDataloader, batch=32):
+def forward_dataloader(bpe, zmq: ZmqDataloader, batch=32):
     # sequence is the previously loaded data + a new batch so the dataset is always increasing.
     sequence = [
-        "hello world, I love bagels. Maybe if I try to overfit the model then this thing will work."
-        for _ in range(batch_size)
+        zmq[index] for index in range(min(batch, zmq.__len__()))
     ]
     X, y = get_document_dataset(bpe, sequence, SEQUENCE_LENGTH)
     raw_dataloader = get_raw_dataloader((
@@ -176,11 +140,11 @@ def forward_dataloader(bpe, iterator, zmq: ZmqDataloader, batch=32):
 def get_model():
     embedding_dim = 1024
     config = Config(
-        vocab_size=len(bpe.index.tokens_index),
+        vocab_size=bpe.size,
         embedding_dim=embedding_dim,
         transformer_layers=4,
         attention_heads=4,
-        dropout=0.05,
+        dropout=0,
         feed_forward=embedding_dim * 4,
         padding_index=bpe.get_system_token_index("<PADDING>"),
         sequence_length=SEQUENCE_LENGTH
@@ -189,11 +153,10 @@ def get_model():
 
     return bpe, model
 
-def start_dataloader_background_thread(data_queue: queue.Queue, bpe, iterator, dataloader: ZmqDataloader, batch=32):
+def start_dataloader_background_thread(data_queue: queue.Queue, bpe, dataloader: ZmqDataloader):
     # Load in one new batch of data 
     raw_dataloader = forward_dataloader(
         bpe,
-        iterator,
         dataloader,
         batch=32
     )
@@ -204,6 +167,7 @@ def train_model():
     torch.cuda.manual_seed(0)
     bpe, model = get_model()
 
+    bpe.index.is_readonly = True
     trainer = Trainer(
         padding_index=bpe.get_system_token_index("<PADDING>")
     )
@@ -211,18 +175,15 @@ def train_model():
 
     dataloader = ZmqDataloader()
     dataloader.max_document_size = 1
-    print(len(dataloader))
-    iterator = iter(dataloader)
 
     dataloader_queue = queue.Queue(maxsize=1)
     raw_dataloader = forward_dataloader(
         bpe,
-        iterator,
         dataloader,
         batch=1,
     )
 
-    Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, iterator, dataloader, )).start()    
+    Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()    
 
     trainer.setup(
         model,
@@ -237,7 +198,7 @@ def train_model():
 
     for _ in range(100):
         raw_dataloader = dataloader_queue.get()
-        Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, iterator, dataloader, )).start()
+        Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()
         trainer.run_epoch(
             raw_dataloader,
             epochs=1,

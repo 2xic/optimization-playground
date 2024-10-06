@@ -104,3 +104,7 @@ What is more interesting is the engineering section
 - Google model.
 - They use a LLM to create the embeddings from by distilling it. 
 
+## OpenAI api changes
+- [Prompt caching](https://platform.openai.com/docs/guides/prompt-caching)
+- [Realtime API](https://openai.com/index/introducing-the-realtime-api/) improves the speech to text > completion > text to speech flow
+- [Model distillation in the API](https://openai.com/index/api-model-distillation/) improved api infra for distilling openai models.

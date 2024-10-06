@@ -29,10 +29,10 @@ class ZmqDataloader(Dataset):
                 "command": "size"
             })
             message = self.socket.recv()
-            print(message)
             return int(message)
+        # return specified max value
         return self.max_document_size
-
+    
     # You want to do fancy stuff, you do it here.
     def process_message(self, message):
         return message.replace(b"\r\n", b"\n")

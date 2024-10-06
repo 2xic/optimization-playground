@@ -24,10 +24,10 @@ def encode_document_text(vocab: BPE, text, tensor_x, tensor_y, entries_index, SE
             start_index = i - SEQUENCE_LENGTH
         context = words[start_index:i]
         # Since we are flattening we want this to match ... 
-        next_token = words[i+1:i+SEQUENCE_LENGTH + 1]
+        next_token = words[i:i+SEQUENCE_LENGTH]
         # add the entries
         tensor_x[entries_index, :context.shape[-1]] = context
-        tensor_y[entries_index] = next_token
+        tensor_y[entries_index, :next_token.shape[-1]] = next_token
         entries_index += 1
     return tensor_x, tensor_y, entries_index
 

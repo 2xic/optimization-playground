@@ -24,21 +24,26 @@ def get_bpe() -> BPE:
     with open(path, "rb") as file:
         return pickle.load(file)
 
-def create_vocab_dataset_bpe() -> SimpleVocab:
+def create_vocab_dataset_bpe(from_scratch=False, validate=False) -> SimpleVocab:
     print("Creating BPE dataset")
     # we create it no files are found
-    bpe = BPE()
-    test_tokens = None
-    for _, i in enumerate(glob.iglob(path, recursive=True)):
-        print(i)
-        with open(i, "r") as file:
-            content = file.read()
-            bpe.add_vocab(content)
-            print(len(content))
-            test_tokens = splitter(content)
-    print(sorted(bpe.index.word_frequency.items(), key=lambda x: x[1], reverse=True)[:10])
-    print("Added tokens ... starting merger")
-    print("Before ", len(bpe.index.tokens_index))
+    bpe = None
+    if not os.path.isfile(source_bpe) or from_scratch:
+        bpe = BPE()
+        test_tokens = None
+        for _, i in enumerate(glob.iglob(path, recursive=True)):
+            print(i)
+            with open(i, "r") as file:
+                content = file.read()
+                bpe.add_vocab(content)
+                print(len(content))
+                test_tokens = splitter(content)
+        print(sorted(bpe.index.word_frequency.items(), key=lambda x: x[1], reverse=True)[:10])
+        print("Added tokens ... starting merger")
+        print("Before ", len(bpe.index.tokens_index))
+    else:
+        bpe = get_bpe()
+    
     start = time.time()
     # Run for 10 minutes and let's see what it comes up with
     while time.time() - start < 60 * 10:
@@ -49,14 +54,17 @@ def create_vocab_dataset_bpe() -> SimpleVocab:
         pickle.dump(bpe, file)
 
     # validation
-    for v in test_tokens:
-        tokens = []
-        for i in bpe.encode(v):
-            tokens.append(bpe.index.tokens_index[i])
-        assert v == bpe.decode(tokens)
+    if validate:
+        for v in test_tokens:
+            tokens = []
+            for i in bpe.encode(v):
+                tokens.append(bpe.index.tokens_index[i])
+            assert v == bpe.decode(tokens)
 
 if __name__ == "__main__":
-    results = create_vocab_dataset_bpe()
+    results = create_vocab_dataset_bpe(
+        from_scratch=False,
+        validate=False,
+    )
   #  print(results)
   #  print(results.encode("Developed"))
-
