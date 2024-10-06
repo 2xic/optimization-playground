@@ -19,7 +19,7 @@ def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_i
         if i > SEQUENCE_LENGTH:
             start_index = i - SEQUENCE_LENGTH
         context = words[start_index:i]
-        next_token = words[i+1:i+SEQUENCE_LENGTH + 1]
+        next_token = words[i:i+SEQUENCE_LENGTH]
         # add the entries
         tensor_x[entries_index, :context.shape[-1]] = context
         tensor_y[entries_index, :next_token.shape[-1]] = next_token

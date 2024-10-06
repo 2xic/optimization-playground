@@ -36,12 +36,13 @@ for _ in range(1024):
     accuracy = 0
     sum_loss = 0
 #    for i in range(X.shape[0]):
-    output = model(X)
+    output = model(X).reshape((-1, config.vocab_size))
     loss = torch.nn.functional.cross_entropy(
-        output.reshape((output.shape[0], -1)),
+        output,
         y.reshape((-1)),
         ignore_index=-1
     )
+    #print(output)
     accuracy += (
         torch.argmax(output, dim=1) == y.reshape((-1))
     ).sum()
@@ -53,17 +54,15 @@ for _ in range(1024):
     optimi.step()
     accuracy_pct = accuracy / (y.shape[0] * y.shape[1]) * 100
     print(accuracy_pct, sum_loss, count_full_win)
-#    raw = model.rollout(
-#        source_vocab.encode("hello"), 
-#        2,
-#        sampling="argmax"
-#    )
     raw = torch.argmax(
-        model.raw_forward(X)[:, ::3, :],
+        model(X[:1]).reshape((-1, config.vocab_size)),
         dim=1
-    ).tolist()
-    print(raw)
-    print(source_vocab.decode(raw))
+    ).tolist()[::config.sequence_length]
+    tokens, x_tokens = model.rollout(source_vocab.encode("hello"), 32)
+    print(X[:1])
+    print(x_tokens[:1])
+    print("Rollout:\n\t", source_vocab.decode(tokens))
+    print("Forward:\n\t", source_vocab.decode(raw))
     print("")
     if int(accuracy_pct) > 99:
         count_full_win += 1

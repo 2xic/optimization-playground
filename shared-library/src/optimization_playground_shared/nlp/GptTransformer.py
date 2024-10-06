@@ -88,9 +88,10 @@ class GptTransformerModel(nn.Module):
     def forward(self, x: Tensor):
         results = self.raw_forward(x)
         # (batch size, sequence size, vocab_size)
-        reshaped = results.view(-1, self.config.vocab_size)
-
-        return reshaped
+        #print(results.shape)
+        #reshaped = results.view(-1, self.config.vocab_size)
+        #print(reshaped.shape)
+        return results
 
     def embeddings(self, X):
         with torch.no_grad():
@@ -132,6 +133,7 @@ class GptTransformerModel(nn.Module):
         return next(self.parameters()).device
 
     def rollout(self, seed, steps, sampling="argmax"):
+        X_tensors = []
         with torch.no_grad():
             output = seed
             for _ in range(steps):
@@ -139,9 +141,9 @@ class GptTransformerModel(nn.Module):
                 context_tensor = torch.tensor(output[-self.sequence_size:]).long()
                 X[0, :context_tensor.shape[0]] = context_tensor
                 next_predicted_token = self.raw_forward(X)
-                next_predicted_token = next_predicted_token[:, 2 ,:]
+                next_predicted_token = next_predicted_token[:, ::self.config.sequence_length ,:][0]
                 next_predicted_token = torch.nn.functional.softmax(next_predicted_token, dim=1)
-                print("output ", next_predicted_token)
+              #  print("output ", next_predicted_token)
                 samplings = {
                     "argmax": argmax_sampling,
                     "temperature": temperature_sampling
@@ -149,44 +151,7 @@ class GptTransformerModel(nn.Module):
                 next_predicted_token = samplings[sampling](
                     next_predicted_token
                 ).item()
-           #     print(next_predicted_token)
                 assert type(next_predicted_token) == int, next_predicted_token
                 output.append(next_predicted_token)
-
-            """
-            prev = None
-            for index in range(steps):
-                next_predicted = None
-                if len(seed) <= index:
-                    X = torch.full((1, self.sequence_size), self.config.padding_index).reshape(1, -1).to(self.device).long()
-                    context_tensor = torch.tensor(output[-self.sequence_size:]).long()
-                    X[0, :context_tensor.shape[0]] = context_tensor
-                    assert prev is None or torch.all(prev[0, 1:] == X[0, :-1])
-
-                    next_token_location = (
-                        -1 if context_tensor.shape[0] == self.sequence_size else context_tensor.shape[0] - 1
-                    )
-                    next_token = self.predict(X, next_token_location=next_token_location)
-                    next_predicted = None
-
-                    if sampling == "argmax":
-                        next_predicted = argmax_sampling(
-                            next_token
-                        ).item()
-                    else:
-                        next_predicted = temperature_sampling(
-                            next_token[0]
-                        ).item()
-                    assert type(next_predicted) == int, next_predicted
-                    output.append(next_predicted)
-                    prev = X
-                else:
-                    if torch.is_tensor(seed[index]):
-                        next_predicted = seed[index].item()
-                    else:
-                        next_predicted = seed[index]
-                    assert type(next_predicted) == int, next_predicted
-                    output.append(next_predicted)
-            return output
-            """
-        return output
+                X_tensors.append(X)
+        return output, X_tensors
