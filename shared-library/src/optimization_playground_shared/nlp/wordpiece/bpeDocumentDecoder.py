@@ -7,18 +7,18 @@ def get_document_words(bpe: BPE, text):
     if type(text) == bytes:
         text = text.replace(b"\r\n", b"\n")
         text = text.replace(b"\r", b"\n")
-        return bpe.encode_sentences(text.decode())
+        return bpe.encode(text.decode())
     else:
         text = text.replace("\r\n", "\n")
         text = text.replace("\r", "\n")
-        return bpe.encode_sentences(text)
+        return bpe.encode(text)
 
 def encode_document_text(vocab: BPE, text, tensor_x, tensor_y, entries_index, SEQUENCE_LENGTH, SKIP_SIZE):
     words = get_document_words(vocab, text)
     count_words = len(words)
     # preload all the words fast
     words = torch.tensor(list(map(lambda x: x, words)), dtype=torch.long)
-    for i in range(1, count_words - 1, SKIP_SIZE):
+    for i in range(0, count_words - 1, SKIP_SIZE):
         start_index = 0
         if i > SEQUENCE_LENGTH:
             start_index = i - SEQUENCE_LENGTH
@@ -38,8 +38,8 @@ def get_document_dataset(vocab: BPE, documents, SEQUENCE_LENGTH, SKIPS_SIZE=1) -
         # -2 as we need the first token to be placed and the last token
         entries_count += len(get_document_words(vocab, i)) - 2
     entries_count = entries_count // SKIPS_SIZE + 1
-    X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.get_system_token_index("<PADDING>"), dtype=torch.long)
-    y = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.get_system_token_index("<PADDING>"), dtype=torch.long)
+    X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.index.padding_idx, dtype=torch.long)
+    y = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.index.padding_idx, dtype=torch.long)
     entries_index = 0
     for document in documents:
         X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index, SEQUENCE_LENGTH, SKIPS_SIZE)

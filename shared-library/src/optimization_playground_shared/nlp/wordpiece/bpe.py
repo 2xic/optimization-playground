@@ -8,6 +8,9 @@ from ..SimpleVocab import splitter
 
 class VocabIndex:
     def __init__(self) -> None:
+        self.system_tokens = { }
+        self.padding_idx = self._add_system_token("<PADDING>")
+        self._system_tokens_length = len(self.system_tokens)
         self.word_index = {}
         self.index_word = {}
         self.word_frequency = {}
@@ -18,6 +21,10 @@ class VocabIndex:
 
         self.is_readonly = False
 
+    def _add_system_token(self, word):
+        self.system_tokens[word] = len(self.system_tokens)
+        return self.system_tokens[word]
+
     def add_sentence(self, sentence):
         for i in splitter(sentence):
             self.add_word(i)
@@ -26,7 +33,7 @@ class VocabIndex:
         assert not self.is_readonly
         word = self._tokenize_words(word)
         if not word in self.word_index:
-            idx =  len(self.word_index)
+            idx = self.size
             self.word_index[word] = idx
             self.index_word[idx] = word
             self.word_frequency[word] = 1
@@ -51,6 +58,15 @@ class VocabIndex:
             self.tokens_index[pair[0] + pair[1]] = None
             # Delete the old token as we have optimized
 
+    def get_token_by_index(self, idx):
+        if idx in self.system_tokens:
+            return self.system_tokens[idx]
+        return self.tokens_index[idx]
+
+    @property
+    def size(self):
+        return len(self.word_index) + self._system_tokens_length
+
     def _tokenize_words(self, word: str):
         return " ".join(list(word))
 
@@ -59,14 +75,7 @@ class BPE:
         self.index = VocabIndex()
         self.progress = tqdm.tqdm if show_progress else list
         self.merged_pairs = []
-        self.system_tokens = [
-            "<PADDING>"
-        ]
     
-    def get_system_token_index(self, token):
-        assert token in self.system_tokens
-        return self.index.tokens_index[token]
-
     # Allows usage of custom tokenizer
     def add_tokens(self, input: List[str]):
         for i in input:
@@ -122,7 +131,7 @@ class BPE:
                     pair
                 )
         
-        for index, value in enumerate(self.system_tokens + list(self.index.tokens_index.keys())):
+        for index, value in enumerate(list(self.index.system_tokens.keys()) + list(self.index.tokens_index.keys())):
             self.index.tokens_index[value] = index
             self.index.index_tokens[index] = value
 
@@ -140,14 +149,15 @@ class BPE:
                 pairs[symbols[i], symbols[i + 1]] += frequency
         return pairs
     
-    def encode_sentences(self, documents):
+    def encode(self, sentence):
+        assert type(sentence) == str
         output = []
-        for v in splitter(documents):
-            for word in self.encode(v):
-                output.append(self.index.tokens_index.get(word, self.get_system_token_index("<PADDING>")))
+        for v in splitter(sentence):
+            for word in self._encode(v):
+                output.append(self.index.get_token_by_index(word))
         return output
     
-    def encode(self, word):
+    def _encode(self, word):
         assert type(word) == str
         word = list(word) + ['</w>']  # Add end-of-word token
         for pair in self.merged_pairs:
@@ -163,7 +173,7 @@ class BPE:
     def decode(self, tokens):
         assert type(tokens) == list
         output = []
-        padding_token = self.get_system_token_index("<PADDING>")
+        padding_token = self.index.padding_idx
         for token in tokens:
             if padding_token == token:
                 continue
@@ -172,7 +182,7 @@ class BPE:
     
     @property
     def size(self):
-        return len(self.index.tokens_index) + 1
+        return len(self.index.tokens_index)
 
 if __name__ == "__main__":
     # example word form the paper

@@ -74,7 +74,10 @@ class SimpleVocab:
     def decoded_tokens(self, tokens):
         X = []
         for i in tokens:
-            X.append(self.vocab.index_vocab[i])
+            if i == self.vocab.PADDING_IDX:
+                continue
+            token = self.vocab.index_vocab[i]
+            X.append(token)
         return X
 
     def get_tensor(self, sentence, sequence_length) -> torch.Tensor:

@@ -88,7 +88,7 @@ class Trainer(MultipleGpuBigModelWrapper):
         self.module.train()
 
     def get_predictions(self, seed_text, sample="temperature"):
-        input_tensor = bpe.encode_sentences(
+        input_tensor = bpe.encode(
             seed_text
         )
         with torch.no_grad():

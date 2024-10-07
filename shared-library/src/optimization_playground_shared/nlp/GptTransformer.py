@@ -136,6 +136,7 @@ class GptTransformerModel(nn.Module):
         X_tensors = []
         with torch.no_grad():
             output = seed
+            output = list(filter(lambda x: x != self.config.padding_index, output))
             for _ in range(steps):
                 X = torch.full((1, self.sequence_size), self.config.padding_index).reshape(1, -1).to(self.device).long()                                    
                 context_tensor = torch.tensor(output[-self.sequence_size:]).long()
@@ -143,7 +144,6 @@ class GptTransformerModel(nn.Module):
                 next_predicted_token = self.raw_forward(X)
                 next_predicted_token = next_predicted_token[:, ::self.config.sequence_length ,:][0]
                 next_predicted_token = torch.nn.functional.softmax(next_predicted_token, dim=1)
-              #  print("output ", next_predicted_token)
                 samplings = {
                     "argmax": argmax_sampling,
                     "temperature": temperature_sampling
