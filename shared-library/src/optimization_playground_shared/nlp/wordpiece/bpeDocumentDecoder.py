@@ -45,7 +45,4 @@ def get_document_dataset(vocab: BPE, documents, SEQUENCE_LENGTH, SKIPS_SIZE=1) -
         X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index, SEQUENCE_LENGTH, SKIPS_SIZE)
     assert not torch.all(X == 0), "All zeros is bad"
     assert not torch.all(y == 0), "All zeros is bad"
-    # Random sampling out of the dataset for better coverage
-    indices = torch.randint(0, X.size(0), size=(entries_count // 32,)) if entries_count > 32 else torch.arange(0, entries_count).reshape((-1, 1)).long()
-    return X[indices], y[indices]
-
+    return X, y

@@ -17,8 +17,8 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from tqdm import tqdm
 
-SEQUENCE_LENGTH = 512
-batch_size = 256
+SEQUENCE_LENGTH = 64
+batch_size = 1024
 bpe = get_bpe()
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -45,7 +45,6 @@ class Trainer(MultipleGpuBigModelWrapper):
 
     def batch_done(self, losses, X: torch.Tensor, y: torch.Tensor, y_prediction: torch.Tensor):
         predicted_formatted = torch.argmax(y_prediction, dim=1)
-        print("y_prediction ", y_prediction.shape)
 
         indices = torch.where(y != self.ignore_index)
         y_filtered = y[indices]
@@ -56,6 +55,33 @@ class Trainer(MultipleGpuBigModelWrapper):
         self.batch_count += y_filtered.shape[0]
 
     def epoch_done(self, epoch, is_last_stage):
+        # only include sometimes, not always
+        include_output = epoch % 100 == 0
+
+        # if it is the last stage then output it.
+        input_tensor_temperature = self.get_model_prediction() if include_output else None
+
+        if is_last_stage:
+            output = Prediction.text_prediction(
+                        "\n".join([
+                            "input:\n\n",
+                            bpe.decode(self.batch[0].tolist()[:32]),
+                            "temperature:\n",
+                            bpe.decode(input_tensor_temperature)[:1024],
+                        ])  
+                    ) if include_output else None
+            metrics_tracker.queue(
+                Metrics(
+                    epoch=epoch,
+                    loss=self.batch_loss,
+                    training_accuracy=self.batch_accuracy / self.batch_count * 100,
+                    prediction=output,
+                )
+            )
+            self.clear_params()
+
+    def get_model_prediction(self):
+        print("entering ", self.rank)
         dist.barrier()
         self.module.eval()
         # already done per stage ... in the step function
@@ -67,25 +93,12 @@ class Trainer(MultipleGpuBigModelWrapper):
             bpe.decode(self.batch[0].tolist()[:32])
         )
         dist.barrier()
-        if is_last_stage:
-            output = Prediction.text_prediction(
-                        "\n".join([
-                            "temperature:\n",
-                            bpe.decode(input_tensor_temperature)[:1024],
-                        ])  
-                    )
-            metrics_tracker.log(
-                Metrics(
-                    epoch=epoch,
-                    loss=self.batch_loss,
-                    training_accuracy=self.batch_accuracy / self.batch_count * 100,
-                    prediction=output,
-                )
-            )
-            self.clear_params()
+        
         # re-enable training
         self.schedule._n_microbatches = old_microbatches
         self.module.train()
+
+        return input_tensor_temperature
 
     def get_predictions(self, seed_text, sample="temperature"):
         input_tensor = bpe.encode(
@@ -110,7 +123,7 @@ class Trainer(MultipleGpuBigModelWrapper):
         return input_tensor
 
     def small_rollout(self, X):
-        X_tensor = torch.full((batch_size // self.world_size, SEQUENCE_LENGTH), bpe.get_system_token_index("<PADDING>"), device=self.device)
+        X_tensor = torch.full((batch_size // self.world_size, SEQUENCE_LENGTH), bpe.index.padding_idx, device=self.device)
         X_tensor[:, :len(X)] = torch.tensor(X[-SEQUENCE_LENGTH:])
         return self.predict(X_tensor)
 
@@ -138,7 +151,7 @@ def forward_dataloader(bpe, zmq: ZmqDataloader, batch=32):
     return raw_dataloader
 
 def get_model():
-    embedding_dim = 1024
+    embedding_dim = 64
     config = Config(
         vocab_size=bpe.size,
         embedding_dim=embedding_dim,
@@ -146,7 +159,7 @@ def get_model():
         attention_heads=4,
         dropout=0,
         feed_forward=embedding_dim * 4,
-        padding_index=bpe.get_system_token_index("<PADDING>"),
+        padding_index=bpe.index.padding_idx,
         sequence_length=SEQUENCE_LENGTH
     )
     model = GptTransformerModel(config)
@@ -169,7 +182,7 @@ def train_model():
 
     bpe.index.is_readonly = True
     trainer = Trainer(
-        padding_index=bpe.get_system_token_index("<PADDING>")
+        padding_index=bpe.index.padding_idx
     )
     trainer.start()
 
@@ -194,18 +207,22 @@ def train_model():
             "transformer_decoder.layers.3": SplitPoint.BEGINNING,
         },
     )
-#    trainer.load()
 
-    for _ in range(100):
-        raw_dataloader = dataloader_queue.get()
-        Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()
+#    Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()
+    raw_dataloader = dataloader_queue.get()
+    for epoch in range(100):
+        # NOTE: any thread calls here will be slow so do it with one background thread, don't start many.
         trainer.run_epoch(
             raw_dataloader,
             epochs=1,
             view_function=lambda x: x.view(-1)
         )
-        # For each epoch we save the model
-        trainer.save()    
+        if epoch % 10 == 0:
+            # For each epoch we save the model
+            trainer.save()    
+    print("Done")
+    # trainer.destroy()
+    metrics_tracker.stop()
 
 if __name__ == "__main__":
     train_model()

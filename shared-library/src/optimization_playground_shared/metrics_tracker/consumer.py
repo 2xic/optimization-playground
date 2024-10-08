@@ -377,7 +377,7 @@ def get_prediction_format(entry):
     value = [
         "<h3>{epoch}</h3>".format(epoch=entry["epoch"])
     ]
-    if entry["prediction"] is None:
+    if entry.get("prediction", None) is None:
         value.append("*no metrics*")
     elif entry["prediction"]["prediction_type"] == "text":
         value.append(entry["prediction"]["value"].replace("\n", "<br>"))
@@ -391,3 +391,4 @@ def get_prediction_format(entry):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True, port=8181)
+

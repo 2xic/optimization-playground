@@ -30,7 +30,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         self.stage = None
         self.batch = None
 
-        atexit.register(self.destroy)
+        atexit.register(self._destroy)
 
     def get_parameters_split_name(self, module: torch.nn.Module):
         parameters = module.named_modules()
@@ -53,14 +53,11 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         module.to(self.device)
         module.eval()
 
-       # print((next(module.parameters()).device, X.device))
-
         input_X = X[:X.shape[0] // self.chunks].reshape((X.shape[0] // self.chunks, ) + tuple(X.shape[1:]))
         input_Y = y[:y.shape[0] // self.chunks].reshape((y.shape[0] // self.chunks, ) + tuple(y.shape[1:]))
         assert input_X.shape[0] == X.shape[0] // self.chunks
         assert input_Y.shape[0] == y.shape[0] // self.chunks
-      #  print(input_X.shape)
-      #  print((first_trainable_parameter, split_start))
+
         self.pipe: Pipe = pipeline(
             module=module,
             mb_args=(),
@@ -70,13 +67,12 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             split_spec=split_spec
         )
         smod = self.pipe.get_stage_module(self.rank)
-      #  print(f"Pipeline stage {self.rank} {get_parameter_count(smod) / 10 ** 6}M params")
 
         self.stage = self.pipe.build_stage(
             self.rank,
             device=self.device,
         )
-        self.optimizer = torch.optim.Adam(smod.parameters())
+        self.optimizer = torch.optim.Adam(smod.parameters(), lr=1e-4)
 
         # Attach to a schedule
         self.schedule = ScheduleGPipe(
@@ -107,13 +103,12 @@ class MultipleGpuBigModelWrapper(abc.ABC):
                     self.losses = []
 
                 self.optimizer.step()
-                dist.barrier()
             # Store the last batch so we can use it for predictions
             self.batch = X
             # Need to do the first epoch to make sure we are at a good stage
             self.epoch_done(self.epoch, self.stage.is_last)
-            if self.stage.is_last:
-                self.epoch += 1
+            # want to update all as there could be conditionals in epoch_done
+            self.epoch += 1
 
     @property
     def module(self):
@@ -133,7 +128,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
     def stage_name(self):
         return f"model_stage_{self.rank}_state_dict.pth"
 
-    def destroy(self):
+    # destroyed by an at exit hook
+    def _destroy(self):
         dist.destroy_process_group()
 
     def forward(self, X, y=None, view_function=lambda x: x):
@@ -180,3 +176,5 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
     def epoch_done(self, epoch, is_last_stage):
         pass
+
+    

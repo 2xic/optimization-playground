@@ -5,9 +5,9 @@ from optimization_playground_shared.nlp.wordpiece.bpe import BPE
 from optimization_playground_shared.nlp.wordpiece.bpeDocumentDecoder import get_document_dataset as get_document_dataset_bpe
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 
-SEQUENCE_LENGTH = 10
+SEQUENCE_LENGTH = 8
 
-vocab_type = "simple"
+vocab_type = "bpe"
 source_vocab = None
 docs = [
     "hello world, this is just some random text to verify if the model can learn something."
@@ -26,16 +26,14 @@ else:
 
     assert "hello" == source_vocab.decode(source_vocab.encode("hello"))
     assert "hello world" == source_vocab.decode(source_vocab.encode("hello world"))
-# exit(0)
-
-print(y)
+    assert PADDING_IDX == 0
 
 config = Config(
     vocab_size=source_vocab.size,
     embedding_dim=32,
     transformer_layers=2,
     attention_heads=4,
-    dropout=0.05,
+    dropout=0,
     feed_forward=128,
     padding_index=PADDING_IDX,
     sequence_length=SEQUENCE_LENGTH
@@ -50,36 +48,32 @@ optimi = torch.optim.Adam(
 
 count_full_win = 0
 for _ in range(1024 * 8):
+    model.train()
     optimi.zero_grad()
     accuracy = 0
     sum_loss = 0
-#    for i in range(X.shape[0]):
+
     output = model(X).reshape((-1, config.vocab_size))
     loss = torch.nn.functional.cross_entropy(
         output,
         y.reshape((-1)),
         ignore_index=PADDING_IDX
     )
-    #print(output)
-    accuracy += (
-        torch.argmax(output, dim=1) == y.reshape((-1))
-    ).sum()
-    """
-    print("Predicted vs actual")
-    print((
-         torch.argmax(output, dim=1)
-    ))
-    print(
-        y.reshape((-1))
-    )
-    """
-
     loss.backward()
     sum_loss += loss.item()
         
     optimi.step()
+    # Eval now to make things are stable
+    model.eval()
+
+    output = model(X).reshape((-1, config.vocab_size))
+    predicted_argmax = torch.argmax(output, dim=1)
+    accuracy += (
+        predicted_argmax == y.reshape((-1))
+    ).sum()
     accuracy_pct = accuracy / (y.shape[0] * y.shape[1]) * 100
     print(accuracy_pct, sum_loss, count_full_win)
+    
     raw = torch.argmax(
         model(X[:1]).reshape((-1, config.vocab_size)),
         dim=1
@@ -87,23 +81,21 @@ for _ in range(1024 * 8):
 
     tokens, x_tokens = model.rollout(
         X[0].tolist(), 
-        config.sequence_length,
+        128,
         sampling="argmax"
     )
     print("Predicted vs actual tokens for X[0]")
     print("\t" + str(tokens[config.sequence_length:]))
-    print("\t" + str(y[0]))
+    print("\t" + str(y[0].tolist()))
     print("Decoded (predicted vs actual)")
-    print("\t" + source_vocab.decode(tokens))
-    print("\t" + source_vocab.decode(X[0].tolist() + y[:1].tolist()[0]))
+    decoded_tokens = source_vocab.decode(tokens)
+    decoded_dataset = source_vocab.decode(X[0].tolist() + y[:1].tolist()[0])
+    print("\t" + decoded_tokens)
+    print("\t" + decoded_dataset)
     print("")
-    """
-    tokens, x_tokens = model.rollout(source_vocab.encode("hello"), 32)
-    print(X[:1])
-    print(x_tokens[:1])
-    print("Rollout:\n\t", source_vocab.decode(tokens))
-    print("Forward:\n\t", source_vocab.decode(raw))
-    print("")
-    """
-    if int(accuracy_pct) > 99:
+
+    if torch.all(predicted_argmax == y.reshape((-1))):
         count_full_win += 1
+        for index, v in  enumerate(x_tokens):
+            assert torch.all(X[index] == v), "Mismatch between tensor and input"
+        assert decoded_dataset == decoded_tokens

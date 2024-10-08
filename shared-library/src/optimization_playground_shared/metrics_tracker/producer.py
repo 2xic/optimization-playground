@@ -10,6 +10,7 @@ from typing import List
 from .resource_sender import get_cpu_resource_usage, get_ram_resource_usage, get_gpu_resource_usage
 import threading
 import time
+import queue
 
 load_dotenv()
 
@@ -22,14 +23,21 @@ class Tracker:
             self.hostname = "http://" + self.hostname
         self.name = project_name
         self.run_id = uuid.uuid4()
-        # sending resource updates :O
-        t1 = threading.Thread(target=self.start_background_thread, daemon=True)
-        t1.start()
+        self.metric_queue = queue.Queue()
         # we send feedback -> feedback is good
+        self.stop_background_thread = threading.Event()
+        # sending resource updates :O
+        self.background_thread = threading.Thread(target=self.start_background_thread, daemon=True)
+        self.background_thread.start()
 
     def start_background_thread(self):
         print("Starting to send resource usage")
-        while True:
+        while not self.stop_background_thread.set() or not self.metric_queue.empty():
+            if not self.metric_queue.empty():
+                print(f"Cleaning queue {self.metric_queue.qsize()}")
+            while not self.metric_queue.empty():
+                item = self.metric_queue.get(block=False)
+                self.log(item)
             try:
                 response = requests.post(self.hostname + "/resource_usage", json={
                     "cpu": get_cpu_resource_usage(),
@@ -37,10 +45,11 @@ class Tracker:
                     "gpu": get_gpu_resource_usage(),
                 })
                 assert response.status_code == 200, "bad status code"
-                time.sleep(30)
+                time.sleep(5)
             except Exception as e:
                 print("Exception in background thread", e)
-                time.sleep(5)
+                time.sleep(30)
+        print("Done background thread")
 
     def send_code_state(self, folders: List[str]):
         files = {}
@@ -78,6 +87,13 @@ class Tracker:
             "metrics": dataclasses.asdict(metrics),
             "message_type": "metrics",
         }))
+
+    def queue(self, metrics: Metrics):
+        self.metric_queue.put(metrics)
+
+    def stop(self):
+        self.stop_background_thread.set()
+
 
 if __name__ == "__main__":
     tracker = Tracker(
