@@ -28,7 +28,8 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         self.epoch = 0
         self.train = True
         self.stage = None
-        self.batch = None
+        self.batch_X = None
+        self.batch_y = None
 
         atexit.register(self._destroy)
 
@@ -72,7 +73,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
             self.rank,
             device=self.device,
         )
-        self.optimizer = torch.optim.Adam(smod.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.Adam(smod.parameters())#, lr=1e-4)
 
         # Attach to a schedule
         self.schedule = ScheduleGPipe(
@@ -89,22 +90,19 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         for _ in range(epochs):
             dataloader_iterator = tqdm(dataloader) if self.rank == 0 else dataloader
             for _, (X, y) in enumerate(dataloader_iterator):
+                self.optimizer.zero_grad(set_to_none=True)
                 X = X.to(self.device)
                 y = y.to(self.device)
-
-                # TODO: Figure out why it doesn't work without the batch size
-                if X.shape[0] != dataloader.batch_size:
-                    break
+                # use drop_last=True and shuffle to not trigger
                 assert X.shape[0] == y.shape[0]
 
                 out = self.forward(X, y, view_function)
                 if out is not None:
                     self.batch_done(self.losses, X, view_function(y), out)
-                    self.losses = []
-
                 self.optimizer.step()
             # Store the last batch so we can use it for predictions
-            self.batch = X
+            self.batch_X = X
+            self.batch_y = y
             # Need to do the first epoch to make sure we are at a good stage
             self.epoch_done(self.epoch, self.stage.is_last)
             # want to update all as there could be conditionals in epoch_done
@@ -137,7 +135,6 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         # disable the loss calculation if not used
         self.schedule._has_backward = train
         if self.rank == 0:
-            self.optimizer.zero_grad(set_to_none=True)
             self.schedule.step(
                 x=X,
                 target=(view_function(y) if train else None),
@@ -176,5 +173,3 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
     def epoch_done(self, epoch, is_last_stage):
         pass
-
-    

@@ -17,7 +17,7 @@ def _call_if_func(func, dataset):
         return func(dataset)
     return func
 
-def get_dataloader(tuple_list, batch_size=32, shuffle=True, sampler=None, collate_fn=None):
+def get_dataloader(tuple_list, batch_size=32, shuffle=True, sampler=None, collate_fn=None, drop_last=False):
     dataset = _RawTensorDataset(tuple_list)
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, dataset), collate_fn=collate_fn)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, sampler=_call_if_func(sampler, dataset), collate_fn=collate_fn, drop_last=drop_last)
     return loader

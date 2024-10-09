@@ -16,10 +16,12 @@ import queue
 import torch.distributed as dist
 import torch.nn.functional as F
 from tqdm import tqdm
+from optimization_playground_shared.nlp.wordpiece.bpe import BPE
 
-SEQUENCE_LENGTH = 64
-batch_size = 1024
-bpe = get_bpe()
+SEQUENCE_LENGTH = 32
+batch_size = 32
+preload = False
+bpe = get_bpe() if preload else BPE()
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 metrics_tracker = Tracker("train_gpt_big_embeddings") if __name__ == "__main__" else None
@@ -56,7 +58,7 @@ class Trainer(MultipleGpuBigModelWrapper):
 
     def epoch_done(self, epoch, is_last_stage):
         # only include sometimes, not always
-        include_output = epoch % 100 == 0
+        include_output = epoch % 5 == 0
 
         # if it is the last stage then output it.
         input_tensor_temperature = self.get_model_prediction() if include_output else None
@@ -64,10 +66,15 @@ class Trainer(MultipleGpuBigModelWrapper):
         if is_last_stage:
             output = Prediction.text_prediction(
                         "\n".join([
-                            "input:\n\n",
-                            bpe.decode(self.batch[0].tolist()[:32]),
-                            "temperature:\n",
+                            "input:",
+                            bpe.decode(self.batch_X[0].tolist()[:32]),
+                            "\n\n",
+                            "expected:",
+                            bpe.decode(self.batch_y[0].tolist()[:32]),
+                            "\n\n",
+                            "temperature:",
                             bpe.decode(input_tensor_temperature)[:1024],
+                            "\n\n",
                         ])  
                     ) if include_output else None
             metrics_tracker.queue(
@@ -85,12 +92,13 @@ class Trainer(MultipleGpuBigModelWrapper):
         dist.barrier()
         self.module.eval()
         # already done per stage ... in the step function
-        torch.cuda.empty_cache()   
+        # torch.cuda.empty_cache()   
         # Only last stage is useful
         old_microbatches = self.schedule._n_microbatches
         self.schedule._n_microbatches = 1
         input_tensor_temperature = self.get_predictions(
-            bpe.decode(self.batch[0].tolist()[:32])
+            bpe.decode(self.batch_X[0].tolist()[:32]),
+            sample="temperature"
         )
         dist.barrier()
         
@@ -100,19 +108,20 @@ class Trainer(MultipleGpuBigModelWrapper):
 
         return input_tensor_temperature
 
-    def get_predictions(self, seed_text, sample="temperature"):
+    def get_predictions(self, seed_text, sample="temperature", steps=64):
         input_tensor = bpe.encode(
             seed_text
         )
         with torch.no_grad():
-            for _ in tqdm(range(64), desc="predictions"):
+            for _ in tqdm(range(steps), desc="predictions"):
                 next_input_tensor = torch.zeros((1)).long().to(self.device)
                 output = self.small_rollout(input_tensor)
                 if output is not None:
+                    normalized_input = output
                     if sample == "temperature":
-                        input_tensor.append(temperature_sampling(F.softmax(output, dim=1)).item())
+                        input_tensor.append(temperature_sampling(normalized_input).item())
                     else:
-                        input_tensor.append(argmax_sampling(F.softmax(output, dim=1)).item())
+                        input_tensor.append(argmax_sampling(normalized_input).item())
                     next_input_tensor[0] = torch.tensor(input_tensor[-1])
                     for rank in range(self.world_size - 1):
                         dist.send(tensor=next_input_tensor, dst=rank)
@@ -132,26 +141,37 @@ class Trainer(MultipleGpuBigModelWrapper):
         if results is None:
             return
         results = results.reshape((results.shape[0] // SEQUENCE_LENGTH, SEQUENCE_LENGTH, bpe.size))
-        return results[0, SEQUENCE_LENGTH - 1, :].reshape((1, -1))
+        return results[0, ::SEQUENCE_LENGTH, :].reshape((1, -1))
 
-def forward_dataloader(bpe, zmq: ZmqDataloader, batch=32):
+def forward_dataloader(bpe: BPE, zmq: ZmqDataloader, batch=32):
     # sequence is the previously loaded data + a new batch so the dataset is always increasing.
     sequence = [
         zmq[index] for index in range(min(batch, zmq.__len__()))
     ]
+#    sequence = [
+#        "hello world, this is just some random text to verify if the model can learn something."
+#    ]
+    if not preload and not bpe.index.is_readonly:
+        for content in sequence:
+            bpe.add_vocab(content)
+        bpe.merge(
+            n=100
+        )
+
     X, y = get_document_dataset(bpe, sequence, SEQUENCE_LENGTH)
     raw_dataloader = get_raw_dataloader((
         X.clone(),
         y.clone()
     ),
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=True, 
+        drop_last=True
     )
     assert X.shape[0] > 0
     return raw_dataloader
 
 def get_model():
-    embedding_dim = 64
+    embedding_dim = 128
     config = Config(
         vocab_size=bpe.size,
         embedding_dim=embedding_dim,
@@ -164,7 +184,7 @@ def get_model():
     )
     model = GptTransformerModel(config)
 
-    return bpe, model
+    return model
 
 def start_dataloader_background_thread(data_queue: queue.Queue, bpe, dataloader: ZmqDataloader):
     # Load in one new batch of data 
@@ -178,23 +198,27 @@ def start_dataloader_background_thread(data_queue: queue.Queue, bpe, dataloader:
 def train_model():
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
-    bpe, model = get_model()
-
-    bpe.index.is_readonly = True
-    trainer = Trainer(
-        padding_index=bpe.index.padding_idx
-    )
-    trainer.start()
-
+    # dataloader setup
     dataloader = ZmqDataloader()
     dataloader.max_document_size = 1
-
     dataloader_queue = queue.Queue(maxsize=1)
     raw_dataloader = forward_dataloader(
         bpe,
         dataloader,
         batch=1,
     )
+
+#    print(f"Size {bpe.size}")
+#    print(f"readonly == {bpe.index.is_readonly}")
+
+    bpe.index.is_readonly = True
+
+    # Model setup
+    model = get_model()
+    trainer = Trainer(
+        padding_index=bpe.index.padding_idx
+    )
+    trainer.start()
 
     Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()    
 
@@ -208,9 +232,11 @@ def train_model():
         },
     )
 
+    bpe.lock()
+
 #    Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()
     raw_dataloader = dataloader_queue.get()
-    for epoch in range(100):
+    for epoch in range(1024):
         # NOTE: any thread calls here will be slow so do it with one background thread, don't start many.
         trainer.run_epoch(
             raw_dataloader,

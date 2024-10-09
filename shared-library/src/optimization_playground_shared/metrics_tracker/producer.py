@@ -7,7 +7,7 @@ from .metrics import Metrics
 import dataclasses
 import glob
 from typing import List
-from .resource_sender import get_cpu_resource_usage, get_ram_resource_usage, get_gpu_resource_usage
+from .resource_sender import get_cpu_resource_usage, get_ram_resource_usage, get_gpu_resource_usage, get_gpu_usage
 import threading
 import time
 import queue
@@ -43,6 +43,7 @@ class Tracker:
                     "cpu": get_cpu_resource_usage(),
                     "ram": get_ram_resource_usage(),
                     "gpu": get_gpu_resource_usage(),
+                    "gpus": get_gpu_usage(), 
                 })
                 assert response.status_code == 200, "bad status code"
                 time.sleep(5)

@@ -2,6 +2,8 @@ import torch
 import string
 
 def splitter(sentence):
+    if type(sentence) == bytes:
+        sentence = sentence.decode()
     tokenizer = []
     token = ""
     sentence = sentence.replace("\r\n", "\n")

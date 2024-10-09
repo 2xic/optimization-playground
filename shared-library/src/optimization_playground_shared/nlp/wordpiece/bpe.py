@@ -134,7 +134,7 @@ class BPE:
         for index, value in enumerate(list(self.index.system_tokens.keys()) + list(self.index.tokens_index.keys())):
             self.index.tokens_index[value] = index
             self.index.index_tokens[index] = value
-
+        assert max(self.index.tokens_index.values()) <= self.size
         return True
 
     def _get_stats(self):
@@ -152,8 +152,8 @@ class BPE:
     def encode(self, sentence):
         assert type(sentence) == str
         output = []
-        for v in splitter(sentence):
-            for word in self._encode(v):
+        for sentence in splitter(sentence):
+            for word in self._encode(sentence):
                 output.append(self.index.get_token_by_index(word))
         return output
     
@@ -178,11 +178,14 @@ class BPE:
             if padding_token == token:
                 continue
             output.append(self.index.index_tokens[token])
-        return "".join(output)
+        return "".join(output)  
+    
+    def lock(self):
+        self.index.is_readonly = True
     
     @property
     def size(self):
-        return len(self.index.tokens_index)
+        return len(self.index.tokens_index) + 1
 
 if __name__ == "__main__":
     # example word form the paper
