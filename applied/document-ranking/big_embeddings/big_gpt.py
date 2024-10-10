@@ -17,11 +17,14 @@ import torch.distributed as dist
 import torch.nn.functional as F
 from tqdm import tqdm
 from optimization_playground_shared.nlp.wordpiece.bpe import BPE
+import time
 
-SEQUENCE_LENGTH = 32
-batch_size = 32
-preload = False
-bpe = get_bpe() if preload else BPE()
+SEQUENCE_LENGTH = 128
+EPOCHS = 82
+BATCH_SIZE = 256
+PRELOAD_VOCAB = True
+MAX_DOCUMENT_SIZE = -1
+bpe = get_bpe() if PRELOAD_VOCAB else BPE()
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 metrics_tracker = Tracker("train_gpt_big_embeddings") if __name__ == "__main__" else None
@@ -83,16 +86,14 @@ class Trainer(MultipleGpuBigModelWrapper):
                     loss=self.batch_loss,
                     training_accuracy=self.batch_accuracy / self.batch_count * 100,
                     prediction=output,
+                    timestamp=time.time()
                 )
             )
             self.clear_params()
 
     def get_model_prediction(self):
-        print("entering ", self.rank)
-        dist.barrier()
+       # dist.barrier()
         self.module.eval()
-        # already done per stage ... in the step function
-        # torch.cuda.empty_cache()   
         # Only last stage is useful
         old_microbatches = self.schedule._n_microbatches
         self.schedule._n_microbatches = 1
@@ -100,8 +101,6 @@ class Trainer(MultipleGpuBigModelWrapper):
             bpe.decode(self.batch_X[0].tolist()[:32]),
             sample="temperature"
         )
-        dist.barrier()
-        
         # re-enable training
         self.schedule._n_microbatches = old_microbatches
         self.module.train()
@@ -132,7 +131,7 @@ class Trainer(MultipleGpuBigModelWrapper):
         return input_tensor
 
     def small_rollout(self, X):
-        X_tensor = torch.full((batch_size // self.world_size, SEQUENCE_LENGTH), bpe.index.padding_idx, device=self.device)
+        X_tensor = torch.full((BATCH_SIZE // self.world_size, SEQUENCE_LENGTH), bpe.index.padding_idx, device=self.device)
         X_tensor[:, :len(X)] = torch.tensor(X[-SEQUENCE_LENGTH:])
         return self.predict(X_tensor)
 
@@ -143,15 +142,12 @@ class Trainer(MultipleGpuBigModelWrapper):
         results = results.reshape((results.shape[0] // SEQUENCE_LENGTH, SEQUENCE_LENGTH, bpe.size))
         return results[0, ::SEQUENCE_LENGTH, :].reshape((1, -1))
 
-def forward_dataloader(bpe: BPE, zmq: ZmqDataloader, batch=32):
+def forward_dataloader(bpe: BPE, zmq: ZmqDataloader, batch: int):
     # sequence is the previously loaded data + a new batch so the dataset is always increasing.
     sequence = [
         zmq[index] for index in range(min(batch, zmq.__len__()))
     ]
-#    sequence = [
-#        "hello world, this is just some random text to verify if the model can learn something."
-#    ]
-    if not preload and not bpe.index.is_readonly:
+    if not PRELOAD_VOCAB and not bpe.index.is_readonly:
         for content in sequence:
             bpe.add_vocab(content)
         bpe.merge(
@@ -163,7 +159,7 @@ def forward_dataloader(bpe: BPE, zmq: ZmqDataloader, batch=32):
         X.clone(),
         y.clone()
     ),
-        batch_size=batch_size,
+        batch_size=BATCH_SIZE,
         shuffle=True, 
         drop_last=True
     )
@@ -175,7 +171,7 @@ def get_model():
     config = Config(
         vocab_size=bpe.size,
         embedding_dim=embedding_dim,
-        transformer_layers=4,
+        transformer_layers=16,
         attention_heads=4,
         dropout=0,
         feed_forward=embedding_dim * 4,
@@ -187,29 +183,26 @@ def get_model():
     return model
 
 def start_dataloader_background_thread(data_queue: queue.Queue, bpe, dataloader: ZmqDataloader):
-    # Load in one new batch of data 
-    raw_dataloader = forward_dataloader(
-        bpe,
-        dataloader,
-        batch=32
-    )
-    data_queue.put(raw_dataloader)
+    while True:
+        raw_dataloader = forward_dataloader(
+            bpe,
+            dataloader,
+            batch=32
+        )
+        data_queue.put(raw_dataloader)
 
 def train_model():
     torch.manual_seed(0)
     torch.cuda.manual_seed(0)
     # dataloader setup
     dataloader = ZmqDataloader()
-    dataloader.max_document_size = 1
-    dataloader_queue = queue.Queue(maxsize=1)
+    dataloader.max_document_size = MAX_DOCUMENT_SIZE
+    dataloader_queue = queue.Queue(maxsize=3)
     raw_dataloader = forward_dataloader(
         bpe,
         dataloader,
         batch=1,
     )
-
-#    print(f"Size {bpe.size}")
-#    print(f"readonly == {bpe.index.is_readonly}")
 
     bpe.index.is_readonly = True
 
@@ -227,16 +220,16 @@ def train_model():
         raw_dataloader,
         {
             "transformer_decoder.layers.1": SplitPoint.BEGINNING,
-            "transformer_decoder.layers.2": SplitPoint.BEGINNING,
-            "transformer_decoder.layers.3": SplitPoint.BEGINNING,
+            "transformer_decoder.layers.8": SplitPoint.BEGINNING,
+            "transformer_decoder.layers.14": SplitPoint.BEGINNING,
         },
     )
 
     bpe.lock()
 
-#    Thread(target=start_dataloader_background_thread, args=(dataloader_queue, bpe, dataloader, )).start()
+    start = time.time()
     raw_dataloader = dataloader_queue.get()
-    for epoch in range(1024):
+    for epoch in range(EPOCHS):
         # NOTE: any thread calls here will be slow so do it with one background thread, don't start many.
         trainer.run_epoch(
             raw_dataloader,
@@ -249,6 +242,7 @@ def train_model():
     print("Done")
     # trainer.destroy()
     metrics_tracker.stop()
+    trainer.log((time.time() - start ) / EPOCHS)
 
 if __name__ == "__main__":
     train_model()

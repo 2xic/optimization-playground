@@ -245,7 +245,7 @@ def diff_runs_full(project_name, ref_1, ref_2):
         context=False
     )
 
-def load_run_id(project_name, run_id):
+def load_run_id(project_name, run_id, n):
     run_metadata_path = os.path.join(
         root_data_directory,
         project_name,
@@ -259,6 +259,7 @@ def load_run_id(project_name, run_id):
                 data.append(json.load(file))
     if len(data) == 0:
         return None
+    
     data = sorted(data, key=lambda x: x["epoch"])
     loss_plot = []
     if all(list(map(lambda x: type(x["loss"]) == dict, data))):
@@ -300,30 +301,38 @@ def load_run_id(project_name, run_id):
             list(map(lambda x: x["training_accuracy"], data))
         )
         accuracy =  "<h2>Accuracy</h2>" + accuracy_plot
-        
-    predictions = list(map(lambda x: get_prediction_format(x), data))[-5:]
+    
+    start_timestamp = (data[-1]["timestamp"] - data[0]["timestamp"]) / data[-1]["epoch"] if len(data) > 1 else None
+    print("timestamp ", data[-1]["timestamp"])
+    print("timestamp ", data[0]["timestamp"])
+    predictions = list(map(lambda x: get_prediction_format(x), data))[-n:]
     # Reverse so you can see the latest results first 
     predictions = predictions[::-1]
-
+    
     if len(loss_plot):
         loss_plot = ["<h2>Loss</h2>"] + loss_plot
-    return "<br>".join([
+    
+    output = [
+        "<h1>meta</h1>",
+        f"epoch iterations {start_timestamp}" if start_timestamp is not None else "No iterations yet",
         "<br>".join(loss_plot),
         accuracy,
         "<h1>Metrics</h1>",
         "<br>".join(predictions),
-    ])
+    ]
+    return "<br>".join(output)
 
 @app.route('/<project_name>/<run_id>', methods=['GET'])
 def run(project_name, run_id):
     """
     Shows the project run data
     """
+    page_size = request.args.get("n", 5)
     if run_id == "latest":
         run_ids = SimpleDatabase.get_sorted_runs(project_name)
         if len(run_ids):
             run_id = run_ids[0]
-    results = load_run_id(project_name, run_id)
+    results = load_run_id(project_name, run_id, page_size)
     if results is None:
         return f"Unknown run id {run_id}"
     return results
@@ -353,6 +362,11 @@ def resource_usage():
                     "percentage":resource_tracker.gpu,
                 },
                 title="gpu usage",
+                y_axes_text="%",
+            ),
+            Figure(
+                plots=resource_tracker.gpus,
+                title="gpus usage",
                 y_axes_text="%",
             ),
         ],

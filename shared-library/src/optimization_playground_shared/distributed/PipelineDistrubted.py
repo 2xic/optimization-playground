@@ -23,7 +23,6 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         self.chunks = self.world_size
         self._main()
 
-
         self.losses = []
         self.epoch = 0
         self.train = True
@@ -113,6 +112,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
         return self.pipe.get_stage_module(self.rank)
 
     def load(self):
+        print("Loading in module state")
         if os.path.isfile(self.stage_name):
             state = torch.load(self.stage_name, weights_only=True)
             smod = self.module
@@ -173,3 +173,7 @@ class MultipleGpuBigModelWrapper(abc.ABC):
 
     def epoch_done(self, epoch, is_last_stage):
         pass
+
+    def log(self, *args):
+        if self.rank == 0:
+            print(*args)

@@ -40,6 +40,8 @@ class GptTransformerModel(nn.Module):
         super(GptTransformerModel, self).__init__()
         self.config = config
 
+        self._dummy_linear = nn.Linear(1, 1)
+
         self.embedding = nn.Embedding(
             config.vocab_size, 
             config.embedding_dim,

@@ -37,12 +37,13 @@ def get_document_dataset(vocab: BPE, documents, SEQUENCE_LENGTH, SKIPS_SIZE=1) -
     for i in documents:
         # -2 as we need the first token to be placed and the last token
         entries_count += len(get_document_words(vocab, i)) - 2
-    entries_count = entries_count // SKIPS_SIZE + 1
+    entries_count = (entries_count // SKIPS_SIZE) + len(documents)
     X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.index.padding_idx, dtype=torch.long)
     y = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.index.padding_idx, dtype=torch.long)
     entries_index = 0
     for document in documents:
         X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index, SEQUENCE_LENGTH, SKIPS_SIZE)
+    assert entries_index == X.shape[0]
     assert not torch.all(X == 0), "All zeros is bad"
     assert not torch.all(y == 0), "All zeros is bad"
     return X, y

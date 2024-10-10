@@ -1,7 +1,8 @@
 from .SimpleVocab import SimpleVocab, splitter
 import torch
+from typing import List
 
-def get_document_words(text):
+def get_document_words(text) -> List:
     # todo: create a good tokenizer, this does not really work for code tokens
     if type(text) == bytes:
         return splitter(text.decode())
