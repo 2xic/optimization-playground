@@ -3,7 +3,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 class TrainingLoop:
-    def __init__(self, model, optimizer, loss=nn.NLLLoss()):
+    def __init__(self, model, optimizer, loss=nn.NLLLoss(), callback=None):
         self.model = model
         self.optimizer = optimizer
         self.loss = loss
@@ -11,6 +11,7 @@ class TrainingLoop:
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
         print(f"Using {self.device} for inference")
         self.iterator_loop = lambda x, _train: x
+        self.callback = callback
 
     def use_tqdm(self):
         self.iterator_loop = lambda x, train: tqdm(x, desc="Training" if train else "Testing")
@@ -63,14 +64,10 @@ class TrainingLoop:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
                 self.optimizer.step()
 
-            # TODO: Maybe instead add a custom accuracy metric field
-            if y_pred.shape[-1] == 1:
-                # check if it is within the error margin
-                accuracy += ((y_pred - y).abs() < 0.001).sum()
-            else:
-                accuracy += (torch.argmax(y_pred, 1) == y).sum()
-            # Shape of y would be equal to the number of predictions if we flatten
-            length += y.shape[0]
+
+            acc, len = self._accuracy_check(y_pred, y)
+            accuracy += acc
+            length += len
 
             # Fallback
             if isinstance(training_loop, tqdm):
@@ -85,3 +82,27 @@ class TrainingLoop:
             total_loss,
             accuracy
         )
+    
+    def _accuracy_check(self, y_pred, y):
+        accuracy = 0
+        if y_pred.shape[-1] == 1:
+            # check if it is within the error margin
+            accuracy += ((y_pred - y).abs() < 0.001).sum()
+        else:
+            accuracy += (torch.argmax(y_pred, 1) == y).sum()
+        return accuracy, y.shape[0]
+
+
+    def _forward(self, X, y):
+        self.model.to(self.device)
+        X = X.to(self.device)
+        y = y.to(self.device)
+        y_pred = self.model(X)
+
+        if self.callback is not None:
+            X, y = self.callback(X, y)
+
+        assert torch.all(y_pred != torch.nan), "Found nan in output"
+
+        loss = self.loss(y_pred, y)
+        loss.backward()

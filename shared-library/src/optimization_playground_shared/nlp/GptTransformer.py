@@ -157,3 +157,7 @@ class GptTransformerModel(nn.Module):
                 output.append(next_predicted_token)
                 X_tensors.append(X)
         return output, X_tensors
+
+    def rollout_output(self, seed, steps, sampling="argmax"):
+        output, _ = self.rollout(seed, steps, sampling)
+        return output

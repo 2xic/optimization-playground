@@ -3,19 +3,20 @@ import torch
 import torch.optim as optim
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
-from optimization_playground_shared.training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
+from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
 from pre_generator import get_cache_file
-import atexit
-import time
 from optimization_playground_shared.utils.General import save_model_atomic, load_model, does_model_exists
 from torch.cuda.amp import autocast
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 from optimization_playground_shared.metrics_tracker.metrics import Prediction
-import json
 import optimization_playground_shared
 from optimization_playground_shared.nlp.DocumentEncoder import get_document_dataset
+from optimization_playground_shared.dataloaders.Utils import find_batch_size
+import atexit
+import time
+import json
 
 metrics_tracker = Tracker("solidity_next_token_predictor").send_code_state([
     __file__,
@@ -24,46 +25,86 @@ metrics_tracker = Tracker("solidity_next_token_predictor").send_code_state([
 
 os.makedirs(".cache", exist_ok=True)
 
-BATCH_SIZE = 8
+BATCH_SIZE = 1
+PRELOAD_VOCAB = False
 # Need to try to tain model with long sequence size ....
 SEQUENCE_LENGTH = 256
 CACHE_FILE = ".model_state.pkt"
+DOCUMENTS_TO_LOAD_PER_BATCH = 1
 
 def get_model(vocab):
+    embedding_dim = 32
     config = Config(
         vocab_size=vocab.size,
-        embedding_dim=8,
-        dropout=0.1,
+        embedding_dim=embedding_dim,
+        dropout=0,
         sequence_length=SEQUENCE_LENGTH,
         padding_index=vocab.vocab.PADDING_IDX,
         transformer_layers=8,
         attention_heads=4,
-        feed_forward=256,
+        feed_forward=embedding_dim * 4,
     )
     model = GptTransformerModel(config)
     return model
 
-def get_cached_model(vocab):
+def get_cached_model(vocab: SimpleVocab):
     vocab.lock()
     model = get_model(vocab)
     # TODO: fix this
-    if does_model_exists(CACHE_FILE):
-        print("Loading cached model")
-        checkpoint = load_model(CACHE_FILE)
-        model.load_state_dict(checkpoint['model_state_dict'])
+    #if does_model_exists(CACHE_FILE):
+    #    #print("Loading cached model")
+    #    #checkpoint = load_model(CACHE_FILE)
+    #    model.load_state_dict(checkpoint['model_state_dict'])
     return model
 
 
 def flatten_view(x, y):
     return x, y.view(-1)
 
-def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
-    optimizer = optim.Adam(model.parameters(), lr=13e-4)
-#    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
-    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX))
+def _accuracy_check(predicted, y, vocab: SimpleVocab):
+    predicted = torch.argmax(
+        predicted,
+        dim=1
+    )
 
+    print(predicted)
+    print(y)
+
+    indices = torch.where(y != vocab.vocab.PADDING_IDX)
+    y_filtered = y[indices]
+    accuracy = ((y[indices] == predicted[indices]).sum())
+
+    return accuracy, y_filtered.shape[0]
+
+def train_loop(vocab: SimpleVocab):
     dataloader = ZmqDataloader()
     iterator = iter(dataloader)
+    X, y = get_document_dataset(vocab, [
+        next(iterator) for _ in range(DOCUMENTS_TO_LOAD_PER_BATCH)
+    ], SEQUENCE_LENGTH=SEQUENCE_LENGTH)
+    raw_dataloader = get_raw_dataloader((
+        X.clone(),
+        y.clone()
+    ),
+        batch_size=1,
+        shuffle=True,
+    )
+    model = get_cached_model(vocab)
+    print("Loaded model")
+
+    optimizer = optim.Adam(model.parameters())
+#    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
+    trainer = TrainingLoop(
+        model, 
+        optimizer, 
+        loss=torch.nn.CrossEntropyLoss(ignore_index=vocab.vocab.PADDING_IDX),
+        callback=flatten_view,
+    )
+    raw_dataloader = find_batch_size(trainer, raw_dataloader, device=torch.device('cuda:0'))
+    # print(vocab.size)
+
+    trainer._accuracy_check = lambda x, y: _accuracy_check(x, y, vocab)
+
     last_save = 0
 
     print("{:.3f}MB allocated".format(torch.cuda.memory_allocated()/1024**2))
@@ -74,19 +115,7 @@ def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
 #    model.output.cuda(2)
     print("{:.3f}MB allocated".format(torch.cuda.memory_allocated()/1024**2))
     print("")
-
     for epoch in range(1024):
-        X, y = get_document_dataset(vocab, [
-            next(iterator) for _ in range(32)
-        ])
-        raw_dataloader = get_raw_dataloader((
-            X.clone(),
-            y.clone()
-        ),
-            batch_size=BATCH_SIZE,
-            shuffle=True,
-        )
-        
         with autocast():
             (loss, accuracy) = trainer.use_tqdm().train(
                 raw_dataloader,
@@ -108,40 +137,40 @@ def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
                 "\n".join([
                     "Example 1:",
                     vocab.decode(
-                        model.rollout(
-                            vocab.get_tensor("uint8 ", sequence_length=-1)[0],
+                        model.rollout_output(
+                            vocab.encode("uint8 "),
                             steps=100,
                             sampling="argmax"
                         )
                     ),
                     json.dumps(
-                        vocab.get_tensor("uint8 ", sequence_length=-1).tolist(),
+                        vocab.encode("uint8 "),
                     ),
-                    json.dumps(model.rollout(
-                        vocab.get_tensor("uint8 ", sequence_length=-1)[0],
+                    json.dumps(model.rollout_output(
+                        vocab.encode("uint8 "),
                         steps=100,
                         sampling="argmax"
                     )),
                     "Example 2",
                     vocab.decode(
-                        model.rollout(
-                            vocab.get_tensor("contract Uniswap {", sequence_length=-1)[0],
+                        model.rollout_output(
+                            vocab.encode("contract Uniswap {"),
                             steps=100,
                             sampling="temperature"
                         )
                     ),
                     "Example 3:",
                     vocab.decode(
-                        model.rollout(
-                            vocab.get_tensor("contract ", sequence_length=-1)[0],
+                        model.rollout_output(
+                            vocab.encode("contract "),
                             steps=100,
                             sampling="argmax"
                         )
                     ),
                     "Example 4:",
                     vocab.decode(
-                        model.rollout(
-                            vocab.get_tensor("// This contract is part", sequence_length=-1)[0],
+                        model.rollout_output(
+                            vocab.encode("// This contract is part"),
                             steps=100,
                             sampling="argmax"
                         )
@@ -167,6 +196,7 @@ def train_loop(vocab: SimpleVocab, model: GptTransformerModel):
             last_save = time.time()
     return model
 
+
 if __name__ == "__main__":
     def save_model():
         print("STARTING TO SAVE MODEL")
@@ -176,10 +206,8 @@ if __name__ == "__main__":
     atexit.register(save_model)
 
     # todo: vocab needs to be pre-generated on the dataloader side.
-    vocab = get_cache_file()
+    vocab = get_cache_file() if PRELOAD_VOCAB else SimpleVocab()
     assert vocab is not None
     print("Loaded vocab")
-    model = get_cached_model(vocab)
-    print("Loaded model")
-    model = train_loop(vocab, model)
+    model = train_loop(vocab)
     print(model)

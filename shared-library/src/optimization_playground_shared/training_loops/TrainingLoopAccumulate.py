@@ -3,7 +3,7 @@ import torch.nn as nn
 from tqdm import tqdm
 
 class TrainingLoopAccumulate:
-    def __init__(self, model, optimizer, loss= nn.NLLLoss()):
+    def __init__(self, model, optimizer, loss= nn.NLLLoss(), callback=None):
         self.model = model
         self.optimizer = optimizer
         self.loss = loss
@@ -11,6 +11,7 @@ class TrainingLoopAccumulate:
         self.epoch = 0
         self.iterator_loop = lambda x, _train: x
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
+        self.callback = callback
 
     def eval(self, dataloader):
         with torch.no_grad():
@@ -50,6 +51,7 @@ class TrainingLoopAccumulate:
                 # Do the step and zero_grad
                 if (0 < index) and index % self.accumulate_steps:
                     self._step()
+            
             accuracy += (torch.argmax(y_pred, 1) == y).sum()
             length += y.shape[0]
             # Fallback
@@ -67,6 +69,20 @@ class TrainingLoopAccumulate:
             total_loss,
             accuracy
         )
+    
+    def _forward(self, X, y):
+        self.model.to(self.device)
+        X = X.to(self.device)
+        y = y.to(self.device)
+        y_pred = self.model(X)
+
+        if self.callback is not None:
+            X, y = self.callback(X, y)
+
+        assert torch.all(y_pred != torch.nan), "Found nan in output"
+
+        loss = self.loss(y_pred, y)
+        loss.backward()
 
     def _step(self):
         self.optimizer.step()

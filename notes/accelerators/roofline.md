@@ -11,3 +11,6 @@ Roofline is taking the $log(flops)$ against $log(AI)$
 ### Some good getting started content
 - [Roofline: An Insightful Visual Performance Model for Floating-Point Programs and Multicore Architectures*](https://people.eecs.berkeley.edu/~kubitron/cs252/handouts/papers/RooflineVyNoYellow.pdf)
 - [Understanding Roofline Charts](https://www.telesens.co/2018/07/26/understanding-roofline-charts/)
+
+[The Naive Roofline Model in Performance Modeling](https://peterchng.com/blog/2024/08/29/the-naive-roofline-model-in-performance-modeling/)
+

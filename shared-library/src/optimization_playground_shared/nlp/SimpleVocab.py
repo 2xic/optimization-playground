@@ -1,5 +1,6 @@
 import torch
 import string
+from typing import List
 
 def splitter(sentence):
     if type(sentence) == bytes:
@@ -64,13 +65,13 @@ class SimpleVocab:
             vocab.add(i)
         return SimpleVocab(vocab)
 
-    def encode(self, sentence):
+    def encode(self, sentence) -> List:
         X = []
         for i in splitter(sentence):
             X.append(self.vocab.add(i))
         return X
     
-    def decode(self, tokens):
+    def decode(self, tokens) -> str:
         return "".join(self.decoded_tokens(tokens))
 
     def decoded_tokens(self, tokens):
