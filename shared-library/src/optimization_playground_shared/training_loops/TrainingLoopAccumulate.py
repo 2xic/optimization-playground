@@ -70,19 +70,22 @@ class TrainingLoopAccumulate:
             accuracy
         )
     
-    def _forward(self, X, y):
-        self.model.to(self.device)
-        X = X.to(self.device)
-        y = y.to(self.device)
-        y_pred = self.model(X)
+    def _forward(self, dataloader):
+        for _ in range(3):
+            X, y = next(dataloader)
+            self.model.to(self.device)
+            X = X.to(self.device)
+            y = y.to(self.device)
+            y_pred = self.model(X)
 
-        if self.callback is not None:
-            X, y = self.callback(X, y)
+            if self.callback is not None:
+                X, y = self.callback(X, y)
 
-        assert torch.all(y_pred != torch.nan), "Found nan in output"
+            assert torch.all(y_pred != torch.nan), "Found nan in output"
 
-        loss = self.loss(y_pred, y)
-        loss.backward()
+            loss = self.loss(y_pred, y)
+            loss.backward()
+            self.optimizer.zero_grad()
 
     def _step(self):
         self.optimizer.step()

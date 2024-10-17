@@ -28,9 +28,10 @@ os.makedirs(".cache", exist_ok=True)
 BATCH_SIZE = 1
 PRELOAD_VOCAB = False
 # Need to try to tain model with long sequence size ....
-SEQUENCE_LENGTH = 256
+SEQUENCE_LENGTH = 128
 CACHE_FILE = ".model_state.pkt"
-DOCUMENTS_TO_LOAD_PER_BATCH = 1
+DOCUMENTS_TO_LOAD_PER_BATCH = 4
+EPOCHS = 1024
 
 def get_model(vocab):
     embedding_dim = 32
@@ -62,26 +63,29 @@ def flatten_view(x, y):
     return x, y.view(-1)
 
 def _accuracy_check(predicted, y, vocab: SimpleVocab):
+    #print(y.shape)
+    #print(predicted.shape)
     predicted = torch.argmax(
         predicted,
         dim=1
     )
 
-    print(predicted)
-    print(y)
+   # print(vocab.decode([2]))
+   # print(y)
 
     indices = torch.where(y != vocab.vocab.PADDING_IDX)
     y_filtered = y[indices]
-    accuracy = ((y[indices] == predicted[indices]).sum())
+    accuracy = (y[indices] == predicted[indices]).sum()
 
     return accuracy, y_filtered.shape[0]
 
 def train_loop(vocab: SimpleVocab):
     dataloader = ZmqDataloader()
     iterator = iter(dataloader)
-    X, y = get_document_dataset(vocab, [
+    docs = [
         next(iterator) for _ in range(DOCUMENTS_TO_LOAD_PER_BATCH)
-    ], SEQUENCE_LENGTH=SEQUENCE_LENGTH)
+    ]
+    X, y = get_document_dataset(vocab, docs, SEQUENCE_LENGTH=SEQUENCE_LENGTH)
     raw_dataloader = get_raw_dataloader((
         X.clone(),
         y.clone()
@@ -91,8 +95,15 @@ def train_loop(vocab: SimpleVocab):
     )
     model = get_cached_model(vocab)
     print("Loaded model")
+    
+#    print(X)
+#    print(docs)
+#    exit(0)
 
-    optimizer = optim.Adam(model.parameters())
+    optimizer = optim.Adam(
+        model.parameters(),
+        lr=13e-4
+    )
 #    trainer = TrainingLoopAccumulate(model, optimizer, loss=torch.nn.CrossEntropyLoss())#ignore_index=vocab.vocab.PADDING_IDX))
     trainer = TrainingLoop(
         model, 
@@ -115,85 +126,77 @@ def train_loop(vocab: SimpleVocab):
 #    model.output.cuda(2)
     print("{:.3f}MB allocated".format(torch.cuda.memory_allocated()/1024**2))
     print("")
-    for epoch in range(1024):
-        with autocast():
-            (loss, accuracy) = trainer.use_tqdm().train(
-                raw_dataloader,
-                callback=flatten_view,
-            ) #, sharding=True)
-        # Try to predict something 
-        stats = {}
-        for x in X.tolist():
-            for token in x:
-                if token not in stats:
-                    stats[token] =1
-                else:
-                    stats[token] += 1
+    for epoch in range(EPOCHS):
+        (loss, accuracy) = trainer.use_tqdm().train(
+            raw_dataloader,
+            callback=flatten_view,
+        )
         metric = Metrics(
             epoch=epoch,
             loss=loss.item(),
             training_accuracy=accuracy.item(),
-            prediction=Prediction.text_prediction(
-                "\n".join([
-                    "Example 1:",
-                    vocab.decode(
-                        model.rollout_output(
-                            vocab.encode("uint8 "),
-                            steps=100,
-                            sampling="argmax"
-                        )
-                    ),
-                    json.dumps(
-                        vocab.encode("uint8 "),
-                    ),
-                    json.dumps(model.rollout_output(
+            prediction=None,
+        )
+        print(epoch)
+        """
+        prediction=Prediction.text_prediction(
+            "\n".join([
+                "Example 1:",
+                vocab.decode(
+                    model.rollout_output(
                         vocab.encode("uint8 "),
                         steps=100,
                         sampling="argmax"
-                    )),
-                    "Example 2",
-                    vocab.decode(
-                        model.rollout_output(
-                            vocab.encode("contract Uniswap {"),
-                            steps=100,
-                            sampling="temperature"
-                        )
-                    ),
-                    "Example 3:",
-                    vocab.decode(
-                        model.rollout_output(
-                            vocab.encode("contract "),
-                            steps=100,
-                            sampling="argmax"
-                        )
-                    ),
-                    "Example 4:",
-                    vocab.decode(
-                        model.rollout_output(
-                            vocab.encode("// This contract is part"),
-                            steps=100,
-                            sampling="argmax"
-                        )
-                    ),
-                    "\n\n\n\n",
-                    "X[0]",
-                    vocab.decode(
-                        X[0].tolist()
-                    ),
-                    "stats for X",
-                    json.dumps(stats),
-                #    "y[0]",
-                #    vocab.decode(
-                #        [y[0].tolist()]
-                #    )
-                ])
-            )
-        )
-        metrics_tracker.log(metric)
+                    )
+                ),
+                json.dumps(
+                    vocab.encode("uint8 "),
+                ),
+                json.dumps(model.rollout_output(
+                    vocab.encode("uint8 "),
+                    steps=100,
+                    sampling="argmax"
+                )),
+                "Example 2",
+                vocab.decode(
+                    model.rollout_output(
+                        vocab.encode("contract Uniswap {"),
+                        steps=100,
+                        sampling="temperature"
+                    )
+                ),
+                "Example 3:",
+                vocab.decode(
+                    model.rollout_output(
+                        vocab.encode("contract "),
+                        steps=100,
+                        sampling="argmax"
+                    )
+                ),
+                "Example 4:",
+                vocab.decode(
+                    model.rollout_output(
+                        vocab.encode("// This contract is part"),
+                        steps=100,
+                        sampling="argmax"
+                    )
+                ),
+                "\n\n\n\n",
+                "X[0]",
+                vocab.decode(
+                    X[0].tolist()
+                ),
+                "stats for X",
+                json.dumps(stats),
+            ])
+            """
+        metrics_tracker.queue(metric)
 
         if (time.time() - last_save) > 60:
             save_model_atomic(CACHE_FILE, model)
             last_save = time.time()
+        metrics_tracker.stop()
+
     return model
 
 

@@ -182,6 +182,10 @@ class BPE:
     
     def lock(self):
         self.index.is_readonly = True
+
+    @property
+    def PADDING_IDX(self):
+        return self.index.padding_idx
     
     @property
     def size(self):

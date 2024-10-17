@@ -37,17 +37,18 @@ class TrainingLoop:
         has_nan_loss = False
 
         training_loop = self.iterator_loop(dataloader, train)
+        print(self.loss)
         for (X, y) in training_loop:
             if callback is not None:
                 X, y = callback(X, y)
             X: torch.Tensor = X.to(device)
             y: torch.Tensor = y.to(device)
             y_pred = self.model(X)
-
+            """
             if not self.loss is None:
                 loss = self.loss(y_pred, y)
                 if torch.isnan(loss):
-                    has_nan_loss = True
+                    has_nan_loss = Trueq
                 else:
                     total_loss += loss
                     has_nan_loss = False
@@ -57,13 +58,15 @@ class TrainingLoop:
             # Nan loss can hurt training, I don't like it.
             if train and not has_nan_loss:
                 assert self.loss is not None
-                self.optimizer.zero_grad(
-                  set_to_none=True
-                )
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
-                self.optimizer.step()
-
+            """
+            loss = self.loss(y_pred, y)
+            self.optimizer.zero_grad(
+                set_to_none=True
+            )
+            loss.backward()
+#                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1)
+            self.optimizer.step()
+            total_loss += loss.item()
 
             acc, len = self._accuracy_check(y_pred, y)
             accuracy += acc
@@ -93,16 +96,19 @@ class TrainingLoop:
         return accuracy, y.shape[0]
 
 
-    def _forward(self, X, y):
-        self.model.to(self.device)
-        X = X.to(self.device)
-        y = y.to(self.device)
-        y_pred = self.model(X)
+    def _forward(self, dataloader):
+        for _ in range(3):
+            X, y = next(dataloader)
+            self.model.to(self.device)
+            X = X.to(self.device)
+            y = y.to(self.device)
+            y_pred = self.model(X)
 
-        if self.callback is not None:
-            X, y = self.callback(X, y)
+            if self.callback is not None:
+                X, y = self.callback(X, y)
 
-        assert torch.all(y_pred != torch.nan), "Found nan in output"
+            assert torch.all(y_pred != torch.nan), "Found nan in output"
 
-        loss = self.loss(y_pred, y)
-        loss.backward()
+            loss = self.loss(y_pred, y)
+            loss.backward()
+            self.optimizer.zero_grad()

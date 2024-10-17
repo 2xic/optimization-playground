@@ -107,5 +107,9 @@ class SimpleVocab:
         return self
     
     @property
+    def PADDING_IDX(self):
+        return self.vocab.PADDING_IDX
+    
+    @property
     def size(self):
         return len(self.vocab.index_vocab)
