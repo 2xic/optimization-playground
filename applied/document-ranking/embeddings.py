@@ -1,6 +1,7 @@
 from sklearn.feature_extraction.text import TfidfVectorizer
-from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 from optimization_playground_shared.apis.cache_embeddings import CacheEmbeddings
+from optimization_playground_shared.apis.huggingface import HuggingfaceApi
 import requests
 import os
 from dotenv import load_dotenv
@@ -42,9 +43,9 @@ class OpenAiEmbeddingsWrapper:
 class HuggingFaceWrapper:
     def __init__(self, model="sentence-transformers/all-MiniLM-L6-v2") -> None:
         self.model_id = model
-        self.hf_token = os.environ["hugginf_face"]
         self.is_trained = False
         self.cache_handler = CacheEmbeddings()
+        self.api = HuggingfaceApi()
 
     def train(self, x):
         assert self.is_trained == False
@@ -58,28 +59,7 @@ class HuggingFaceWrapper:
         return X
 
     def _query(self, model_id, texts):
-        payload = {
-            "model": model_id,
-            "input": texts,
-        }
-        cache = self.cache_handler.load(**payload)
-        if cache is not None:
-            return cache
-        # 20:42
-
-        api_url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model_id}"
-        headers = {"Authorization": f"Bearer {self.hf_token}"}
-        response = requests.post(api_url, headers=headers, json={"inputs": texts, "options":{"wait_for_model":True}})
-        embed = response.json()
-        if type(embed) == dict:
-            print(embed)
-        response = np.asarray(embed).astype(np.float32)
-        self.cache_handler.save(
-            payload,
-            embed
-        )
-        time.sleep(1)
-        return response
+        return self.api.get_embeddings(model_id, texts)
 
 class ClaudeWrapper:
     def __init__(self) -> None:

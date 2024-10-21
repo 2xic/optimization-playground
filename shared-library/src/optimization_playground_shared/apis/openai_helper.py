@@ -6,6 +6,7 @@ import requests
 from dotenv import load_dotenv
 import json
 from .cache_embeddings import CacheEmbeddings
+from typing import Dict
 load_dotenv()
 
 cache_handler = CacheEmbeddings()
@@ -55,3 +56,52 @@ def get_embeddings(text, model):
         results=results.json()
     )
     return results.json()
+
+def get_completion(messages, model, response_format=None) -> Dict:
+    # TODO: TOken length validation is in OpenAiAdaEmbeddings
+    payload = {
+        "model": model,
+        "messages": messages,
+     #   "max_completion_tokens": 50_000
+    }
+    print(model)
+    if response_format is not None:
+        payload["response_format"] = response_format
+    cache = cache_handler.load(
+        model,
+        input=json.dumps(payload)
+    )
+    if cache is not None and "error" not in cache:
+        return cache
+    
+    print("Requesting embedding ... ")
+    results = requests.post("https://api.openai.com/v1/chat/completions", 
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {token}" 
+        }
+    )
+
+    cache_handler.save(
+        payload={
+            "model":model,
+            "input": json.dumps(payload),
+        },
+        results=results.json()
+    )
+    return results.json()
+
+def get_text_to_speech(text):
+    response = requests.post(
+        "https://api.openai.com/v1/audio/speech",
+        json={
+            "model": "tts-1",
+            "input": text,
+            "voice": "alloy"
+        },
+        headers={
+            "Authorization": f"Bearer {token}" 
+        },
+        stream=True
+    )
+    return response

@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 load_dotenv()
 
-from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 
 def get_embeddings(link_id):
     url = os.environ["host_link"]

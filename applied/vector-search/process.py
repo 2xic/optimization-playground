@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from optimization_playground_shared.datasources.arxiv import start_crawling, get_crawled
-from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 from database import Chroma
 
 model = OpenAiEmbeddings()

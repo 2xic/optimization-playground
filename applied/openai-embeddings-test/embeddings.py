@@ -5,7 +5,7 @@ import time
 
 load_dotenv()
 
-from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 
 model = OpenAiEmbeddings()
 # I want to study some OpenAi embeddings

@@ -1,5 +1,5 @@
 from dataset import get_dataset
-from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 import hashlib
 import json
 import numpy as np

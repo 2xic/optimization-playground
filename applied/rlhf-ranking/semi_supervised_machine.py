@@ -12,7 +12,7 @@ from results import Input, Results
 from dotenv import load_dotenv
 load_dotenv()
 
-from optimization_playground_shared.apis.openai_embeddings import OpenAiEmbeddings
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 import torch
 from abc import abstractmethod
 from typing import List
