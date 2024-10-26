@@ -22,3 +22,10 @@
   - Generative Architecture which is a function f(g(x, z), y) Learns to construct y from a compatible signal x using a decoder network that is conditional on a latent variable z 
   - Join-Embedding prediction architecture learns to predict the embeddings of signal y from compatible signal `X` using a predictor network that is possibly conditional on a latent variable Z
 - The overall idea is vitalized in image 3 and 4
+
+## [VICReg: Variance-Invariance-Covariance Regularization for Self-Supervised Learning](https://arxiv.org/pdf/2105.04906)
+Stabilize the learning with self-supervised methods by adding regularization which is
+1. Maintain the variance between the two embeddings
+2. De-correlate the variables
+
+The code is [here](https://arxiv.org/pdf/2105.04906#page=13).

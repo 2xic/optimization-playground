@@ -111,6 +111,7 @@ improves performance and scalability in a variety of domains."
 - They have results to back this up also!
 
 ## [Diffusion for World Modeling: Visual Details Matter in Atari](https://arxiv.org/pdf/2405.12399)
+[Website](https://diamond-wm.github.io/)
 - So core idea here seems to be that they used diffusion for the rollout
   - Render it conditionally on the past action + state to get the next state
   - Next state goes into policy with new action output

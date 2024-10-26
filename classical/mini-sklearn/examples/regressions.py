@@ -4,7 +4,7 @@ import pandas as pd
 from sklearn import datasets
 from src.regression.linear_regression import ProbabilisticLinearRegression
 from src.regression.huber_regression import HuberRegression
-
+import os
 from sklearn.linear_model import LinearRegression as SklearnLinearRegression
 
 # Our models from mini sklearn
@@ -13,12 +13,13 @@ huber_regression = HuberRegression()
 sklearn_regression = SklearnLinearRegression()
 
 def predict(model, x, y, plotLine):
+    a = plotLine.reshape((-1)).reshape(-1, 1)
     if isinstance(model, SklearnLinearRegression):
         model.fit(x, y)        
+        output = model.predict(a)
     else:
         model.fit(x, y, n_iterations=10_000)
-    a = plotLine.reshape((-1)).tolist()
-    output = model.predict(a)
+        output = model.predict(a.reshape(-1).tolist())
     print(output)
     return output
 
@@ -54,11 +55,14 @@ fit_df = pd.DataFrame(
 	data={
         "linear_regression": predict(linear_regression, X, y, predict_X),
 	    "huber_regression": predict(huber_regression, X, y, predict_X),
-	    "sklearn_regression": predict(sklearn_regression, X, y, predict_X),
+	 #   "sklearn_regression": predict(sklearn_regression, X, y, predict_X),
 	}
 )
 fix, ax = plt.subplots()
 fit_df.plot(ax=ax)
 plt.scatter(X, y, c="k")
 plt.title("Linear regression on data with outliers")
-plt.savefig("regressions.png")
+plt.savefig(os.path.join(
+    os.path.dirname(__file__),
+    "regressions.png"
+))

@@ -1,6 +1,10 @@
 https://en.wikipedia.org/wiki/Category:Data_compression
 
-http://prize.hutter1.net/
+### Benchmarks
+- [Hutter price](http://prize.hutter1.net/)
+- [Large Text Compression Benchmark](https://www.mattmahoney.net/dc/text.html)
+
+Currently [nncp](https://bellard.org/nncp/nncp.pdf) and variants of [cmix](https://github.com/kaitz/fx-cmix) are on top of both leaderboard.
 
 ### [Data Compression Explained](http://mattmahoney.net/dc/dce.html#Section_1)
 All data compression algorithms are based on 

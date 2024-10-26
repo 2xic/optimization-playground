@@ -108,3 +108,18 @@ What is more interesting is the engineering section
 - [Prompt caching](https://platform.openai.com/docs/guides/prompt-caching)
 - [Realtime API](https://openai.com/index/introducing-the-realtime-api/) improves the speech to text > completion > text to speech flow
 - [Model distillation in the API](https://openai.com/index/api-model-distillation/) improved api infra for distilling openai models.
+
+### [Zamba2-7B](https://www.zyphra.com/post/zamba2-7b)
+- SOTA small model
+- [Improvement over the old version](https://arxiv.org/abs/2405.16712)
+- [Mamba2 Blocks](https://arxiv.org/pdf/2405.21060)
+
+## [Scaling LLM Test-Time Compute Optimally can be More Effective than Scaling Model Parameters](https://arxiv.org/pdf/2408.03314)
+- The idea behind strawberry, instead of spending time training, spend more time thinking before outputting answer.
+- [Searching](https://arxiv.org/pdf/2408.03314#page=8) for the best answer.
+- How do you select the time to spend here vs training time ? 
+
+## [Badllama 3: removing safety finetuning from Llama 3 in minutes](https://arxiv.org/pdf/2407.01376)
+It's easy to remove safety features when you have access to the model.
+
+

@@ -1,7 +1,6 @@
 """
 https://web.stanford.edu/~jurafsky/slp3/3.pdf
 """
-import numpy as np
 
 class Dataloader:
     def __init__(self, window_size) -> None:
