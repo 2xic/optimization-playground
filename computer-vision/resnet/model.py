@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
-from optimization_utils.logging.EpochRuns import EpochRuns
+#from optimization_playground_shared.metrics_tracker.metrics import Metrics
 
 def conv_layer(in_channel, out_channel, kernel_size=3, stride=1):
     return nn.Conv2d(
@@ -39,6 +39,7 @@ class ResidualBlock(nn.Module):
 
 class Net(nn.Module):
     def __init__(self, skip_connections):
+        self.skip_connections = skip_connections
         super().__init__()
         self.conv1 = conv_layer(3, 16)
         self.conv2 = ResidualBlock(16, 16, is_active=skip_connections)
@@ -59,9 +60,9 @@ class Net(nn.Module):
 class TrainableModel(pl.LightningModule):
     def __init__(self, skip_connections, test_loader):
         super().__init__()
-        self.epoch_information = EpochRuns(
-            "resnet" if skip_connections else "non_resnet"
-        )
+        #self.epoch_information = Metrics(
+        #    "resnet" if skip_connections else "non_resnet"
+        #)
         self.test_loader = test_loader
         self.model = Net(skip_connections)
 
@@ -77,12 +78,12 @@ class TrainableModel(pl.LightningModule):
     
         self.log("train_loss", loss_value)
 
-        self.epoch_information.log(
-            "train_loss", loss_value.item(), self.current_epoch,
-        )
-        self.epoch_information.log(
-            "training_accuracy", (torch.sum(torch.argmax(z_k_1, 1) == y) / x.shape[0]).item() * 100, self.current_epoch,
-        )
+        #self.epoch_information.log(
+        #    "train_loss", loss_value.item(), self.current_epoch,
+        #)
+        #self.epoch_information.log(
+        #    "training_accuracy", (torch.sum(torch.argmax(z_k_1, 1) == y) / x.shape[0]).item() * 100, self.current_epoch,
+        #)
         return loss_value
 
     def configure_optimizers(self):
@@ -99,7 +100,7 @@ class TrainableModel(pl.LightningModule):
                 y = y.to(torch.device('cuda'))
                 z_k_1 = self.forward(x)
                 testing_acc += (torch.sum(torch.argmax(z_k_1, 1) == y) / x.shape[0]).item() * 100
-        self.epoch_information.log(
-            "testing_accuracy", testing_acc, self.current_epoch,
-        )
+        #self.epoch_information.log(
+        #    "testing_accuracy", testing_acc, self.current_epoch,
+        #)
         self.epoch_information.store()

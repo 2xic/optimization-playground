@@ -7,16 +7,13 @@ from optimization_playground_shared.training_loops.TrainingLoop import TrainingL
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
 from pre_generator import get_cache_file
-from optimization_playground_shared.utils.General import save_model_atomic, load_model, does_model_exists
-from torch.cuda.amp import autocast
+from optimization_playground_shared.utils.General import save_model_atomic
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
-from optimization_playground_shared.metrics_tracker.metrics import Prediction
 import optimization_playground_shared
 from optimization_playground_shared.nlp.DocumentEncoder import get_document_dataset
 from optimization_playground_shared.dataloaders.Utils import find_batch_size
 import atexit
 import time
-import json
 
 metrics_tracker = Tracker("solidity_next_token_predictor").send_code_state([
     __file__,

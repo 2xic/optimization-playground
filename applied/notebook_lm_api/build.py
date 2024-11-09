@@ -1,3 +1,7 @@
+
+"""
+note: sadly the api is already changed so this doesn't work anymore.
+"""
 import requests
 import json
 from string import Template
@@ -72,7 +76,7 @@ if True:
         headers=headers
     )
 
-    #print(data.text)
+   # print(data.text)
     assert data.status_code == 200
 
     respone = json.loads(data.text.split("\n")[3])

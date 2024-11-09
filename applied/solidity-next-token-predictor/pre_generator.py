@@ -10,7 +10,8 @@ import glob
 from optimization_playground_shared.nlp.wordpiece.bpe import BPE
 from collections import defaultdict
 
-path = "/mnt/blockstorage/smart-contract-fiesta/organized_contracts/**/main.sol"
+#path = "/mnt/blockstorage/smart-contract-fiesta/organized_contracts/**/main.sol"
+path = "~/smart-contract-fiesta/organized_contracts/**/main.sol"
 source = ".source_vocab_metadata"
 source_bpe = ".source_vocab_metadata_bpe"
 
@@ -41,27 +42,32 @@ def create_vocab_dataset() -> SimpleVocab:
 def create_vocab_dataset_bpe() -> SimpleVocab:
     print("Creating BPE dataset")
     bpe = BPE()
+    files = []
     for i in glob.iglob(path, recursive=True):
         print(i)
         with open(i, "r") as file:
             content = file.read()
             tokens = splitter(content)
             bpe.add_tokens(tokens)
+            files.append(i)
 
     print("Add tokens ... starting merger")
     with open(source_bpe + "_pre_merge", "wb") as file:
         pickle.dump(bpe, file)
-    bpe = None
-    with open(source_bpe + "_pre_merge", "rb") as file:
-        bpe = pickle.load(file)
+    #bpe = None
+    #with open(source_bpe + "_pre_merge", "rb") as file:
+    #    bpe = pickle.load(file)
     bpe.merge()
     with open(source_bpe, "wb") as file:
         pickle.dump(bpe, file)
+
+    for i in files:
+        pass
     return bpe
 
 if __name__ == "__main__":
     results = create_vocab_dataset_bpe()
 #    results = create_vocab_dataset_bpe()
 #    print(results.index.word_index)
-    print(results.index.tokens_index)
+#    print(results.index.tokens_index)
 
