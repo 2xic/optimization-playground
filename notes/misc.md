@@ -63,6 +63,11 @@ They made some data observations which was kinda intresting
   - neural-symbolic with a language model based on Gemini. It uses search trees to tackle more complex problems.
 
 
+[Solution files](https://storage.googleapis.com/deepmind-media/DeepMind.com/Blog/imo-2024-solutions/index.html)
+
+[AlphaProof's Greatest Hits](https://rishimehta.xyz/2024/11/17/alphaproofs-greatest-hits.html). 
+
+
 ## [Segment Anything Model 2](https://github.com/smlxl/storage-explorer/)
 [Original model](https://ai.meta.com/blog/segment-anything-foundation-model-image-segmentation/)
 

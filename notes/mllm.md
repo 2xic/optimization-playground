@@ -60,3 +60,9 @@ There are some examples from driving scene which the model is also able to corre
 - (Foundation) models on models 
 - Transformer
 - Video editing, video generation (16 seconds, 16 frames per second), audio generation
+
+## [EMMA: End-to-End Multimodal Model for Autonomous Driving](https://storage.googleapis.com/waymo-uploads/files/research/EMMA-paper.pdf)
+[Waymo Research](https://waymo.com/research/emma/)
+- Task prompt + Image = Answer + Visualizations
+- https://x.com/___Harald___/status/1852039810812203198
+- 

@@ -883,3 +883,8 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
     - [Blogpost on it](https://arcprize.org/blog/openai-o1-results-arc-prize)
   - [COT might noise the context](https://x.com/mlstreettalk/status/1835576313223987383)
 - [Where is John Schulman?](https://x.com/livgorton/status/1834769173458960675)
+
+# [FrontierMath](https://epoch.ai/frontiermath)
+- Benchmark to test math capbabilities of models
+- They max at around 2%
+

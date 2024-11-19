@@ -8,12 +8,13 @@ transform = transforms.Compose(
 
 
 class Cifar10Dataloader(Dataset):
-    def __init__(self, test=False):
+    def __init__(self, test=False, max_files=float('inf')):
         self.dataset = torchvision.datasets.CIFAR10(root='./data', train=(not test),
                                                           download=True, transform=transform)
+        self.max_files = max_files
 
     def __len__(self):
-        return len(self.dataset)
+        return min(len(self.dataset), self.max_files)
 
     def __getitem__(self, idx):
         return self.dataset[idx]

@@ -12,3 +12,9 @@
 - The exception of rapid feedback does not seem to have happened
 - Capabilities will not increase without resource usage (at least for now)
 - The feedback loop after launch does not seem to be working "as planned" 
+
+## Elon Musk
+- [In a year or two it will be on par with a human](https://x.com/tsarnick/status/1851360143721869672). 
+  - https://x.com/___Harald___/status/1851496842024071372
+
+
