@@ -825,6 +825,11 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 - It's in the top tier compared to other models, LLama/Mixtral still beats it on a few benchmarks
 - They use GRPO for RLHF.
 
+### [chat.deepseek](https://chat.deepseek.com/)
+- Uses the deepseek model, intresting seeing the context window here vs. openai 4o.
+- Similiar to the [o1 scaling laws](https://x.com/nrehiew_/status/1859218213915001157?utm_source=pocket_saves). That said, it doesn't have [preform as well as o1](https://x.com/mrsiipa/status/1859218868490674360).
+- 
+
 ### [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/pdf/2404.19737)
 - Instead of predicting one next token, predict multiple 
 - No extra train time or memory overhead. They have evidecne to show that there was at least a 15% improvmenet on average when training models (up to 13B parameters) with this method.  
@@ -887,4 +892,10 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 # [FrontierMath](https://epoch.ai/frontiermath)
 - Benchmark to test math capbabilities of models
 - They max at around 2%
+
+## [Chain-of-Thought Reasoning without Prompting](https://arxiv.org/pdf/2402.10200)
+Don't do greedy decoding, use top-k tokens and you will notice COT like reasoning. You dod this at the first decoding step and keep the rest of the process greedy. 
+  
+## [Modded-NanoGPT](https://github.com/KellerJordan/modded-nanogpt/tree/master?tab=readme-ov-file)
+Has done various changes to nanogpt to speed up the training time 9x. The changes are also [documented](https://github.com/KellerJordan/modded-nanogpt/tree/master?tab=readme-ov-file#world-record-history).
 
