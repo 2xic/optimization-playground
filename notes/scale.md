@@ -34,3 +34,6 @@ How does scaling laws affect transfer learning?
 - On smaller datasets pre-training is more compute efficient.
 - They created a unified scaling law for pre-training that looks a lot similar to the existing onces.
 - **Conclusion**: scaling laws also existing for pre-training.
+
+## [DEEP LEARNING SCALING IS PREDICTABLE, EMPIRICALLY](https://arxiv.org/pdf/1712.00409)
+The first paper (?) to notice power laws with model/data/computation scales.

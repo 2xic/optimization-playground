@@ -98,9 +98,10 @@ class GptTransformerModel(nn.Module):
     def embeddings(self, X):
         with torch.no_grad():
             if torch.is_tensor(X):
-                values = torch.zeros((1, 1024))
-                for i in range(0, X.shape[0], 1024):
-                    current_x = X[i:i+1024]
+                size = X.shape[0]
+                values = torch.zeros((1, size))
+                for i in range(0, X.shape[0], size):
+                    current_x = X[i:i+size]
                     # NOTE: Make sure we have one dimension at least
                     current_x = current_x.reshape((1, -1))
                     sum_tensor = ((self.embedding(current_x) + self.pos_encoder(current_x)))
@@ -113,7 +114,7 @@ class GptTransformerModel(nn.Module):
                         sum_tensor = sum_tensor.sum(dim=0)
                     values += sum_tensor
                 # Flatten the tensor as that makes sklearn happy
-                return (values / X.shape[0]).reshape((1024))
+                return (values / X.shape[0]).reshape((size))
             else:
                 values = torch.zeros((1, self.config.embedding_dim))
                 for x in X:

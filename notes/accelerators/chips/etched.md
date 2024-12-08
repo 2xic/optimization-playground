@@ -14,4 +14,8 @@ World first transform ASIC, beats the best existing GPUs in terms of token per s
 
 ## [Horace He tweet](https://x.com/cHHillee/status/1805696613480022238)
 - TLDR, they posted a misleading blogpost
+
+# [tinygrad / George Hotz](https://x.com/__tinygrad__/status/1854755455601692905)
+- Makes no sense, H100 ~ asic.
+- https://hc2023.hotchips.org/assets/program/conference/day2/Keynote%202/Keynote-NVIDIA_Hardware-for-Deep-Learning.pdf
 - 

@@ -899,3 +899,25 @@ Don't do greedy decoding, use top-k tokens and you will notice COT like reasonin
 ## [Modded-NanoGPT](https://github.com/KellerJordan/modded-nanogpt/tree/master?tab=readme-ov-file)
 Has done various changes to nanogpt to speed up the training time 9x. The changes are also [documented](https://github.com/KellerJordan/modded-nanogpt/tree/master?tab=readme-ov-file#world-record-history).
 
+## [LANGUAGE MODELS ARE HIDDEN REASONERS: UNLOCKING LATENT REASONING CAPABILITIES VIA SELF-REWARDING](https://arxiv.org/pdf/2411.04282)
+You get a good overview of it on [page2](https://arxiv.org/pdf/2411.04282#page=2). Generate some rationals, and use the internal model to get a sense of the likleyhood of the answer after seeing the input question and the rationals. Then update based on the actual ground truht.
+
+It's using a [policiy gradient](https://arxiv.org/pdf/2411.04282#page=5) to have the ML model improve the rationals it generates.
+
+## [AMORTIZING INTRACTABLE INFERENCE IN LARGE LANGUAGE MODELS](https://arxiv.org/pdf/2310.04363)
+[Official implementation](https://github.com/GFNOrg/gfn-lm-tuning/tree/main)
+
+- [GFlowNet](https://arxiv.org/pdf/2111.09266) as a fine tuned large language model.
+- [Random number eval](https://arxiv.org/pdf/2310.04363#page=3), you can clearly see the GlowNet is beating the competion.
+
+## [Marco-o1: Towards Open Reasoning Models for Open-Ended Solutions](https://arxiv.org/pdf/2411.14405)
+Using monte carlo as part of the reasoning steps for the LLM.
+
+## [o1-pro]
+[Announcement](https://openai.com/index/introducing-chatgpt-pro/)
+
+- Improved version of O1.
+- [tweet](https://x.com/deedydas/status/1865759180419981655) and [tweet](https://x.com/goodside/status/1865629150104404150)
+- [Hackernews](https://news.ycombinator.com/item?id=42330732).
+
+

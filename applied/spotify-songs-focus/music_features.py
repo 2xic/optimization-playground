@@ -1,6 +1,4 @@
 import librosa
-import numpy as np
-import audioread
 
 def load_audio(file_path, sr=None):
     audio, sample_rate = librosa.load(file_path, sr=sr,)

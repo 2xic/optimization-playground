@@ -1,6 +1,7 @@
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.cluster import KMeans, BisectingKMeans
 from sklearn import svm
 import matplotlib.pyplot as plt
 import os
@@ -24,27 +25,9 @@ def evaluation():
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
-        "big_gpt": [
-            Wrapper(),
-        ],
         "BM25": [
             BM25(),
         ],
-#        "torch_next_token_bigger": [
-#            EmbeddingWrapperBigger(),
-#            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
-#            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
-#        ],
-#        "torch_contrastive": [
-#            ContrastiveEmbeddingWrapper(),
-#        ],
-#        "untrained reference": [
-#            EmbeddingWrapper(trained=False),
-#        ],
-#        "torch_next_token": [
-#            EmbeddingWrapper(),
-#            EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
-#        ],
         "mixedbread-ai":[
             HuggingFaceWrapper(
                 "mixedbread-ai/mxbai-embed-large-v1"
@@ -67,6 +50,29 @@ def evaluation():
             ClaudeWrapper(),
         ],
     }
+    # TODO: move to other dict if you want to use
+    if False:
+        _disabled = {
+            "big_gpt": [
+                Wrapper(),
+            ],
+
+            "torch_next_token_bigger": [
+            EmbeddingWrapperBigger(),
+            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
+            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
+        ],
+        "torch_contrastive": [
+            ContrastiveEmbeddingWrapper(),
+        ],
+        "untrained reference": [
+            EmbeddingWrapper(trained=False),
+        ],
+        "torch_next_token": [
+            EmbeddingWrapper(),
+            EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
+        ],
+    }
     results = {}
     for base_config_name in model_pipeline_configs:
         best_local_config_score = 0
@@ -84,6 +90,8 @@ def evaluation():
                 RandomForestRegressor(max_depth=4, random_state=0),
                 svm.SVR(),
                 XGBRegressor(),
+                KMeans(n_clusters=2),
+                BisectingKMeans(n_clusters=2),
             ]
             for model in models:
                 config_name =  f"{model.__class__.__name__} + {base_config_name}"

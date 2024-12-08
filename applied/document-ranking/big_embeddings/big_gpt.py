@@ -166,6 +166,9 @@ def forward_dataloader(bpe: BPE, zmq: ZmqDataloader, batch: int):
     assert X.shape[0] > 0
     return raw_dataloader
 
+def get_model_bpe():
+    return bpe, get_model()
+
 def get_model():
     embedding_dim = 128
     config = Config(

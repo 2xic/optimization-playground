@@ -1,4 +1,4 @@
-from .big_gpt import get_model, get_document_dataset, SEQUENCE_LENGTH
+from .big_gpt import get_model_bpe, get_document_dataset, SEQUENCE_LENGTH
 from typing import List
 import os
 import glob
@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 class Wrapper:
     def __init__(self) -> None:
-        self.bpe, self.model = get_model()
+        self.bpe, self.model = get_model_bpe()
         self.load()
     
     def load(self):
