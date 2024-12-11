@@ -13,7 +13,7 @@ Somewhat inspired from the last section "A Summary of Popular Positions" by [Xan
 - [François Chollet](https://twitter.com/fchollet/status/1639692810659188737)
   - [Another good thread](https://x.com/fchollet/status/1598938868606464001)
 - [Jeremy Howard](https://x.com/jeremyphoward/status/1807162701380223070)
-  
+  - https://x.com/jeremyphoward/status/1866583858298384454
 
 # World view for LLMs
 

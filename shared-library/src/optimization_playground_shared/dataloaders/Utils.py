@@ -6,11 +6,10 @@ TODO: not good implementation, improve it.
 
 Also what about when training on multiple GPUs - how to nicely spilt model across devices also ? 
 """
-def find_batch_size(trainer: TrainingLoopAccumulate, original_dataloader: DataLoader, device):
+def find_batch_size(trainer: TrainingLoopAccumulate, original_dataloader: DataLoader, device, max_size=128):
     previous_batch_size = original_dataloader.batch_size
-    n = 2
     dataloader = None
-    while n < 1_00:
+    while previous_batch_size < max_size:
         new_batch_size = previous_batch_size * 2
         print("new_batch_size ", new_batch_size)
         try:

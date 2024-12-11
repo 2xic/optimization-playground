@@ -79,10 +79,11 @@ class OpenAiCompletion:
         }
 
     def get_summary(self, text: str):
-        # first summarize independent
+        # First summarize all the batches
         text = self._get_summary(text)
-        # then summarize all
-        return self._get_summary(text)
+        # Then fix all the combined one to one summarization
+        text = self._get_summary(text)
+        return text
 
     def get_dialogue(self, text: str):
         batches = get_text_batches(text, max_tokens=self.tokens_length[self.model])
@@ -152,9 +153,9 @@ class OpenAiCompletion:
         )
         error = response.get("error", None)
         if not error is None:
-            print(error)
+            print("error ", error)
             return error
-        print(response)
+        # print(response)
         return response["choices"][0]["message"]["content"]
 
     def name(self):

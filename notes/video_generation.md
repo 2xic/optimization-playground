@@ -27,3 +27,9 @@ The authors also had this [talk](https://www.youtube.com/watch?v=U3J6R9gfUhU) at
 1. Getting video and text pair is hard, didn't think about that before, but I guess that is true.
 2. [U-net and DIT are the main players](https://lilianweng.github.io/posts/2021-07-11-diffusion-models/#model-architecture)
 3. [Training-free adaptation](https://lilianweng.github.io/posts/2024-04-12-diffusion-video/#training-free-adaptation) was something knew that I was unaware of, but very cool. It references this [paper](https://arxiv.org/pdf/2303.13439)
+
+## [Sora Release](https://openai.com/index/sora-system-card/)
+- [Sora is here](https://openai.com/index/sora-is-here/)
+- [Sora System Card](https://openai.com/index/sora-system-card/)
+
+Nothing juicy info though.

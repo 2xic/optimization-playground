@@ -6,7 +6,6 @@ from optimization_playground_shared.dataloaders.RawTensorToDataloader import get
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
 from optimization_playground_shared.dataloaders.data_portal.Client import ZmqDataloader
-from pre_generator import get_cache_file
 from optimization_playground_shared.utils.General import save_model_atomic
 from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
 import optimization_playground_shared
