@@ -9,6 +9,7 @@ from typing import List
 from results import Results, Input
 from utils import rollout_model_binary
 from best_model import BestModel
+from dataset_creator_list.embedding_backend import EmbeddingBackend
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -58,12 +59,13 @@ class Model(nn.Module):
 
 if __name__ == "__main__":
     batch_size = 32
-    model = Model(embeddings_size=1536)
+    embedding_backend = EmbeddingBackend()
+    model = Model(embeddings_size=embedding_backend.embedding_size())
     optimizer = torch.optim.Adam(model.parameters())
-    train_dataset = DocumentRankDataset(train=True, dataset_format="binary")
+    train_dataset = DocumentRankDataset(train=True, embedding_backend=embedding_backend.backend, dataset_format="binary")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    test_dataset = DocumentRankDataset(train=False, dataset_format="binary")
+    test_dataset = DocumentRankDataset(train=False, embedding_backend=embedding_backend.backend, dataset_format="binary")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     best_model = BestModel()

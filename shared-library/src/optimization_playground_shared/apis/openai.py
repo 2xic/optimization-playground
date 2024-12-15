@@ -131,7 +131,7 @@ class OpenAiCompletion:
             messages = [
                 {
                     "role": "system",
-                    "content": f"You are a helpful assistant that summarizes text. This is chuck {index} / {length}."
+                    "content": f"You are a helpful assistant that summarizes text. This is chuck {index} / {length}. Please make it as informative as possible."
                 },
                 {
                     "role": "user",

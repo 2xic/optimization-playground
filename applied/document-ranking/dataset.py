@@ -14,8 +14,8 @@ else:
 
 def get_dataset(force=False):
     all_results = None
-    if os.path.isfile("cache.json") and not force:
-        all_results = json.load(open("cache.json"))
+    if os.path.isfile("training_data.json") and not force:
+        all_results = json.load(open("training_data.json"))
     else:
         all_results = []
         limit = 100
@@ -61,7 +61,7 @@ def get_dataset(force=False):
         seen[text] = True
         if len(text.strip()) > 0:
             X.append(text)
-            y.append(i["is_good"])
+            y.append(i["is_good_content"])
     return X, y
 
 if __name__ == "__main__":

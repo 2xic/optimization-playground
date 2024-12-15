@@ -37,7 +37,7 @@ class TrainingLoop:
         has_nan_loss = False
 
         training_loop = self.iterator_loop(dataloader, train)
-        print(self.loss)
+#        print(self.loss)
         for (X, y) in training_loop:
             if callback is not None:
                 X, y = callback(X, y)

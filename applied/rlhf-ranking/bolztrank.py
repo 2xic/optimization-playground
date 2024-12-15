@@ -4,7 +4,6 @@ https://netman.aiops.org/~peidan/ANM2021/2.MachineLearningBasics/LectureCoverage
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
@@ -15,6 +14,7 @@ from typing import List
 import torch
 from utils import rollout_model_binary
 from best_model import BestModel
+from dataset_creator_list.embedding_backend import EmbeddingBackend
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -62,9 +62,10 @@ class Model(nn.Module):
 
 if __name__ == "__main__":
     batch_size = 256
-    model = Model(embeddings_size=1536)
+    embedding_backend = EmbeddingBackend()
+    model = Model(embeddings_size=embedding_backend.embedding_size())
     optimizer = torch.optim.Adam(model.parameters())
-    train_dataset = DocumentRankDataset(train=True, dataset_format="binary")
+    train_dataset = DocumentRankDataset(train=True, embedding_backend=embedding_backend.backend, dataset_format="binary")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_dataset = DocumentRankDataset(train=False, dataset_format="binary")
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)

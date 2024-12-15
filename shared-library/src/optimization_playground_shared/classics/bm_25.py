@@ -2,10 +2,9 @@ import math
 from collections import Counter
 import numpy as np
 from sklearn.feature_extraction.text import CountVectorizer
-from tqdm import tqdm
 
 class BM25:
-    def __init__(self, k1=1.5, b=0.75):
+    def __init__(self, k1=1.5, b=0.75, max_features=-1):
         self.k1 = k1
         self.b = b
         self.avg_doc_len = 0
@@ -13,12 +12,13 @@ class BM25:
         self.idf = {}
         self.doc_lens = []
         self.vocab = set()
+        self.bm_25_features = {}
+        self.max_features = max_features
 
     def _normalizer_tokens(self, document):
         vectorizer = CountVectorizer()
         _ = vectorizer.fit_transform([document])
         return vectorizer.get_feature_names_out()
-            
         
     def train(self, corpus):
         return self.fit(corpus)
@@ -43,9 +43,9 @@ class BM25:
         for doc_freq in self.doc_freqs:
             for term in doc_freq:
                 df[term] += 1
-        
         for term, freq in df.items():
             self.idf[term] = math.log((num_docs - freq + 0.5) / (freq + 0.5) + 1)
+        self.bm_25_features = self._limit_features()
         return self.transforms(raw_corpus)
 
     def score_term(self, term, term_freq, doc_len):
@@ -65,10 +65,21 @@ class BM25:
         document = self._normalizer_tokens(document)
         doc_freq = Counter(document)
         doc_len = len(document)
-        vector = np.zeros((len(self.vocab)))
-        for index, term in enumerate(self.vocab):
+        vector = np.zeros((len(self.bm_25_features)))
+        for index, term in enumerate(self.bm_25_features.keys()):
             vector[index] = self.score_term(term, doc_freq[term], doc_len)
         return vector
+    
+    def _limit_features(self):
+        scores = {}
+        for _, term in enumerate(self.vocab):
+            scores[term] = self.idf.get(term, 0)
+        return {
+            key: value for key, value in sorted(scores.items(), key=lambda x: x[1], reverse=True)[:self.max_features]
+        }
+
+    def get_embedding(self, x):
+        return self.transforms(x)
 
     def transform_debug(self, document):
         doc_freq = Counter(document)

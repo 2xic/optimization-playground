@@ -10,9 +10,9 @@ from bolztrank import Model as BoltzrankModel
 from flask import Flask, request, jsonify
 from results import Input, Results
 from dotenv import load_dotenv
+from dataset_creator_list.embedding_backend import EmbeddingBackend
 load_dotenv()
 
-from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 import torch
 from abc import abstractmethod
 from typing import List
@@ -25,12 +25,12 @@ class RankingModel:
  
 class SemiSupervisedMachine:
     def __init__(self) -> None:
-        self.embeddings = OpenAiEmbeddings()
+        self.embeddings = EmbeddingBackend()
         self.models: List[RankingModel] = [
-            RanknetModel(embeddings_size=1536).load().eval(),
-            ListnetModel(embeddings_size=1536).load().eval(),
-            ListnetPlainModel(embeddings_size=1536).load().eval(),
-            BoltzrankModel(embeddings_size=1536).load().eval()
+            RanknetModel(embeddings_size=self.embeddings.embedding_size()).load().eval(),
+            ListnetModel(embeddings_size=self.embeddings.embedding_size()).load().eval(),
+            ListnetPlainModel(embeddings_size=self.embeddings.embedding_size()).load().eval(),
+            BoltzrankModel(embeddings_size=self.embeddings.embedding_size()).load().eval()
         ]
     
     def rank_documents(self, items):

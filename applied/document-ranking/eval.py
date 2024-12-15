@@ -7,7 +7,8 @@ import matplotlib.pyplot as plt
 import os
 from dataset import get_dataset
 from pipeline import Pipeline
-from embeddings import TfIdfWrapper, OpenAiEmbeddingsWrapper, HuggingFaceWrapper, ClaudeWrapper
+from embeddings import OpenAiEmbeddingsWrapper, HuggingFaceWrapper, ClaudeWrapper
+from optimization_playground_shared.classics.tf_idf_wrapper import TfIdfWrapper
 from optimization_playground_shared.classics.bm_25 import BM25
 from torch_gpt_like_model import EmbeddingWrapper
 from torch_contrastive_model import ContrastiveEmbeddingWrapper
@@ -15,6 +16,7 @@ from torch_gpt_like_model_bigger import EmbeddingWrapperBigger
 from xgboost import XGBRegressor
 from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_classes
 from big_embeddings.Wrapper import Wrapper
+from torch_score_models.linear import ModelInterface
 
 def evaluation():
     X, y = get_dataset()
@@ -28,14 +30,6 @@ def evaluation():
         "BM25": [
             BM25(),
         ],
-        "mixedbread-ai":[
-            HuggingFaceWrapper(
-                "mixedbread-ai/mxbai-embed-large-v1"
-            ),
-        ],
-        "intfloat":[
-            HuggingFaceWrapper("intfloat/multilingual-e5-large"),
-        ],
         "tf_idf": [
             TfIdfWrapper(max_features=75),
             TfIdfWrapper(max_features=100),
@@ -46,18 +40,26 @@ def evaluation():
             OpenAiEmbeddingsWrapper("text-embedding-3-large"),
             OpenAiEmbeddingsWrapper("text-embedding-3-small"),
         ],
-        "voyage": [
-            ClaudeWrapper(),
-        ],
     }
     # TODO: move to other dict if you want to use
     if False:
         _disabled = {
-            "big_gpt": [
-                Wrapper(),
-            ],
+        "voyage": [
+            ClaudeWrapper(),
+        ],
+        "mixedbread-ai":[
+            HuggingFaceWrapper(
+                "mixedbread-ai/mxbai-embed-large-v1"
+            ),
+        ],
+        "intfloat":[
+            HuggingFaceWrapper("intfloat/multilingual-e5-large"),
+        ],
+        "big_gpt": [
+            Wrapper(),
+        ],
 
-            "torch_next_token_bigger": [
+        "torch_next_token_bigger": [
             EmbeddingWrapperBigger(),
             EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
             EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
@@ -85,6 +87,7 @@ def evaluation():
             )
             # TODO: Add more fancy models also
             models = [
+                ModelInterface(),
                 RandomForestRegressor(max_depth=2, random_state=0),
                 RandomForestRegressor(max_depth=8, random_state=0),
                 RandomForestRegressor(max_depth=4, random_state=0),

@@ -1,4 +1,3 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
 from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 from optimization_playground_shared.apis.cache_embeddings import CacheEmbeddings
 from optimization_playground_shared.apis.huggingface import HuggingfaceApi
@@ -9,19 +8,6 @@ import numpy as np
 from tqdm import tqdm
 load_dotenv()
 import time
-
-class TfIdfWrapper:
-    def __init__(self, **kwargs) -> None:
-        self.encoder = TfidfVectorizer(**kwargs)
-        self.is_trained = False
-
-    def train(self, x):
-        assert self.is_trained == False
-        self.is_trained = True
-        return self.encoder.fit_transform(x)
-    
-    def transforms(self, x):
-        return self.encoder.transform(x)
 
 class OpenAiEmbeddingsWrapper:
     def __init__(self, model) -> None:

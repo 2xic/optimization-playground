@@ -4,7 +4,6 @@ https://embracingtherandom.com/machine-learning/tensorflow/ranking/deep-learning
 """
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from dataset_creator_list.dataloader import DocumentRankDataset
 from torch.utils.data import DataLoader
 from optimization_playground_shared.plot.Plot import Plot, Figure
@@ -12,6 +11,7 @@ from tqdm import tqdm
 from results import Input, Results
 from typing import List
 from best_model import BestModel
+from dataset_creator_list.embedding_backend import EmbeddingBackend
 
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
@@ -108,10 +108,11 @@ class Model(nn.Module):
     
 if __name__ == "__main__":
     batch_size = 256
-    model = Model(embeddings_size=1536)
+    embedding_backend = EmbeddingBackend()
+    model = Model(embeddings_size=embedding_backend.embedding_size())
     optimizer = torch.optim.Adam(model.parameters())
     train_dataset = DocumentRankDataset(train=True)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, embedding_backend=embedding_backend.backend, batch_size=batch_size, shuffle=True)
 
     test_dataset = DocumentRankDataset(train=False)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)

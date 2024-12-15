@@ -10,12 +10,12 @@ import itertools
 import random
 
 class DocumentRankDataset(Dataset):
-    def __init__(self, train, dataset_format="softmax", row_size=-1, create_synthetic_rows=True):
+    def __init__(self, train, embedding_backend="openai", dataset_format="softmax", row_size=-1, create_synthetic_rows=True):
         assert dataset_format in ["softmax", "binary"]
         self.create_synthetic_rows = create_synthetic_rows
         path = os.path.join(
             os.path.dirname(__file__),
-            "dataset.json"
+            f"dataset_{embedding_backend}.json"
         )
         with open(path, "r") as file:
             self.raw_dataset = json.load(file)
@@ -32,9 +32,17 @@ class DocumentRankDataset(Dataset):
         # Update the dataset and create it with permutations
         self.dataset = []
         self.labels = []
+        self.embedding_size = -1
         for row in self.raw_dataset:
             embeddings = row["embeddings"]
+            print(row["scores"])
             scores = list(map(float, row["scores"]))
+
+            if self.embedding_size == -1:
+                self.embedding_size = len(embeddings[0])
+            else:
+                assert self.embedding_size == len(embeddings[0]), f"{self.embedding_size} != {len(embeddings)}"
+
             if row_size == -1:
                 self._add_dataset(embeddings, scores)
                 row_size = len(embeddings)
