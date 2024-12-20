@@ -4,7 +4,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 if __name__ == "__main__":
     # Example usage
     corpus = [
-        "this is a sample and some bagels",
+        "this this is a sample and some bagels",
         "this is another example example",
         "more text data",
         "no more today of those bagels",
@@ -23,9 +23,16 @@ if __name__ == "__main__":
     print("Encoded Corpus:")
     for i, doc_vector in enumerate(encoded_corpus):
         print(f"Document {i} BM25 Vector:")
+        #print(json.dumps(doc_vector, indent=2))
         print(doc_vector)
 
     print("\nNew Document BM25 Vector:")
     print(bm25.transforms(new_document))
     print("\nNew Document tf-idf Vector:")
-    print(TfidfVectorizer().fit(corpus).transforms([new_document]).todense())
+    tf_idf = TfidfVectorizer()
+    tf_idf.fit(corpus)
+    print(tf_idf.transform([new_document]).todense())
+    print("Limiting bm25 vocab features")
+    bm25.max_features = 2
+    bm25.fit(list(corpus))
+    print(bm25.bm_25_features)

@@ -6,7 +6,7 @@ from optimization_playground_shared.classics.bm_25 import BM25
 from optimization_playground_shared.classics.tf_idf_wrapper import TfIdfWrapper
 
 class EmbeddingBackend:
-    def __init__(self, backend="openai"):
+    def __init__(self, backend="bm25"):
         self.backend = backend
         if backend == "openai":
             # Backend 
