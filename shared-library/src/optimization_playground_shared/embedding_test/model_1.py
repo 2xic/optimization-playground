@@ -3,84 +3,121 @@ import torch.nn as nn
 import torch.optim as optim
 from ..apis.url_to_text import get_url_documents
 from sklearn.feature_extraction.text import CountVectorizer
-import random
+from ..nlp.DocumentEncoderSequence import SimpleVocab, get_document_dataset
+import os
 
 class SimpleEmbeddingModel(nn.Module):
-    def __init__(self, vocab_size, embed_dim, hidden_dim):
+    def __init__(self, vocab_size, embed_dim):
         super().__init__()
+        self.vocab_size = vocab_size
+        self.embed_dim = embed_dim
         self.embedding = nn.Embedding(vocab_size, embed_dim)
-        self.rnn = nn.GRU(embed_dim, hidden_dim, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, vocab_size)
+        self.fc = nn.Sequential(*[
+             nn.Linear(embed_dim, 512),
+             nn.ReLU(),
+             nn.Linear(512, 1024),
+             nn.ReLU(),
+             nn.Linear(1024, 512),
+#             nn.ReLU(),
+        ])
 
     def forward(self, x):
         embedded = self.embedding(x)
-        output, _ = self.rnn(embedded)
-        return self.fc(output)
+        embedded = embedded.mean(dim=1)
+        return self.fc(embedded)
 
-class DocumentEncoder:
+class EmbeddingModelOne:
     def __init__(self):
-        self.vocab = {}
-        self.vocab_size = -1
+        self.document_encoder = SimpleVocab()
+        self.model = None
 
-    def fit(self, documents):
-        tokens = sum([
-            self.get_tokens(docs)
-            for docs in documents
-        ], [])
-        self.vocab = {char: idx for idx, char in enumerate(list(set(tokens)))}
-        self.vocab_size = len(self.vocab) + 1
+    def loss_contrastive(self, logits):
+        labels = torch.arange(logits.shape[0])
+        l_row = torch.nn.CrossEntropyLoss()(logits, labels)
+
+        return l_row
+
+    def train(self, docs):
+        documents_encoder = self.document_encoder.fit(docs)
+        self.document_encoder.lock()
+
+        embed_dim = 64
+        lr = 0.001
+        num_epochs = 512
+        batch_size = 512
+
+        self.model = SimpleEmbeddingModel(documents_encoder.size, embed_dim)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+
+        inputs = get_document_dataset(documents_encoder, docs, SEQUENCE_LENGTH=512)
+
+        for epoch in range(num_epochs):
+            # batch size = 32
+            for i in range(0, inputs.shape[0], batch_size):
+                self.model.train()
+                outputs = self.model(inputs[i:i+batch_size])
+                loss = self.loss_contrastive(outputs)
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+            print(f"Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}")
+
+        print("Training completed!")
         return self
+
+    def get_embedding(self, docs):
+        embedings = []
+        for text in docs:
+            inputs = get_document_dataset(self.document_encoder, [text], SEQUENCE_LENGTH=512)
+            embedding = torch.zeros((512))
+            batch_size = 512
+            self.model.eval()
+            with torch.no_grad():
+                for i in range(0, inputs.shape[0], batch_size):
+                    output = self.model(inputs[i:i+batch_size]).mean(dim=0)
+                    embedding += output
+            embedings.append(embedding / inputs.shape[0])
+        return embedings
+
+    def save(self):
+        path = os.path.join(os.path.dirname(
+            __file__
+        ), ".model")
+        os.makedirs(path, exist_ok=True)
+        torch.save({
+            "state_dict": self.model.state_dict(),
+            "vocab_size": self.model.vocab_size,
+            "embed_dim": self.model.embed_dim,
+        }, os.path.join(
+            path,
+            "model.pth"
+        ))
+        self.document_encoder.save(path)
     
-    def transformer(self, text):
-        tokens =  self.get_tokens(text)
-        batch = 512
-        offset = random.randint(0, len(tokens) - batch)
-        return torch.tensor([
-            self.vocab.get(token, len(self.vocab)) for token in tokens[offset:offset+batch]
-        ], dtype=torch.long)
-
-    def get_tokens(self, document):
-        return document.split(" ")
-
-def get_data_from_documents(documents: DocumentEncoder, docs):
-    sequences = [documents.transformer(doc) for doc in docs]
-    padded_data = nn.utils.rnn.pad_sequence(sequences, batch_first=True)
-  #  print(padded_data.shape)
-    inputs = padded_data[:, :-1]
-    targets = padded_data[:, 1:]
-    return inputs, targets
-
-def train_model(documents_encoder: DocumentEncoder, docs):
-    documents_encoder = documents_encoder.fit(docs)
-
-    print(len(docs))
-    embed_dim = 64
-    hidden_dim = 128
-    lr = 0.001
-    num_epochs = 32
-
-    model = SimpleEmbeddingModel(documents_encoder.vocab_size, embed_dim, hidden_dim)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-
-    for epoch in range(num_epochs):
-        step = 2
-        for i in range(0, len(docs)- step, step):
-            model.train()
-            inputs, targets = get_data_from_documents(documents_encoder, docs[i:(i+step)])
-            outputs = model(inputs)
-            loss = criterion(outputs.reshape((-1, documents_encoder.vocab_size)), targets.reshape(-1))
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-        print(f"Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}")
-
-    print("Training completed!")
+    def load(self):
+        path = os.path.join(os.path.dirname(
+            __file__
+        ), ".model")
+        os.makedirs(path, exist_ok=True)
+        model_data = torch.load(
+            os.path.join(
+                path,
+                "model.pth"
+            )
+        )
+        self.model = SimpleEmbeddingModel(
+            model_data["vocab_size"],
+            model_data["embed_dim"]
+        )
+        self.model.load_state_dict(model_data["state_dict"])
+        self.model.eval()
+        self.document_encoder = self.document_encoder.load(path)
 
 if __name__ == "__main__":
-    document_encoder = DocumentEncoder()
-    train_model(
-        document_encoder,
+    model = EmbeddingModelOne().train(
         get_url_documents()
     )
+    model.save()
+    model.load()
+    print(model.encode_document("hello, this is some text"))

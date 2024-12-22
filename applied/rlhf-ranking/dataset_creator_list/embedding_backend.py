@@ -4,9 +4,10 @@ So it's easier test different backends
 from optimization_playground_shared.apis.openai import OpenAiEmbeddings
 from optimization_playground_shared.classics.bm_25 import BM25
 from optimization_playground_shared.classics.tf_idf_wrapper import TfIdfWrapper
+from optimization_playground_shared.embedding_test.model_1 import EmbeddingModelOne
 
 class EmbeddingBackend:
-    def __init__(self, backend="bm25"):
+    def __init__(self, backend="model_one"):
         self.backend = backend
         if backend == "openai":
             # Backend 
@@ -28,6 +29,9 @@ class EmbeddingBackend:
             embedding_size = 512
             self.transformer = BM25(max_features=embedding_size)
             self._embedding_size = embedding_size
+        elif backend == "model_one":
+            self.transformer = EmbeddingModelOne()
+            self._embedding_size = 512
         else:
             raise Exception(f"Unknown backend {backend}")
 

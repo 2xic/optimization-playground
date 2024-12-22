@@ -1,6 +1,8 @@
 import torch
 import string
 from typing import List
+import pickle
+import os
 
 def splitter(sentence):
     if type(sentence) == bytes:
@@ -64,6 +66,11 @@ class SimpleVocab:
         for i in tokens:
             vocab.add(i)
         return SimpleVocab(vocab)
+    
+    def fit(self, X):
+        for i in X:
+            _ = self.encode(i)
+        return self
 
     def encode(self, sentence) -> List:
         X = []
@@ -113,3 +120,11 @@ class SimpleVocab:
     @property
     def size(self):
         return len(self.vocab.index_vocab)
+
+    def save(self, path):
+        with open(os.path.join(path, "vocab.pkl"), "wb") as f:
+            pickle.dump(self, f)
+
+    def load(self, path):
+        with open(os.path.join(path, "vocab.pkl"), "rb") as f:
+            return pickle.load(f)

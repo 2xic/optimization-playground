@@ -2,12 +2,11 @@
 Let's use OpenAi for embeddings backend.
 """
 import glob
-import requests
 from dotenv import load_dotenv
 import os
 import json
 from tqdm import tqdm
-from optimization_playground_shared.apis.url_to_text import get_text
+from optimization_playground_shared.apis.url_to_text import get_text, get_url_documents
 
 load_dotenv()
 
@@ -43,7 +42,10 @@ def build():
             print(len(scores))
     # Train model
     if hasattr(model.transformer, "train"):
-        model.transformer.train(flatten_text)
+        # load on the input documents + some extra for good measure.
+        extra_documents = get_url_documents()
+        extra_documents += flatten_text
+        model.transformer.train(extra_documents)
 
     assert len(scores) > 0
     assert len(text) == len(scores)
