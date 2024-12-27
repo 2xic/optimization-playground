@@ -34,6 +34,11 @@ class EmbeddingBackend:
             self._embedding_size = 512
         else:
             raise Exception(f"Unknown backend {backend}")
+        
+    def load(self):
+        if isinstance(self.transformer, EmbeddingModelOne):
+            self.transformer.load()        
+        return self
 
     def embedding_size(self):
         return self._embedding_size

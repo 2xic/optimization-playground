@@ -14,7 +14,6 @@ from dataset_creator_list.embedding_backend import EmbeddingBackend
 class Model(nn.Module):
     def __init__(self, embeddings_size) -> None:
         super().__init__()
-
         self.base_layers = nn.Sequential(*[
             nn.Linear(embeddings_size, 2048),
             nn.ReLU(),
@@ -53,15 +52,17 @@ class Model(nn.Module):
         }, self.model_file)
     
     def load(self):
-        state = torch.load(self.model_file)
+        state = torch.load(self.model_file, weights_only=True)
         self.load_state_dict(state["model_state"])
         return self
 
 if __name__ == "__main__":
     batch_size = 32
+    epochs = 1_000
+
     embedding_backend = EmbeddingBackend()
     model = Model(embeddings_size=embedding_backend.embedding_size())
-    optimizer = torch.optim.Adam(model.parameters())
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     train_dataset = DocumentRankDataset(train=True, embedding_backend=embedding_backend.backend, dataset_format="binary")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
@@ -73,7 +74,7 @@ if __name__ == "__main__":
     epoch_accuracy = []
     epoch_loss = []
     epoch_test_accuracy = []
-    iterator = tqdm(range(1_00))
+    iterator = tqdm(range(epochs))
     for _ in iterator:
         sum_accuracy = torch.tensor(0.0)
         sum_loss = torch.tensor(0.0)

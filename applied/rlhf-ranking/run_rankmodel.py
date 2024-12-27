@@ -1,9 +1,11 @@
 """
 Web interface for running a ranker model.
 """
+from dotenv import load_dotenv
+load_dotenv()
+
 from flask import Flask, request
 import os
-from dotenv import load_dotenv
 from ranknet import Model
 from semi_supervised_machine import Input
 import torch
@@ -12,13 +14,11 @@ from dataset_creator_list.embedding_backend import EmbeddingBackend
 results_dirname = "results"
 os.makedirs(results_dirname, exist_ok=True)
 
-load_dotenv()
-
 app = Flask(__name__)
 
-embeddings = EmbeddingBackend()
+embeddings = EmbeddingBackend().load()
 model = Model(
-    embeddings_size=1536,
+    embeddings_size=embeddings.embedding_size(),
 ).load()
 
 @app.route('/', methods=["POST"])

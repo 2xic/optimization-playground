@@ -102,7 +102,7 @@ class Model(nn.Module):
         }, self.model_file)
     
     def load(self):
-        state = torch.load(self.model_file)
+        state = torch.load(self.model_file, weights_only=True)
         self.load_state_dict(state["model_state"])
         return self
     

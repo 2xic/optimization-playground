@@ -26,6 +26,10 @@ class RankingModel:
 class SemiSupervisedMachine:
     def __init__(self) -> None:
         self.embeddings = EmbeddingBackend()
+        self.models = []
+
+    def load_model(self):
+        assert len(self.models) == 0
         self.models: List[RankingModel] = [
             RanknetModel(embeddings_size=self.embeddings.embedding_size()).load().eval(),
             ListnetModel(embeddings_size=self.embeddings.embedding_size()).load().eval(),
@@ -34,6 +38,7 @@ class SemiSupervisedMachine:
         ]
     
     def rank_documents(self, items):
+        assert len(self.models) > 0, "You need to load in the models first"
         documents = []
         is_raw_input = False
         for _, doc in enumerate(items):
@@ -90,4 +95,5 @@ def rank_documents():
     return jsonify(list(map(lambda x: x, results)))
 
 if __name__ == "__main__":
+    models.load_model()
     app.run(port=4232)

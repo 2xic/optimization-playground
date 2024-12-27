@@ -2,9 +2,31 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from ..apis.url_to_text import get_url_documents
-from sklearn.feature_extraction.text import CountVectorizer
 from ..nlp.DocumentEncoderSequence import SimpleVocab, get_document_dataset
 import os
+
+import torch
+import torch.nn.functional as F
+
+class SimpleContrastiveLoss(torch.nn.Module):
+    def __init__(self, temperature=0.1, epsilon=1e-6):
+        super(SimpleContrastiveLoss, self).__init__()
+        self.temperature = temperature
+        self.epsilon = epsilon
+
+    def forward(self, embeddings):
+        embeddings = F.normalize(embeddings, p=2, dim=1)
+        similarity_matrix = torch.matmul(embeddings, embeddings.T) / self.temperature
+        positives = torch.diagonal(similarity_matrix)
+
+        mask = torch.eye(similarity_matrix.size(0), device=similarity_matrix.device).bool()
+        negatives = similarity_matrix.masked_fill(mask, float('-inf'))
+        negatives = torch.logsumexp(negatives, dim=1)
+
+        # Todo: figure out why things turn negative
+        loss = (negatives -positives).abs()
+
+        return loss.mean()
 
 class SimpleEmbeddingModel(nn.Module):
     def __init__(self, vocab_size, embed_dim):
@@ -13,9 +35,11 @@ class SimpleEmbeddingModel(nn.Module):
         self.embed_dim = embed_dim
         self.embedding = nn.Embedding(vocab_size, embed_dim)
         self.fc = nn.Sequential(*[
-             nn.Linear(embed_dim, 512),
+             nn.Linear(embed_dim, 1024),
              nn.ReLU(),
-             nn.Linear(512, 1024),
+             nn.Linear(1024, 2048),
+             nn.ReLU(),
+             nn.Linear(2048, 1024),
              nn.ReLU(),
              nn.Linear(1024, 512),
 #             nn.ReLU(),
@@ -32,9 +56,9 @@ class EmbeddingModelOne:
         self.model = None
 
     def loss_contrastive(self, logits):
+        # return SimpleContrastiveLoss().forward(logits)
         labels = torch.arange(logits.shape[0])
         l_row = torch.nn.CrossEntropyLoss()(logits, labels)
-
         return l_row
 
     def train(self, docs):

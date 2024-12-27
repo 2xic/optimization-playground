@@ -45,13 +45,15 @@ def get_cache(url):
     )
     return path
 
-def get_text(url):
+def get_text(url, cache_only=False):
     cache_path = get_cache(url)
     if os.path.isfile(cache_path):
         with open(cache_path, "r") as file:
             content = file.read()
             if len(content) > 0:
                 return content
+    if cache_only:
+        return None
     id = _get_id(url)
     text = _get_text(id)
     if text is None or len(text) < 100:
@@ -60,14 +62,17 @@ def get_text(url):
         file.write(text)
     return text
 
-def get_url_documents():
-    url = os.environ["url_to_text_host"] + f"/api/links/1/0"
-    items = requests.get(
-        url, 
-        cookies={
-            "credentials": os.environ["auth_header"]
-        }
-    ).json()
-    return [
-        get_text(i["url"]) for i in items
-    ]
+def get_url_documents(pages=5):
+    documents = []
+    for page in range(pages):
+        url = os.environ["url_to_text_host"] + f"/api/links/1/{page}"
+        items = requests.get(
+            url, 
+            cookies={
+                "credentials": os.environ["auth_header"]
+            }
+        ).json()
+        documents += [
+            get_text(i["url"]) for i in items
+        ]
+    return documents

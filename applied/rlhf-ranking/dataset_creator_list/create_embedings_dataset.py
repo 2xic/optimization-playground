@@ -28,7 +28,7 @@ def build():
                 #item_id = i["id"]
                 url = i["url"]
                 item_score = i.get("score", len(data) - index)
-                item_text = get_text(url)
+                item_text = get_text(url, cache_only=True)
                 if item_text is None:
                     break
                 batch_text.append(item_text)
@@ -43,7 +43,8 @@ def build():
     # Train model
     if hasattr(model.transformer, "train"):
         # load on the input documents + some extra for good measure.
-        extra_documents = get_url_documents()
+        # tbh. we maybe should do this for all cases ... 
+        extra_documents = get_url_documents(pages=10)
         extra_documents += flatten_text
         model.transformer.train(extra_documents)
 
