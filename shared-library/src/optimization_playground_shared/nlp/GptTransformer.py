@@ -90,38 +90,13 @@ class GptTransformerModel(nn.Module):
     def forward(self, x: Tensor):
         results = self.raw_forward(x)
         # (batch size, sequence size, vocab_size)
-        #print(results.shape)
         reshaped = results.view(-1, self.config.vocab_size)
-        #print(reshaped.shape)
         return reshaped
 
     def embeddings(self, X):
         with torch.no_grad():
-            if torch.is_tensor(X):
-                size = X.shape[0]
-                values = torch.zeros((1, size))
-                for i in range(0, X.shape[0], size):
-                    current_x = X[i:i+size]
-                    # NOTE: Make sure we have one dimension at least
-                    current_x = current_x.reshape((1, -1))
-                    sum_tensor = ((self.embedding(current_x) + self.pos_encoder(current_x)))
-                    if len(sum_tensor.shape) != 4:
-                        sum_tensor = sum_tensor.reshape((1, ) + sum_tensor.shape)
-                    sum_tensor = sum_tensor.sum(dim=2)
-                    if sum_tensor.shape[1] > 1:
-                        sum_tensor = sum_tensor.sum(dim=1)
-                    else:
-                        sum_tensor = sum_tensor.sum(dim=0)
-                    values += sum_tensor
-                # Flatten the tensor as that makes sklearn happy
-                return (values / X.shape[0]).reshape((size))
-            else:
-                values = torch.zeros((1, self.config.embedding_dim))
-                for x in X:
-                    x = x.reshape((1, ) + X.shape[1:])
-                    assert len(X.shape) == 2
-                    values += (self.embedding(x) + self.pos_encoder(x)).reshape(1, -1)
-                return values
+            values = (self.embedding(X) + self.pos_encoder(X))
+            return values
 
     def forward_argmax(self, x):
         prediction = self.forward(x)

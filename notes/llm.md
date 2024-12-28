@@ -828,6 +828,15 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 ### [chat.deepseek](https://chat.deepseek.com/)
 - Uses the deepseek model, intresting seeing the context window here vs. openai 4o.
 - Similiar to the [o1 scaling laws](https://x.com/nrehiew_/status/1859218213915001157?utm_source=pocket_saves). That said, it doesn't have [preform as well as o1](https://x.com/mrsiipa/status/1859218868490674360).
+
+### [DeepSeek-V3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/DeepSeek_V3.pdf)
+[Good tweet summary](https://x.com/amasad/status/1872369500672417932)
+
+[139 engineers vs the ~600+ at other labs](https://x.com/kevinsxu/status/1872492822529495251)
+
+- [One of the best compute optimal models on the market](https://api-docs.deepseek.com/news/news1226#still-the-best-value-in-the-market-)
+- They trained using FP8. They also implemented some new traning frameworks(`HAI-LLM`) and algorithms (`DualPipe`) to train more compute optimal.
+- Solves the needle in the haystack problem without any issues.
 - 
 
 ### [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/pdf/2404.19737)
@@ -920,4 +929,6 @@ Using monte carlo as part of the reasoning steps for the LLM.
 - [tweet](https://x.com/deedydas/status/1865759180419981655) and [tweet](https://x.com/goodside/status/1865629150104404150)
 - [Hackernews](https://news.ycombinator.com/item?id=42330732).
 
-
+## [Training Large Language Models to Reason in a Continuous Latent Space](https://arxiv.org/pdf/2412.06769)
+- Use the output of the last hidden state of the LLM as a representation of reasoning state.
+- Uses special tokens `<bot>` and `<eot>` to switch between lantent thought mode and langauge mode.

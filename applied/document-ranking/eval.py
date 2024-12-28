@@ -15,6 +15,7 @@ from torch_contrastive_model import ContrastiveEmbeddingWrapper
 from torch_gpt_like_model_bigger import EmbeddingWrapperBigger
 from xgboost import XGBRegressor
 from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_classes
+from optimization_playground_shared.embedding_test.model_1 import EmbeddingModelOne
 from big_embeddings.Wrapper import Wrapper
 from torch_score_models.linear import ModelInterface
 
@@ -27,6 +28,11 @@ def evaluation():
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
+        "EmbeddingModelOne": [
+            lambda : EmbeddingModelOne("MinimalCrossEntropyLoss"),
+            lambda : EmbeddingModelOne("SimpleContrastiveLoss"),
+            lambda : EmbeddingModelOne("NegativeSample"),
+        ],
         "BM25": [
             BM25(),
         ],
@@ -58,7 +64,6 @@ def evaluation():
         "big_gpt": [
             Wrapper(),
         ],
-
         "torch_next_token_bigger": [
             EmbeddingWrapperBigger(),
             EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),

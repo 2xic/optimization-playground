@@ -1,6 +1,7 @@
 from .SimpleVocab import SimpleVocab, splitter
 import torch
 from typing import List
+import random
 
 def get_document_words(text) -> List:
     # todo: create a good tokenizer, this does not really work for code tokens
@@ -48,3 +49,20 @@ def get_document_dataset(vocab: SimpleVocab, documents, SEQUENCE_LENGTH) -> tupl
 #    return X[indices], y[indices]
     return X, y
 
+
+def get_document_dataset_iter(vocab: SimpleVocab, documents, SEQUENCE_LENGTH):
+    assert type(documents) == list
+    for document in documents:
+        # -2 as we need the first token to be placed and the last token
+        entries_count = len(get_document_words(document)) - 2
+
+        X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
+        y = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
+        print(document)
+        X, y, _ = encode_document_text(vocab, document, X, y, 0, SEQUENCE_LENGTH)
+
+        print(X)
+
+        assert not torch.all(X == 0), "All zeros is bad"
+        assert not torch.all(y == 0), "All zeros is bad"
+        yield X, y

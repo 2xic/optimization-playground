@@ -12,7 +12,10 @@ class Pipeline:
         y_train_original = y_train_original[:max(1, int(len(y_train_original) * self.sample_size))]
         y_test_original = y_test_original[:max(1, int(len(y_test_original) * self.sample_size))]
 
-        X_train = pre_processor.train(X_train_original)
+        if (callable(pre_processor)):
+            pre_processor = pre_processor()
+
+        X_train = pre_processor.fit_transforms(X_train_original)
         X_test = pre_processor.transforms(X_test_original)
         y_train = y_train_original
         y_test = y_test_original
@@ -20,4 +23,3 @@ class Pipeline:
         return (
             X_train, X_test, y_train, y_test
         )
-    

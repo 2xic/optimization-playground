@@ -14,6 +14,9 @@ class OpenAiEmbeddingsWrapper:
         self.is_trained = False
         self.encoder = OpenAiEmbeddings(model)
 
+    def fit_transforms(self, x):
+        return self.transforms(x)
+
     def train(self, x):
         assert self.is_trained == False
         self.is_trained = True

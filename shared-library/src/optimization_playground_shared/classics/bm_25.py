@@ -25,6 +25,9 @@ class BM25:
             results[key] = transformed[0][value]
         return results    
 
+    def fit_transforms(self, corpus):
+        return self.fit(corpus)
+
     def train(self, corpus):
         return self.fit(corpus)
 

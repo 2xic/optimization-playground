@@ -1,6 +1,10 @@
 import os 
 import requests
 import hashlib
+import aiohttp
+from urllib.parse import urljoin
+import asyncio
+import json
 
 def _get_id(url):
     url = os.environ["url_to_text_host"] + f"url/id?url={url}"
@@ -72,7 +76,62 @@ def get_url_documents(pages=5):
                 "credentials": os.environ["auth_header"]
             }
         ).json()
-        documents += [
-            get_text(i["url"]) for i in items
-        ]
+        for i in items:
+            text = get_text(i["url"]) 
+            if text is None:
+                continue
+            documents.append(text)
     return documents
+
+"""
+async code.
+"""
+async def get_document_dataset():
+    host = os.environ["url_to_text_host"]
+    urls = [
+        urljoin(host, f"/api/dataset"),
+        urljoin(host, f"/api/reading_list"),
+    ]
+    for page in range(1_000):
+        urls.append(urljoin(host, f"/api/links/30/{page}"))
+    
+    operator = lambda x: get_url(x)
+    async for v in gather_batch(urls, operator):
+        if v is None:
+            continue
+        documents = json.loads(v)
+        document_batch = []
+        for v in documents:
+            doc_id = v["id"]
+            document_batch.append(urljoin(host, f"/text/{doc_id}"))
+        async for v in gather_batch(document_batch, operator):
+            if v is None:
+                continue
+            yield v
+
+async def gather_batch(items, operator, batch_size=5):
+    batch = []
+    index = 0
+    while index < len(items):
+        if len(batch) >= batch_size:
+            results = await asyncio.gather(*batch)
+            for v in results:
+                yield v
+            batch = []
+        batch.append(operator(items[index]))
+        index += 1
+    results = await asyncio.gather(*batch)
+    for v in results:
+        yield v
+
+async def get_url(url):
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                results = await response.text()
+                if response.status != 200:
+                    return None
+                return results
+    except Exception as e:
+        print(e)
+        return None

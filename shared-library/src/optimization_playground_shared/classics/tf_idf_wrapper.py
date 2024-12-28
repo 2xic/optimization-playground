@@ -10,7 +10,11 @@ class TfIdfWrapper:
         assert self.is_trained == False
         self.is_trained = True
         return np.asarray(self.encoder.fit_transform(x).todense().tolist())
-    
+
+    def fit_transforms(self, x):
+        self.train(x)
+        return self.transforms(x)
+
     def transforms(self, x):
         return np.asarray(self.encoder.transform(x).todense().tolist())
 
