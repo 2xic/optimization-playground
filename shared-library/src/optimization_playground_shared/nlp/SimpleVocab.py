@@ -68,6 +68,7 @@ class SimpleVocab:
         return SimpleVocab(vocab)
     
     def fit(self, X):
+        assert type(X) == list
         for i in X:
             _ = self.encode(i)
         return self
@@ -121,10 +122,10 @@ class SimpleVocab:
     def size(self):
         return len(self.vocab.index_vocab)
 
-    def save(self, path):
-        with open(os.path.join(path, "vocab.pkl"), "wb") as f:
+    def save(self, path, prefix=""):
+        with open(os.path.join(path, prefix + "vocab.pkl"), "wb") as f:
             pickle.dump(self, f)
 
-    def load(self, path):
-        with open(os.path.join(path, "vocab.pkl"), "rb") as f:
+    def load(self, path, prefix=""):
+        with open(os.path.join(path, prefix + "vocab.pkl"), "rb") as f:
             return pickle.load(f)

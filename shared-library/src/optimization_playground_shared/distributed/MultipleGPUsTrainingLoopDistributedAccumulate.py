@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from torch.nn.parallel import DistributedDataParallel as DDP
 from tqdm import tqdm
 
 
@@ -13,7 +12,7 @@ class MultipleGPUsTrainingLoopDistributedAccumulate:
                  update_step=32
         ):
         self.gpu_id = gpu_id
-        self.model = DDP(model.to(gpu_id), device_ids=[gpu_id])
+        self.model = model
         self.optimizer = optimizer
         self.loss = loss
         self.epoch = 0
@@ -30,12 +29,34 @@ class MultipleGPUsTrainingLoopDistributedAccumulate:
 
     def _iterate(self, dataloader, train=True):
         device = self.gpu_id
-        total_loss = torch.tensor(0.0, device=device)
-        accuracy = torch.tensor(0.0, device=device)
-        length = 0
-        dataloader.sampler.set_epoch(self.epoch)
+        if hasattr(dataloader, 'sampler'):
+            dataloader.sampler.set_epoch(self.epoch)
 
         dataloader = tqdm(dataloader) if self.is_main_gpu else dataloader
+        total_loss, accuracy = self._iterate_dataloader(
+            dataloader,
+            device,
+            train,
+        )
+
+        self.epoch += 1
+        self._step()
+
+        if self.gpu_id == 0:
+            if self.epoch % 100 == 0:
+                print(
+                    f"[GPU{self.gpu_id}] Epoch {self.epoch} | Loss {total_loss.item()}"
+                )
+            return (
+                total_loss,
+                accuracy
+            )
+        return None
+    
+    def _iterate_dataloader(self, dataloader, device, train):
+        length = 0
+        total_loss = torch.tensor(0.0, device=device)
+        accuracy = torch.tensor(0.0, device=device)
 
         for batch, (X, y) in enumerate(dataloader):
             X = X.to(device)
@@ -48,26 +69,18 @@ class MultipleGPUsTrainingLoopDistributedAccumulate:
 
                 if 0 < batch and batch % self.update_step == 0:
                     self._step()
-
+                if isinstance(dataloader, tqdm):
+                    dataloader.set_description(f"batch: {batch}, loss: {loss}")
                 total_loss += loss.item()
+                self._batch_done()
             accuracy += (torch.argmax(y_pred.detach(), 1) == y).sum()
             length += X.shape[0]
         accuracy = (accuracy / length) * 100
-        self.epoch += 1
-        self._step()
-
-        if self.gpu_id == 0:
-            if self.epoch % 100 == 0:
-                print(
-                    f"[GPU{self.gpu_id}] Epoch {self.epoch} | Loss {total_loss.item()}"
-                )
-
-            return (
-                total_loss,
-                accuracy
-            )
-        return None
-
+        return total_loss, accuracy
+    
     def _step(self):
         self.optimizer.step()
         self.optimizer.zero_grad()
+
+    def _batch_done(self):
+        pass

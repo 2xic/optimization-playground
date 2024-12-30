@@ -3,7 +3,7 @@ import requests
 import hashlib
 import aiohttp
 from urllib.parse import urljoin
-import asyncio
+from ..utils.asyncio_utils import gather_batch
 import json
 
 def _get_id(url):
@@ -108,21 +108,6 @@ async def get_document_dataset():
             if v is None:
                 continue
             yield v
-
-async def gather_batch(items, operator, batch_size=5):
-    batch = []
-    index = 0
-    while index < len(items):
-        if len(batch) >= batch_size:
-            results = await asyncio.gather(*batch)
-            for v in results:
-                yield v
-            batch = []
-        batch.append(operator(items[index]))
-        index += 1
-    results = await asyncio.gather(*batch)
-    for v in results:
-        yield v
 
 async def get_url(url):
     try:

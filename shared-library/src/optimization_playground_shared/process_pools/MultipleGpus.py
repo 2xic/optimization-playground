@@ -6,6 +6,23 @@ from torch.distributed import init_process_group, destroy_process_group
 import torch
 import atexit
 import os
+import hashlib
+import sys
+
+def get_target_port() -> int:
+    main_module = sys.modules['__main__']
+    data = main_module.__file__
+#    data = __main__.__file__
+    min_port: int = 10000 
+    max_port: int = 65535
+
+    # Hash the data using SHA-256
+    hasher = hashlib.sha256()
+    hasher.update(data.encode('utf-8'))
+    hash_value = int(hasher.hexdigest(), 16)
+    port_range = max_port - min_port + 1
+    return (hash_value % port_range) + min_port
+
 
 def ddp_setup(rank: int, world_size: int):
     """
@@ -14,11 +31,15 @@ def ddp_setup(rank: int, world_size: int):
     """
     if os.path.isfile("/tmp/peers"):
         print(f"Note that peer exists :) ({rank})")
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] =  str(int(get_target_port()))
+
     init_process_group(
-        backend="nccl", 
+#        backend="nccl", 
+        backend="nccl",
         rank=rank, 
         world_size=world_size,
-        init_method="file:///tmp/peers"
+#        init_method="file:///tmp/peers"
     )
 
 def run_on_multiple_gpus(gpu_call, *args):

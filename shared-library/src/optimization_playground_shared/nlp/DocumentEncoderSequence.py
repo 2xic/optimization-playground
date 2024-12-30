@@ -1,15 +1,9 @@
-from .SimpleVocab import SimpleVocab, splitter
+from .SimpleVocab import SimpleVocab
 import torch
-from typing import List
+import os
+from .DocumentEncoder import get_document_words
 
-def get_document_words(text) -> List:
-    # todo: create a good tokenizer, this does not really work for code tokens
-    if type(text) == bytes:
-        return splitter(text.decode())
-    else:
-        return splitter(text)
-
-def encode_document_text(vocab: SimpleVocab, text, tensor_x, tensor_y, entries_index, SEQUENCE_LENGTH):
+def encode_document_text(vocab: SimpleVocab, text, tensor_x, entries_index, SEQUENCE_LENGTH):
     words = get_document_words(text)
     count_words = len(words)
     vocab_add = vocab.vocab.add 
@@ -32,8 +26,8 @@ def get_document_dataset(vocab: SimpleVocab, documents, SEQUENCE_LENGTH) -> tupl
     X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
     entries_index = 0
     for document in documents:
-        X, _, entries_index = encode_document_text(vocab, document, X, None, entries_index, SEQUENCE_LENGTH)
-    assert not torch.all(X == 0), "All zeros is bad"
+        X, _, entries_index = encode_document_text(vocab, document, X, entries_index, SEQUENCE_LENGTH)
+
+    if os.environ.get("DEBUG_MODE") is not None:
+        assert not torch.all(X == 0), "All zeros is bad"
     return X
-
-

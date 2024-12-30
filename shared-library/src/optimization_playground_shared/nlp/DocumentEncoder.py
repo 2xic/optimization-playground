@@ -1,7 +1,7 @@
 from .SimpleVocab import SimpleVocab, splitter
 import torch
 from typing import List
-import random
+import os
 
 def get_document_words(text) -> List:
     # todo: create a good tokenizer, this does not really work for code tokens
@@ -40,13 +40,11 @@ def get_document_dataset(vocab: SimpleVocab, documents, SEQUENCE_LENGTH) -> tupl
     entries_index = 0
     for document in documents:
         X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index, SEQUENCE_LENGTH)
-  #  print(torch.bincount(y).tolist())#, y.unique(sorted=True).float()))
-    assert not torch.all(X == 0), "All zeros is bad"
-    assert not torch.all(y == 0), "All zeros is bad"
 
-    # Random sampling out of the dataset for better coverage
-#    indices = torch.randint(0, X.size(0), (entries_count // 32,))
-#    return X[indices], y[indices]
+    if os.environ.get("DEBUG_MODE") is not None:
+        assert not torch.all(X == 0), "All zeros is bad"
+        assert not torch.all(y == 0), "All zeros is bad"
+
     return X, y
 
 
@@ -58,11 +56,9 @@ def get_document_dataset_iter(vocab: SimpleVocab, documents, SEQUENCE_LENGTH):
 
         X = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
         y = torch.full(size=(entries_count, SEQUENCE_LENGTH), fill_value=vocab.vocab.PADDING_IDX, dtype=torch.long)
-        print(document)
         X, y, _ = encode_document_text(vocab, document, X, y, 0, SEQUENCE_LENGTH)
 
-        print(X)
-
-        assert not torch.all(X == 0), "All zeros is bad"
-        assert not torch.all(y == 0), "All zeros is bad"
+        if os.environ.get("DEBUG_MODE") is not None:
+            assert not torch.all(X == 0), "All zeros is bad"
+            assert not torch.all(y == 0), "All zeros is bad"
         yield X, y

@@ -3,9 +3,11 @@ import os
 import torch
 
 class BaseModel:
-    def __init__(self):
-        self.document_encoder = SimpleVocab()
+    def __init__(self, name):
+        self.document_encoder: SimpleVocab = SimpleVocab()
         self.model = None
+        self.name = name
+        self.embedding_size = 512
 
     def fit_transforms(self, docs):
         self.train(docs)
@@ -15,16 +17,21 @@ class BaseModel:
         return self.get_embedding(docs)
 
     def get_embedding(self, docs):
-        embeddings = torch.zeros((len(docs), 512))
+        self.model.eval()
+        with torch.no_grad():
+            return self._get_embedding(docs)
+    
+    def _get_embedding(self, docs, device=torch.device('cpu')):
+        assert type(docs) == list
+        embeddings = torch.zeros((len(docs), self.embedding_size), device=device)
         for index, text in enumerate(docs):
-            inputs = get_document_dataset(self.document_encoder, [text], SEQUENCE_LENGTH=512)
-            embedding = torch.zeros((512))
-            batch_size = 512
-            self.model.eval()
-            with torch.no_grad():
-                for i in range(0, inputs.shape[0], batch_size):
-                    output = self.model(inputs[i:i+batch_size]).mean(dim=0)
-                    embedding += output
+            inputs = get_document_dataset(self.document_encoder, [text], SEQUENCE_LENGTH=2048)
+            inputs = inputs.to(device)
+            embedding = torch.zeros((self.embedding_size), device=device)
+            batch_size = self.embedding_size
+            for i in range(0, inputs.shape[0], batch_size):
+                output = self.model(inputs[i:i+batch_size]).mean(dim=0)
+                embedding += output
             embeddings[index] = (embedding / inputs.shape[0])
         return embeddings
 
@@ -33,9 +40,9 @@ class BaseModel:
         os.makedirs(path, exist_ok=True)
         torch.save(self._get_state_dict(), os.path.join(
             path,
-            "model.pth"
+            self._prefix + "model.pth"
         ))
-        self.document_encoder.save(path)
+        self.document_encoder.save(path, self._prefix)
     
     def load(self):
         path = self._get_path()
@@ -43,13 +50,21 @@ class BaseModel:
         model_data = torch.load(
             os.path.join(
                 path,
-                "model.pth"
+                self._prefix + "model.pth"
             )
         )
         self.model = self._load_model(model_data)
         self.model.load_state_dict(model_data["state_dict"])
         self.model.eval()
-        self.document_encoder = self.document_encoder.load(path)
+        self.document_encoder = self.document_encoder.load(
+            path,
+            self._prefix
+        )
+        return self
+
+    @property
+    def _prefix(self):
+        return self.name
 
     def _get_path(self):
         return os.path.join(os.path.dirname(

@@ -15,7 +15,14 @@ def create_route(app, model):
             return jsonify({
                 "embedding": None,
             })
-    return predict
+
+    @app.route("/models")
+    def models():
+        return jsonify({
+            "models": ["mega"]
+        })
+
+    return predict, models
 
 def create_flask_app(model):
     app = Flask(__name__)
