@@ -1,5 +1,5 @@
 from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config
-from .base_model import BaseModel
+from .base_model import BaseModel, AccumulateLoss
 import torch.optim as optim
 from ..nlp.DocumentEncoderSequence import get_document_dataset as get_document_dataset_sequence
 import torch
@@ -48,22 +48,28 @@ class EmbeddingModelTwo(BaseModel):
         }
         self.loss = self.loss_functions[loss]
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        self.checkpoint = Checkpoint()
-        self.embedding_size = 2048 * 4
+        self.checkpoint = Checkpoint(30)
+        self.accumulator = AccumulateLoss()
 
     def train_dataloader(self, dataloader: TextDataloader):
         num_epochs = 64
         config = self.get_config(
             self.document_encoder.size,
-            2048,
+            128,
         )
         self.model =    GptTransformerModel(config) \
                         if dataloader.variant == "next_token_prediction" \
                         else GptEmbeddings(config)
         self.optimizer = optim.Adam(self.model.parameters())
+        dataloader.SEQUENCE_LENGTH = config.sequence_length
+        self.sequence_length = config.sequence_length
+        self.embedding_size = config.sequence_length * 4
+        dataloader.batch_size = 2
         self.model = self.model.to(self.device)
         self.model.train()
-        for epoch in range(num_epochs):
+        epoch = 0
+        print("Model loaded")
+        while not self.checkpoint.timeout():
             batch = 0
             for (X, y) in dataloader:
                 if y is not None:
@@ -72,28 +78,35 @@ class EmbeddingModelTwo(BaseModel):
                     X = X.to(self.device)
                 outputs = self.model(X)
                 loss = self.loss(outputs, y)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
-
-                line = f"Epoch {epoch+1}/{num_epochs}, Batch {batch} Loss: {loss.item():.4f}"
-                sys.stdout.write(f"\r{line}")
-                sys.stdout.flush()
+                self.accumulator.update(loss)
+                if self.accumulator.done():
+                    self.optimizer.zero_grad()
+                    self.accumulator.loss.backward()
+                    self.optimizer.step()
+                    line = f"Epoch {epoch+1}/{num_epochs}, Batch {batch} Loss: {self.accumulator.loss.item():.4f}"
+                    sys.stdout.write(f"\r{line}")
+                    sys.stdout.flush()
+                    self.accumulator.reset()
                 batch += 1
 
                 if self.checkpoint.checkpoint():
                     self.save()
-
+                    break
+            epoch += 1
         print("Training completed!")
         return self
     
     def _load_model(self, model_data):
-        return GptEmbeddings(
+        model = GptEmbeddings(
             self.get_config(
                 model_data["vocab_size"],
                 model_data["sequence_length"],
             )
         )
+        self.sequence_length = model_data["sequence_length"]
+        self.embedding_size = model_data["sequence_length"] * 4
+
+        return model
     
     def _get_state_dict(self):
         return {
@@ -139,8 +152,8 @@ def train_embedding():
     return model
 
 if __name__ == "__main__":
-#    model = train_gpt_like()
-    model = train_embedding()
+    model = train_gpt_like()
+#    model = train_embedding()
     model.save()
     model.load()
     print(model.transforms([

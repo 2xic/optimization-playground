@@ -1,6 +1,29 @@
 from ..nlp.DocumentEncoderSequence import SimpleVocab, get_document_dataset
 import os
 import torch
+from .checkpoints import Checkpoint
+
+class AccumulateLoss:
+    def __init__(self):
+        self.counter = 0
+        self.loss = None
+
+    def update(self, loss):
+        if torch.isnan(loss):
+            print("nan loss .... ")
+        else:
+            if self.loss is None:
+                self.loss = loss
+            else:
+                self.loss += loss
+            self.counter += 1
+
+    def reset(self):
+        self.counter = 0
+        self.loss = None
+
+    def done(self):
+        return self.counter >= 32
 
 class BaseModel:
     def __init__(self, name):
@@ -8,6 +31,8 @@ class BaseModel:
         self.model = None
         self.name = name
         self.embedding_size = 512
+        self.checkpoint = Checkpoint(30)
+        self.sequence_length = 2048
 
     def fit_transforms(self, docs):
         self.train(docs)
@@ -25,7 +50,7 @@ class BaseModel:
         assert type(docs) == list
         embeddings = torch.zeros((len(docs), self.embedding_size), device=device)
         for index, text in enumerate(docs):
-            inputs = get_document_dataset(self.document_encoder, [text], SEQUENCE_LENGTH=2048)
+            inputs = get_document_dataset(self.document_encoder, [text], SEQUENCE_LENGTH=self.sequence_length)
             inputs = inputs.to(device)
             embedding = torch.zeros((self.embedding_size), device=device)
             batch_size = self.embedding_size

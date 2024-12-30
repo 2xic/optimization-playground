@@ -1,4 +1,5 @@
-https://notebooklm.google/ is great, but has no api :( https://pdf-to-podcast.com/ was mentioned [here](https://simonwillison.net/2024/Jun/13/pdf-to-podcast/) so I'll fork it.
+### Context
+[NotebookLM](https://notebooklm.google/) is great, but has no api :( [pdftopodcast](https://pdf-to-podcast.com/) was mentioned [here](https://simonwillison.net/2024/Jun/13/pdf-to-podcast/) so I'll fork it.
 
 Original source code is [here](https://github.com/knowsuchagency/pdf-to-podcast/blob/main/main.py).
 

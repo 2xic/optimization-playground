@@ -1,12 +1,11 @@
 import torch.nn as nn
 import torch.optim as optim
-from .base_model import BaseModel
+from .base_model import BaseModel, AccumulateLoss
 from .loss_functions import MinimalCrossEntropyLoss, SimpleContrastiveLoss, NegativeSample
 from .dataloader import get_dataloader, TextDataloader
-from .hosted_model import create_flask_app
 from optimization_playground_shared.distributed.MultipleGpuTrainWrapper import MultipleGpuTrainWrapper
 import torch
-from .checkpoints import Checkpoint
+from tqdm import tqdm
 
 class SimpleEmbeddingModel(nn.Module):
     def __init__(self, vocab_size, embed_dim):
@@ -40,9 +39,8 @@ class EmbeddingModelOne(BaseModel):
         self.loss = None
         if loss is not None:
             self.loss = self.loss_functions[loss]
-        super().__init__(
-            self.__class__.__name__
-        )
+        super().__init__(self.__class__.__name__)
+        self.accumulator = AccumulateLoss()
 
     def create(self):
         embed_dim = 64
@@ -56,15 +54,25 @@ class EmbeddingModelOne(BaseModel):
         self.model = self.create()
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
-        for epoch in range(num_epochs):
+        epoch = 0
+        progress = tqdm()
+
+        while not self.checkpoint.timeout():
             for (X, y) in data_loader:
                 loss = self.loss(self.model(X), y)
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+                self.accumulator.update(loss)
+                if self.accumulator.done():
+                    self.optimizer.zero_grad()
+                    self.accumulator.loss.backward()
+                    self.optimizer.step()
+                    progress.set_description(f"Loss: {self.accumulator.loss.item():.4f}")
+                    progress.update(1)
+                    self.accumulator.reset()
 
-                print(f"Epoch {epoch+1}/{num_epochs}, Loss: {loss.item():.4f}")
-
+                if self.checkpoint.timeout():
+                    self.save()
+                    break
+            epoch += 1
         print("Training completed!")
         return self
 
@@ -84,7 +92,6 @@ class EmbeddingModelOne(BaseModel):
 class Trainer(MultipleGpuTrainWrapper):
     def __init__(self) -> None:
         super().__init__()
-        self.checkpoint = Checkpoint()
 
     def get_training_parameters(self):
         optimizer = optim.Adam(self.model_wrapper.model.parameters())
@@ -98,12 +105,6 @@ class Trainer(MultipleGpuTrainWrapper):
         if self.gpu_id == 0:
             model = self.model_wrapper
             model.save()
-            model.load()
-            print(self.model_wrapper.transforms(["hello, this is some text"]))
-            create_flask_app(model).run(
-                port=8081,
-                host="0.0.0.0"
-            )
 
     def get_dataloader(self, gpu_id):
         self.model_wrapper = EmbeddingModelOne(
@@ -117,9 +118,10 @@ class Trainer(MultipleGpuTrainWrapper):
         return dataloader
     
     def batch_done(self):
-        if self.gpu_id == 0:
-            if self.checkpoint.checkpoint():
-                self.model_wrapper.save()
+        if self.model_wrapper.checkpoint.checkpoint():
+            self.model_wrapper.save()
+        if self.model_wrapper.checkpoint.timeout():
+            exit(0)
 
 if __name__ == "__main__":
     trainer = Trainer()

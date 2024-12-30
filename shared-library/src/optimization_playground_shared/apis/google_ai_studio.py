@@ -12,7 +12,7 @@ def get_gemini_output(text):
                 {
                     "parts":[
                         {
-                            "text": text
+                            "text": text,
                         }
                     ]
                 }

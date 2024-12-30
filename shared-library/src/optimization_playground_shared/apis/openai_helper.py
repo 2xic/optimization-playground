@@ -92,6 +92,8 @@ def get_completion(messages, model, response_format=None) -> Dict:
     return results.json()
 
 def get_text_to_speech(text):
+    assert type(text) == str
+    assert token is not None
     response = requests.post(
         "https://api.openai.com/v1/audio/speech",
         json={

@@ -1,8 +1,8 @@
 from .openai_helper import get_embeddings, get_completion, get_text_to_speech
 import numpy as np
 import tiktoken
-from pathlib import Path
-import requests
+from io import BytesIO
+from pydub import AudioSegment
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -167,3 +167,31 @@ class OpenAiWhisper:
 
     def get_speech(self, text):
         return get_text_to_speech(text)
+
+
+import re
+
+def _is_all_whitespace(s):
+    return bool(re.match(r'^\s*$', s))
+
+def get_mp3_from_text(text):
+    assert type(text) == str, type(text)
+    model = OpenAiWhisper()
+    combined = AudioSegment.empty()
+    for text_batch in get_text_batches(text, max_tokens=512):
+        if _is_all_whitespace(text_batch):
+            continue
+        data = bytes()
+        print(text_batch)
+        with model.get_speech(text_batch) as response:
+            response.raise_for_status()
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:  # filter out keep-alive chunks
+                    # bytes_io.write(chunk)
+                    data += chunk
+        audio = AudioSegment.from_file(BytesIO(data), format="mp3")
+        combined += audio
+
+    bytes_io = BytesIO()
+    combined.export(bytes_io, format="mp3")
+    return bytes_io

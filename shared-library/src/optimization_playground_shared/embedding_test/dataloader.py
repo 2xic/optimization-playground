@@ -17,6 +17,7 @@ class TextDataloader(Dataset):
         self.document_encoder = document_encoder
         self.variant = variant
         self.docs = asyncio.run(self.load_documents(document_encoder))
+        self.batch_size = 32
 
     async def load_documents(self, document_encoder: SimpleVocab):
         docs = []
@@ -46,8 +47,8 @@ class TextDataloader(Dataset):
             document = self.docs[index]
             if self.variant == "next_token_prediction":
                 batch_x, batch_y = get_document_dataset(self.document_encoder, [document], self.SEQUENCE_LENGTH)
-                for i in range(0, batch_x.shape[0], 32):
-                    yield batch_x[i:i+32], batch_y[i:i+32]
+                for i in range(0, batch_x.shape[0], self.batch_size):
+                    yield batch_x[i:i+self.batch_size], batch_y[i:i+self.batch_size]
             elif self.variant == "triplet_loss":
                 batch_x = get_document_dataset_sequence(self.document_encoder, [document], self.SEQUENCE_LENGTH)
                 n = 4
@@ -62,8 +63,8 @@ class TextDataloader(Dataset):
                 yield batch_n, batch_x_positives, batch_x_negative
             else:
                 batch_x = get_document_dataset_sequence(self.document_encoder, [document], self.SEQUENCE_LENGTH)
-                for i in range(0, batch_x.shape[0], 32):
-                    yield batch_x[i:i+32], torch.zeros((1))
+                for i in range(0, batch_x.shape[0], self.batch_size):
+                    yield batch_x[i:i+self.batch_size], torch.zeros((1))
 
     def get_x_positive(self, batch_x, batch_n):
         indices_b = torch.randint(0, batch_x.shape[1], (3, ))

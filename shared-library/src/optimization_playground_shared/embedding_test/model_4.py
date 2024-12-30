@@ -1,13 +1,9 @@
 import torch.optim as optim
-from .base_model import BaseModel
-from .loss_functions import TfIdfAnchor
-from .dataloader import get_dataloader, TextDataloader
-import random
-from .hosted_model import create_flask_app
+from .base_model import BaseModel, AccumulateLoss
+from .dataloader import get_dataloader
 from .model_1 import SimpleEmbeddingModel
 from tqdm import tqdm
-from .dataloader import get_dataloader, TextDataloader
-from .hosted_model import create_flask_app
+from .dataloader import get_dataloader
 from optimization_playground_shared.distributed.MultipleGpuTrainWrapper import MultipleGpuTrainWrapper
 import torch
 from .checkpoints import Checkpoint
@@ -37,30 +33,11 @@ class EmbeddingModelFour(BaseModel):
             "embed_dim": self.model.embed_dim,
         }
     
-class AccumulateLoss:
-    def __init__(self):
-        self.counter = 0
-        self.loss = None
-
-    def update(self, loss):
-        if self.loss is None:
-            self.loss = loss
-        else:
-            self.loss += loss
-        self.counter += 1
-
-    def reset(self):
-        self.counter = 0
-        self.loss = None
-
-    def done(self):
-        return self.counter >= 32
-
 class Trainer(MultipleGpuTrainWrapper):
     def __init__(self) -> None:
         super().__init__()
         self.model_wrapper = None
-        self.checkpoint = Checkpoint()
+        self.checkpoint = Checkpoint(30)
         self.accumulator = AccumulateLoss()
 
     def get_training_parameters(self):
@@ -72,7 +49,7 @@ class Trainer(MultipleGpuTrainWrapper):
         progress = tqdm()
         self.model.to(self.device)
         self.model.train()
-        while not self.checkpoint.checkpoint():
+        while not self.checkpoint.timeout():
             for (x, y, z) in self.dataloader:
                 x, y, z = x.to(self.device), y.to(self.device),z.to(self.device)
                 loss = anchor_loss(
@@ -86,11 +63,11 @@ class Trainer(MultipleGpuTrainWrapper):
                     self.accumulator.loss.backward()
                     self.optimizer.step()
                     progress.set_description(f"Loss: {self.accumulator.loss.item():.4f}")
+                    progress.update(1)
                     self.accumulator.reset()
                 if self.checkpoint.checkpoint():
                     self.model_wrapper.save()
                     break
-            break
 
         self.model_wrapper.save()
         print("Training completed!")
@@ -101,11 +78,6 @@ class Trainer(MultipleGpuTrainWrapper):
             model = self.model_wrapper
             model.save()
             model.load()
-            print(self.model_wrapper.transforms(["hello, this is some text"]))
-            create_flask_app(model).run(
-                port=8081,
-                host="0.0.0.0"
-            )
 
     def get_dataloader(self, gpu_id):
         self.model_wrapper = EmbeddingModelFour()

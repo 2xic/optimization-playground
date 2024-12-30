@@ -12,7 +12,7 @@ import sys
 def get_target_port() -> int:
     main_module = sys.modules['__main__']
     data = main_module.__file__
-#    data = __main__.__file__
+
     min_port: int = 10000 
     max_port: int = 65535
 
@@ -32,14 +32,13 @@ def ddp_setup(rank: int, world_size: int):
     if os.path.isfile("/tmp/peers"):
         print(f"Note that peer exists :) ({rank})")
     os.environ["MASTER_ADDR"] = "localhost"
+    # Generate ports so we can have multiple instances running at the same time.
     os.environ["MASTER_PORT"] =  str(int(get_target_port()))
 
     init_process_group(
-#        backend="nccl", 
         backend="nccl",
         rank=rank, 
         world_size=world_size,
-#        init_method="file:///tmp/peers"
     )
 
 def run_on_multiple_gpus(gpu_call, *args):

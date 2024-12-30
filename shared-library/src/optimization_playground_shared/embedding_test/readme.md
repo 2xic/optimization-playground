@@ -4,6 +4,8 @@ I'm trying to replace the OpenAI embeddings api with something custom.
 python3 -m optimization_playground_shared.embedding_test.model_1
 python3 -m optimization_playground_shared.embedding_test.model_2
 python3 -m optimization_playground_shared.embedding_test.model_3
+# 
+python3 -m optimization_playground_shared.embedding_test.hosted_trained_models
 ```
 
 ## Papers with embeddings
@@ -25,4 +27,4 @@ Most deep learning models are based on context models. Things like bert, word2ve
 Some ideas
 - using tf-idf as anchor in the loss
 - sample a document into paragraphs and ask the model if the two sequences are part of it or not.
-- 
+

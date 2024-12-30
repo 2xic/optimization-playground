@@ -8,3 +8,4 @@ xgboost
 pyzmq
 flask
 torchvision
+aiofiles
