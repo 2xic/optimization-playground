@@ -4,6 +4,8 @@ You also get a code diff so you can see what actually changed between experiment
 
 How to use on the model side
 ```python
+from optimization_playground_shared.metrics_tracker.producer import Tracker, Metrics
+
 metrics_tracker = Tracker("example_model")
 metrics_tracker.log(
     Metrics(

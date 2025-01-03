@@ -149,7 +149,7 @@ for epoch in range(1_000):
             )
         ], f'inference.png')
 
-        metrics_tracker.log(
+        metrics_tracker._log(
             Metrics(
                 epoch=epoch,
                 loss=sum_loss,

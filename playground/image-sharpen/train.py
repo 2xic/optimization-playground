@@ -57,7 +57,7 @@ def train():
                     inference
                 )
             )
-            metrics_tracker.log(metric)
+            metrics_tracker._log(metric)
 
 if __name__ == "__main__":
     train()

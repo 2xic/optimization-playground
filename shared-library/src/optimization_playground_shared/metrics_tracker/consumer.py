@@ -177,23 +177,65 @@ def add_message():
         "status": "success"
     })
 
+def get_main_runs():
+    if os.path.isfile(global_metadata):
+        with open(global_metadata, "r") as file:
+            data = json.load(file)
+            return sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True)
+    return []
+            
+
 @app.route('/', methods=['GET'])
 def index():
     """
     Shows the projects data
     """
-    if os.path.isfile(global_metadata):
-        with open(global_metadata, "r") as file:
-            data = json.load(file)
-            results = []
-            for (name, _) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
-                print(name)
-                results.append(
-                    f"<a href={name}>{name}</a>".format(name=name)
-                )
-            return "<br>".join(results)
+    main_runs = get_main_runs()
+    if len(main_runs) == 0:
+        results = []
+        for (name, _) in main_runs:
+            print(name)
+            results.append(
+                f"<a href={name}>{name}</a>".format(name=name)
+            )
+        return "<br>".join(results)
     else:
         return "No projects found, have you executed any experiments?"
+
+@app.route('/table', methods=['GET'])
+def table():
+    """
+    Shows the projects data
+    """
+    table = """
+        <table>
+        <tr>
+            <th>Name</th>
+            <th>Accuracy</th>
+            <th>Epochs</th>
+        </tr>
+    """
+    for (project_name, _) in get_main_runs():
+        runs = SimpleDatabase.get_sorted_runs(project_name)
+        if len(runs) == 0:
+            continue
+        for i in runs:
+            output = load_run_id_epoch_data(project_name, i)[-1]
+            accuracy = output.get("training_accuracy", None)
+            epochs = output["epoch"]
+            if accuracy is None:
+                continue
+            real_run_id = f"<a href={project_name}/{i}>{project_name}</a>"
+            table += "\n".join([
+                "<tr>",
+                    f"<td>{real_run_id}</td>",
+                    f"<td>{accuracy}</td>",
+                    f"<td>{epochs}</td>",
+                "</tr>",
+            ])
+    table += "</table>"
+    return table
+
 
 @app.route('/<project_name>', methods=['GET'])
 def runs(project_name):
@@ -245,7 +287,7 @@ def diff_runs_full(project_name, ref_1, ref_2):
         context=False
     )
 
-def load_run_id(project_name, run_id, n):
+def load_run_id_epoch_data(project_name, run_id):
     run_metadata_path = os.path.join(
         root_data_directory,
         project_name,
@@ -259,8 +301,11 @@ def load_run_id(project_name, run_id, n):
                 data.append(json.load(file))
     if len(data) == 0:
         return None
-    
     data = sorted(data, key=lambda x: x["epoch"])
+    return data
+
+def load_run_id(project_name, run_id, n):
+    data = load_run_id_epoch_data(project_name, run_id)
     loss_plot = []
     if all(list(map(lambda x: type(x["loss"]) == dict, data))):
         plots = {}
@@ -296,7 +341,7 @@ def load_run_id(project_name, run_id, n):
             list(filter(lambda x: x is not None, list(map(lambda x: x["loss"], data))))
         ))
     accuracy = ""
-    if not all(list(map(lambda x: x["training_accuracy"] is None, data))):
+    if not all(list(map(lambda x: x.get("training_accuracy", None) is None, data))):
         accuracy_plot = plot_xy(
             list(map(lambda x: x["training_accuracy"], data))
         )

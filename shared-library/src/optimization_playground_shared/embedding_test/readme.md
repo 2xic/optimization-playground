@@ -4,6 +4,7 @@ I'm trying to replace the OpenAI embeddings api with something custom.
 python3 -m optimization_playground_shared.embedding_test.model_1
 python3 -m optimization_playground_shared.embedding_test.model_2
 python3 -m optimization_playground_shared.embedding_test.model_3
+python3 -m optimization_playground_shared.embedding_test.model_4
 # 
 python3 -m optimization_playground_shared.embedding_test.hosted_trained_models
 ```

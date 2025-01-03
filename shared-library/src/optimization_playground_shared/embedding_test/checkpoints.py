@@ -1,10 +1,10 @@
 import time
-import torch.distributed as dist
+from optimization_playground_shared.process_pools.MultipleGpus import is_main_gpu
 
 class Checkpoint:
     def __init__(self, timeout_minutes):
         self.start_time = time.time()
-        self.last_checkpoint = time.time()
+        self.last_checkpoint = 0
         self.timeout_minutes = timeout_minutes
 
     def checkpoint(self):
@@ -15,18 +15,11 @@ class Checkpoint:
         if checkpoint:
             self.last_checkpoint = time.time()
         
-        return checkpoint and self.is_main_gpu()
+        return checkpoint and is_main_gpu()
 
     def timeout(self):
         current_time = time.time()
         delta = current_time - self.start_time
         # checkpoint every n minutes
         checkpoint = delta > 60 * self.timeout_minutes
-        if checkpoint:
-            self.last_checkpoint = time.time()
         return checkpoint
-
-    def is_main_gpu(self):
-        if not dist.is_initialized():
-            return True
-        return dist.get_rank() == 0

@@ -186,7 +186,7 @@ def train_encoder(tensor_batch):
         )
         print((calculated_loss, metric.loss))
         assert calculated_loss == metric.loss, "error " + type(calculated_loss)
-        metrics_encoder.log(metric)
+        metrics_encoder._log(metric)
 
 
 def train_behaviors(tensor_batch):
@@ -246,7 +246,7 @@ def train_behaviors(tensor_batch):
             test_random_agent_reward =  eval_model(RandomAgent())
             print(f"real reward {test_real_agent_reward}, random agent reward {test_random_agent_reward}")
 
-            metrics_actor_critic.log(
+            metrics_actor_critic._log(
                 Metrics(
                     epoch=epoch,
                     loss=calculated_loss,

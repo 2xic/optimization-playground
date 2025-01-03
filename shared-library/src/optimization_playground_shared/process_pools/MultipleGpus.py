@@ -8,6 +8,18 @@ import atexit
 import os
 import hashlib
 import sys
+import torch.distributed as dist
+
+def is_main_gpu():
+    if not dist.is_initialized():
+        return True
+    return dist.get_rank() == 0
+
+def get_rank():
+    if not dist.is_initialized():
+        return 0
+    return dist.get_rank()
+
 
 def get_target_port() -> int:
     main_module = sys.modules['__main__']
@@ -49,10 +61,12 @@ def run_on_multiple_gpus(gpu_call, *args):
     return output
 
 def cleanup():
-    try:
-        destroy_process_group()
-    except Exception as e:
-        print("Failed to cleanup destroy")
+    if dist.is_initialized():
+        try:
+            destroy_process_group()
+        except Exception as e:
+            print(e)
+            print("Failed to cleanup destroy")
 
 # destroys the process group
 atexit.register(cleanup)

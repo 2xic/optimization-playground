@@ -86,6 +86,18 @@ def get_url_documents(pages=5):
 """
 async code.
 """
+def get_document_eval(n=50):
+    host = os.environ["url_to_text_host"]
+    urls = urljoin(host, f"/dataset?limit={n}")
+    X = []
+    y = []
+    results = requests.get(urls).json()
+    print(results.keys())
+    for i in results["entries"]:
+        X.append(i["text"])
+        y.append(i["is_good"])
+    return X, y
+
 async def get_document_dataset():
     host = os.environ["url_to_text_host"]
     urls = [

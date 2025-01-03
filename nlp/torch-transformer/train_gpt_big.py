@@ -74,7 +74,7 @@ class Trainer(MultipleGpuBigModelWrapper):
         self.batch_count += predicted_formatted.shape[0]
 
     def epoch_done(self, epoch):
-        metrics_tracker.log(
+        metrics_tracker._log(
             Metrics(
                 epoch=epoch,
                 loss=self.batch_loss,

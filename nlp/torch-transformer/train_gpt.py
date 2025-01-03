@@ -114,7 +114,7 @@ def train_model():
         debug_x = X[random.randint(0, X.shape[0] - 1)]
         text, raw_tokens = get_text_prediction(model, debug_x)
         debug_text = get_debug_prediction(model, debug_x)
-        metrics_tracker.log(
+        metrics_tracker._log(
             Metrics(
                 epoch=epoch,
                 loss=loss,

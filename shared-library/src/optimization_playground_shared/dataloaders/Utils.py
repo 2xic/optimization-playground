@@ -1,6 +1,6 @@
 from torch.utils.data import DataLoader
 from ..training_loops.TrainingLoopAccumulate import TrainingLoopAccumulate
-
+from typing import Union
 """
 TODO: not good implementation, improve it. 
 

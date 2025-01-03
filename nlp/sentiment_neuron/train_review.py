@@ -48,7 +48,7 @@ for epoch in range(10_000):
                 training_accuracy=None,
                 prediction=None
             )
-            metrics_tracker.log(metric)
+            metrics_tracker._log(metric)
             latest_loss = loss
             print(f"loss {loss} epoch: {epoch}, epoch progress {index} / {len(sentences)}")
             # batching together to get more epoch like flow
@@ -73,7 +73,7 @@ for epoch in range(10_000):
             "\n\n".join(results)
         )
     )
-    metrics_tracker.log(metric)
+    metrics_tracker._log(metric)
 
     print("predicted", predicted)
     print("truth", truth)

@@ -1,14 +1,11 @@
 from flask import Flask, request, jsonify
-from .model_1 import EmbeddingModelOne
-from .model_2 import EmbeddingModelTwo
-from .model_3 import EmbeddingModelThree
-from .model_4 import EmbeddingModelFour
+from .model_config import ModelConfig
 
 all_models = [
-    EmbeddingModelTwo("SimpleContrastiveLoss").load(),
-    EmbeddingModelOne().load(),
-    EmbeddingModelThree().load(),
-    EmbeddingModelFour().load()
+    ModelConfig("NegativeSample").load_trained_model(),
+    ModelConfig("NextTokenPrediction").load_trained_model(),
+    ModelConfig("TfIdfAnchor").load_trained_model(),
+    ModelConfig("TripletMarginLoss").load_trained_model(),
 ]
 
 mapping = {}

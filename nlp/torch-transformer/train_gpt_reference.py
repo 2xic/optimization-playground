@@ -103,7 +103,7 @@ for epoch in range(epochs):
         sum_loss += loss.item()
 
     text, raw_tokens = get_text_prediction(model, X[random.randint(0, X.shape[0] - 1)])
-    metrics_tracker.log(
+    metrics_tracker._log(
         Metrics(
             epoch=epoch,
             loss=sum_loss,

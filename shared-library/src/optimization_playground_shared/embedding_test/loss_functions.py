@@ -83,4 +83,11 @@ class TfIdfAnchor(torch.nn.Module):
         relative_differences_a = (norm_embeddings[1:] - norm_embeddings[:-1]) / norm_embeddings[:-1]
         relative_differences_b = (norm_tfidf[1:] - norm_tfidf[:-1]) / norm_tfidf[:-1]
 
-        return ((relative_differences_b - relative_differences_a) ** 2).mean()
+        assert not torch.any(torch.isnan(relative_differences_a))
+        assert not torch.any(torch.isnan(relative_differences_b))
+        output = ((relative_differences_b - relative_differences_a) ** 2)
+        assert not torch.any(torch.isnan(output))
+        assert output.shape[0] > 0
+        assert not torch.any(torch.isnan(output.mean()))
+
+        return output.mean()

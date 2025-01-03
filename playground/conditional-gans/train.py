@@ -114,7 +114,7 @@ def train(discriminator, generator):
                 )
             ], f'inference.png')
 
-            metrics_tracker.log(
+            metrics_tracker._log(
                 Metrics(
                     epoch=current_epoch,
                     loss={
