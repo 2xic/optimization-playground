@@ -25,22 +25,25 @@ This does distributed data training
 class MultipleGpuTrainWrapper(abc.ABC):
     def __init__(self):
         super().__init__()
-        self.is_debug_mode = not torch.cuda.is_available()
+        self.is_debug_mode = (
+            not torch.cuda.is_available() or 
+            torch.cuda.device_count() == 1
+        )
         self.epochs = 1_000
 
     def start(self, is_debug_mode=False) -> None:
+        self.is_debug_mode = is_debug_mode
         if not is_debug_mode:
-            run_on_multiple_gpus(self._main, is_debug_mode)
+            run_on_multiple_gpus(self._main)
         else:
             print("Running in debug mode")
-            self._main(gpu_id=0, world_size=None, is_debug_mode=is_debug_mode)
+            self._main(gpu_id=0, world_size=None)
 
-    def _main(self, gpu_id, world_size, is_debug_mode):
-        if not is_debug_mode:
+    def _main(self, gpu_id, world_size):
+        if not self.is_debug_mode:
             ddp_setup(gpu_id, world_size)
-        print(f"is_debug_mode : {is_debug_mode}, gpu_id: {gpu_id}")
+        print(f"is_debug_mode : {self.is_debug_mode}, gpu_id: {gpu_id}")
         self._core(gpu_id)
-        self.is_debug_mode = is_debug_mode
 
     def _core(self, gpu_id):
         # Get dataloader first to init global variables

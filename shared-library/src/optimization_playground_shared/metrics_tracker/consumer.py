@@ -132,14 +132,18 @@ class SimpleDatabase:
 
     @staticmethod
     def get_sorted_runs(project_name):
+        return list(map(lambda x: x[0], SimpleDatabase.get_sorted_runs_with_timestamp(project_name)))
+
+    @staticmethod
+    def get_sorted_runs_with_timestamp(project_name):
         project_metadata_path = SimpleDatabase.metadata_file(project_name)
         with open(project_metadata_path, "r") as file:
             data = json.load(file)
-            ids = []
-            for (run_id, _) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
-                ids.append(run_id)
-            return ids
-        
+            ids_timestamp = []
+            for (run_id, data) in sorted(data.items(), key=lambda x: x[1]["last_commit"], reverse=True):
+                ids_timestamp.append((run_id, data["last_commit"]))
+            return ids_timestamp
+
     @staticmethod
     def metadata_file(project_name):
         return os.path.join(
@@ -191,7 +195,7 @@ def index():
     Shows the projects data
     """
     main_runs = get_main_runs()
-    if len(main_runs) == 0:
+    if len(main_runs) > 0:
         results = []
         for (name, _) in main_runs:
             print(name)
@@ -215,24 +219,27 @@ def table():
             <th>Epochs</th>
         </tr>
     """
+    rows = []
     for (project_name, _) in get_main_runs():
-        runs = SimpleDatabase.get_sorted_runs(project_name)
+        runs = SimpleDatabase.get_sorted_runs_with_timestamp(project_name)
         if len(runs) == 0:
             continue
-        for i in runs:
+        for (i, timestamp) in runs:
             output = load_run_id_epoch_data(project_name, i)[-1]
             accuracy = output.get("training_accuracy", None)
             epochs = output["epoch"]
             if accuracy is None:
                 continue
             real_run_id = f"<a href={project_name}/{i}>{project_name}</a>"
-            table += "\n".join([
+            rows.append(("\n".join([
                 "<tr>",
                     f"<td>{real_run_id}</td>",
                     f"<td>{accuracy}</td>",
                     f"<td>{epochs}</td>",
                 "</tr>",
-            ])
+            ]), timestamp))
+    table += "\n".join(
+        list(map((lambda x: x[0]), sorted(rows, key=lambda x: x[1], reverse=True))))
     table += "</table>"
     return table
 

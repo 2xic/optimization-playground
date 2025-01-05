@@ -23,6 +23,7 @@ def get_rank():
 
 def get_target_port() -> int:
     main_module = sys.modules['__main__']
+    # print(main_module)
     data = main_module.__file__
 
     min_port: int = 10000 

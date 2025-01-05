@@ -50,13 +50,15 @@ class MinimalCrossEntropyLoss(torch.nn.Module):
         return torch.nn.functional.cross_entropy(logits, labels)
 
 class NextTokenPrediction(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, padding_index):
         super(NextTokenPrediction, self).__init__()
+        self.padding_index = padding_index
 
     def forward(self, logits, y):
         return F.cross_entropy(
             logits,
-            y.reshape((-1))
+            y.reshape((-1)),
+            ignore_index=self.padding_index,
         )
 
 class TfIdfAnchor(torch.nn.Module):

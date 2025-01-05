@@ -932,3 +932,22 @@ Using monte carlo as part of the reasoning steps for the LLM.
 ## [Training Large Language Models to Reason in a Continuous Latent Space](https://arxiv.org/pdf/2412.06769)
 - Use the output of the last hidden state of the LLM as a representation of reasoning state.
 - Uses special tokens `<bot>` and `<eot>` to switch between lantent thought mode and langauge mode.
+
+## [Deliberative Alignment: Reasoning Enables Safer Language Models](https://assets.ctfassets.net/kftzwdyauwt9/4pNYAZteAQXWtloDdANQ7L/0aedc43a8f2d1e5c71c5e114d287593f/OpenAI_Deliberative-Alignment-Reasoning-Enables-Safer_Language-Models_122024_3.pdf)
+- Aligment paper for the O-series of OpenAI models.
+- No human labels are required and they instead use model generated data.
+- [Overall aritecture](https://assets.ctfassets.net/kftzwdyauwt9/4pNYAZteAQXWtloDdANQ7L/0aedc43a8f2d1e5c71c5e114d287593f/OpenAI_Deliberative-Alignment-Reasoning-Enables-Safer_Language-Models_122024_3.pdf#page=5)
+  - Input prompts, the saftey category and the saftey spec is used as input. The model then outputs a COT and the actual output. Then another model judges the output.
+  - This is then used in supervised fine tuning. 
+
+They alos releasted the [OpenAI o1 System Card](https://arxiv.org/pdf/2412.16720), but there is nothing useful there. 
+
+## [Stealing User Prompts from Mixture of Experts](https://arxiv.org/pdf/2410.22884)
+- `token dropping` happens when the expers capcity is exceeded. This causes tokens to be dropped or re-routed.
+  - https://152334h.github.io/blog/knowing-enough-about-moe/
+  - 
+- This papers shows a novel attack that can be used to reveal the user inputs. The attack is named "MoE Tiebreak Leakage". 
+- They assume that the attacker has whitebox access and they controll where the attack and user input is wihtin a batch (in other words, attack isn't very realistic)
+
+## [Benchmarks LLMs have beaten](https://r0bk.github.io/killedbyllm/)
+Nice websites with benchmarks that LLMs have defated. 

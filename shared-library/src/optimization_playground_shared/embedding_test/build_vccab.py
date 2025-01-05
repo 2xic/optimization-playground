@@ -6,20 +6,38 @@ import glob
 import torch
 import os 
 from tqdm import tqdm
+import torch.nn.functional as F
 
-os.makedirs("tensors", exist_ok=True)
+root_path = "/root/"
+os.makedirs(os.path.join(root_path, "tensors"), exist_ok=True)
+os.makedirs(os.path.join(root_path, "tensors_processed"), exist_ok=True)
 
 vocab = SimpleVocab()
-files = sorted(glob.glob("/root/text_document_dataset/*"))
-documents = []
-for i in tqdm(files, "fitting documents"):
-    with open(i, "r") as file:
-        documents.append(file.read())
-vocab.fit(documents)
-vocab.lock()
-vocab.save(".", prefix="pretrained")
+if not os.path.isfile(vocab.get_path(".", prefix="pretrained")):
+    files = sorted(glob.glob("/root/text_document_dataset/*"))
+    documents = []
+    for i in tqdm(files, "fitting documents"):
+        with open(i, "r") as file:
+            documents.append(file.read())
+    vocab.fit(documents)
+    vocab.lock()
+    vocab.save(".", prefix="pretrained")
+    for (i, filename) in tqdm(list(zip(documents, files)), "storing pre computed tensors"):
+        encoded = torch.tensor(vocab.encode(i))
+        name = os.path.basename(filename)
+        torch.save(encoded, os.path.join(root_path, "tensors", name))
+else:
+    vocab.load(".", prefix="pretrained")
 
-for (i, filename) in tqdm(list(zip(documents, files)), "storing pre computed tensors"):
-    encoded = torch.tensor(vocab.encode(i))
+# aggregated batch size
+SEQUENCE_LENGTH = 256
+for filename in glob.glob("/root/tensors/*"):
+    load = torch.load(filename, weights_only=True)
+    if load.shape[-1] < SEQUENCE_LENGTH:
+        continue
+    delta = SEQUENCE_LENGTH - (load.shape[-1] % SEQUENCE_LENGTH) if SEQUENCE_LENGTH < load.shape[-1] else SEQUENCE_LENGTH - load.shape[-1]
+    # Now all vectors loaded will be divisible by the sequence length. 
+    resized = F.pad(load, (0, delta), value=vocab.PADDING_IDX).long()
+    resized = resized.reshape((resized.shape[0] // SEQUENCE_LENGTH, SEQUENCE_LENGTH))
     name = os.path.basename(filename)
-    torch.save(encoded, os.path.join("tensors", name))
+    torch.save(resized, os.path.join(root_path, "tensors_processed", name))

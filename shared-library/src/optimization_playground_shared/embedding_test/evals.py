@@ -11,7 +11,9 @@ Metrics for knowing if the model embedding even learn anything.
 """
 class EvaluationMetrics:
     def __init__(self):
-        X, y = get_document_eval()
+        X, y = get_document_eval(
+            n=10_000
+        )
         X, y = balance_classes(X, y)    
         X = [str(i) for i in X]
         assert type(X[0]) == str, type(X[0])
@@ -30,4 +32,4 @@ class EvaluationMetrics:
             )        
             model.fit(X_train, y_train)
             accuracy = accuracy_score(y_test, list(map(lambda x: (1 if x > 0.5 else 0), model.predict(X_test))))
-            return accuracy
+            return round(accuracy, 4)

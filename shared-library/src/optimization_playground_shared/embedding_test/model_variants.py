@@ -19,11 +19,6 @@ class HighLevelModel(abc.ABC):
     def transforms(docs: List[str]) -> torch.Tensor:
         pass
 
-#    @property
-#    @abc.abstractmethod
-#    def model(self) -> nn.Module:
-#        pass
-
 """
 Model variants
 """
@@ -32,9 +27,9 @@ class BaseModel(HighLevelModel):
         self.document_encoder: SimpleVocab = document_encoder
         self.model = None
         self.name = name
+        self._device = None
         self.embedding_size = 512
         self.sequence_length = 2048
-        self._device = None
 
     def fit_transforms(self, docs):
         self.train(docs)
@@ -78,7 +73,8 @@ class BaseModel(HighLevelModel):
             os.path.join(
                 path,
                 self._prefix + "model.pth"
-            )
+            ),
+            weights_only=True
         )
         self.model = self._load_model(model_data)
         self.model.load_state_dict(model_data["state_dict"])
@@ -87,6 +83,7 @@ class BaseModel(HighLevelModel):
             path,
             self._prefix
         )
+        self.model.document_encoder = self.document_encoder
         return self
 
     @property
@@ -177,29 +174,63 @@ class GptEmbeddings(GptTransformerModel):
         source = self.layer_norm(source)
         return source.reshape((x.shape[0], -1))
 
-    def get_embedding(self, docs):
-        embeddings = torch.zeros((len(docs), 512))
-        try:
-            for index, text in enumerate(docs):
-                X = get_document_dataset_sequence(
-                    self.document_encoder, 
-                    [text], 
-                    SEQUENCE_LENGTH=self.config.sequence_length
-                )
-                embeddings[index] = self.forward(X).mean(dim=0)
-        except Exception as e:
-            print(e)
+    def get_embedding(self, docs, document_encoder, device):
+        embeddings = torch.zeros((len(docs), 512), device=device)
+        for index, text in enumerate(docs):
+            X = get_document_dataset_sequence(
+                document_encoder, 
+                [text], 
+                SEQUENCE_LENGTH=self.config.sequence_length
+            ).to(device)
+            output =  self.forward(X)
+            embeddings[index] = output.mean(dim=0)
         return embeddings
     
+
+class GptEmbeddingsFineTuned(GptEmbeddings):
+    def __init__(self, config: Config) -> None:
+        super().__init__(config)
+        self.fine_tuned_layers = nn.Sequential(*[
+            nn.Linear(self.config.embedding_dim, 512),
+            nn.Linear(512, 128),
+            nn.Linear(128, self.config.embedding_dim),
+        ])
+        self.linear_layer = nn.Sequential(*[
+            nn.Linear(512, 1),
+            nn.Sigmoid()
+        ])
+
+    def forward(self, x):
+        assert len(x.shape) == 2
+        with torch.no_grad():
+            source = self.embedding(x) + self.pos_encoder(x)
+            source = self.dropout(source)
+            source = self.transformer_decoder(source)
+            source = self.layer_norm(source)
+        source = self.fine_tuned_layers(source)
+        return source.reshape((x.shape[0], -1))
+
 class TransformerModelWrapper(BaseModel):
     def __init__(self, name, vocab):
         super().__init__(name, vocab)
-        self._embedding = None
 
     def transforms(self, docs):
-        self._embedding.load_state_dict(self.model.state_dict())
-        return self._embedding.get_embedding(docs)
-    
+       # assert isinstance(self.model, GptEmbeddings)
+        self.model.to(self._device)
+        with torch.no_grad():
+            if isinstance(self.model, GptEmbeddings):
+                assert self.document_encoder is not None
+                return self.model.get_embedding(docs, self.document_encoder, device=self._device)
+            else:
+                model = GptTransformerModel(self.config).to(self._device)
+                model.load_state_dict(self.model.state_dict())
+                return model.get_embedding(docs, self.document_encoder, device=self._device)
+            
+    def fine_tune_model(self, replacement: nn.Module):
+        replacement.load_state_dict(self.model.state_dict(), strict=False)
+        self.model = replacement
+        return self
+
     def _load_model(self, model_data):
         model = GptEmbeddings(
             self.get_config(
@@ -220,13 +251,8 @@ class TransformerModelWrapper(BaseModel):
         }
 
     def create_model(self):
-        self.config = self.get_config(
-            self.document_encoder.size,
-            128,
-        )
+        self.config = self.get_config(self.document_encoder.size, 128)
         self.model = GptTransformerModel(self.config) 
-        self._embedding = GptEmbeddings(self.config)
-        self._embedding.document_encoder = self.document_encoder
 
         self.sequence_length = self.config.sequence_length
         return self

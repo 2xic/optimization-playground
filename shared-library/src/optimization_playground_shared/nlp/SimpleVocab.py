@@ -121,11 +121,14 @@ class SimpleVocab:
     @property
     def size(self):
         return len(self.vocab.index_vocab)
+    
+    def get_path(self, path, prefix=""):
+        return os.path.join(path, prefix + "vocab.pkl")
 
     def save(self, path, prefix=""):
-        with open(os.path.join(path, prefix + "vocab.pkl"), "wb") as f:
+        with open(self.get_path(path, prefix), "wb") as f:
             pickle.dump(self, f)
 
     def load(self, path, prefix=""):
-        with open(os.path.join(path, prefix + "vocab.pkl"), "rb") as f:
+        with open(self.get_path(path, prefix), "rb") as f:
             return pickle.load(f)

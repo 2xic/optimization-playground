@@ -88,11 +88,18 @@ async code.
 """
 def get_document_eval(n=50):
     host = os.environ["url_to_text_host"]
-    urls = urljoin(host, f"/dataset?limit={n}")
+    url = urljoin(host, f"/dataset?limit={n}")
     X = []
     y = []
-    results = requests.get(urls).json()
-    print(results.keys())
+    cache_path = get_cache(url)
+    results = None
+    if os.path.isfile(cache_path):
+        with open(cache_path, "r") as file:
+            results = json.load(file)
+    else:
+        results = requests.get(url).json()
+        with open(cache_path, "w") as file:
+            json.dump(results, file)
     for i in results["entries"]:
         X.append(i["text"])
         y.append(i["is_good"])

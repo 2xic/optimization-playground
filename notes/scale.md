@@ -37,3 +37,6 @@ How does scaling laws affect transfer learning?
 
 ## [DEEP LEARNING SCALING IS PREDICTABLE, EMPIRICALLY](https://arxiv.org/pdf/1712.00409)
 The first paper (?) to notice power laws with model/data/computation scales.
+
+## [An Empirical Exploration in Quality Filtering of Text Data](https://arxiv.org/pdf/2109.00698)
+Aggressively filtering out data from common crawl results in a worse model. The author speculates the reason for this being that the proxy metrics hurts the performance of the actual metric.

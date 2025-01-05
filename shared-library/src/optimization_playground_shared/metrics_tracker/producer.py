@@ -16,21 +16,33 @@ load_dotenv()
 
 assert "HOST" in os.environ, "Missing host keyword"
 
+def in_jupyter_notebook():
+    try:
+        from IPython import get_ipython
+        if 'IPKernelApp' in get_ipython().config:  # Check for IPython kernel
+            return True
+    except Exception:
+        return False
+    return False
+
 class Tracker:
     def __init__(self, project_name) -> None:
         self.hostname = os.environ["HOST"]
         assert self.hostname is not None
         if not "https://" in self.hostname:
             self.hostname = "https://" + self.hostname
-        print(f"Tracking metrics to: {self.hostname}")
         self.name = project_name
         self.run_id = uuid.uuid4()
         self.metric_queue = queue.Queue()
         # we send feedback -> feedback is good
         self.stop_background_thread = threading.Event()
         # sending resource updates :O
-        self.background_thread = threading.Thread(target=self.start_background_thread, daemon=True)
-        self.background_thread.start()
+        if not in_jupyter_notebook():
+            print(f"Tracking metrics to: {self.hostname}")
+            self.background_thread = threading.Thread(target=self.start_background_thread, daemon=True)
+            self.background_thread.start()
+        else:
+            print("Running inside a notebook, no metrics are tracked.")
 
     def start_background_thread(self):
         print("Starting to send resource usage")

@@ -1,6 +1,11 @@
 import setuptools
+import os 
 
-with open('requirements.txt') as f:
+path = os.path.join(
+    os.path.dirname(__file__),
+    "requirements.txt"
+)
+with open(path) as f:
     required = f.read().splitlines()
 
 print(setuptools.find_packages(where="src"))

@@ -2,10 +2,10 @@ from flask import Flask, request, jsonify
 from .model_config import ModelConfig
 
 all_models = [
-    ModelConfig("NegativeSample").load_trained_model(),
-    ModelConfig("NextTokenPrediction").load_trained_model(),
-    ModelConfig("TfIdfAnchor").load_trained_model(),
-    ModelConfig("TripletMarginLoss").load_trained_model(),
+    ModelConfig("NegativeSample").load_trained_model()._model,
+    ModelConfig("NextTokenPrediction").load_trained_model()._model,
+    ModelConfig("TfIdfAnchor").load_trained_model()._model,
+    ModelConfig("TripletMarginLoss").load_trained_model()._model,
 ]
 
 mapping = {}

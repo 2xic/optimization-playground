@@ -16,4 +16,3 @@ class Trainer(MultipleGpuTrainWrapper):
 if __name__ == "__main__":
     trainer = Trainer()
     trainer.start()
-    trainer.train(torch.device('cpu'))

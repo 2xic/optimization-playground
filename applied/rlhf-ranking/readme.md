@@ -7,6 +7,11 @@ Running the hosted model.
 python3 run_rankmodel.py
 ```
 
+# Todo
+- Add some more metrics 
+  - https://en.wikipedia.org/wiki/Discounted_cumulative_gain
+
+# Models
 ## Listrank list
 ![listrank](./training_listnet_list.png)
 
