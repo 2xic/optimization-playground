@@ -8,7 +8,7 @@ class Trainer(MultipleGpuTrainWrapper):
     def __init__(self) -> None:
         super().__init__()
         self.model_config = ModelConfig("NextTokenPrediction_post_training")
-        # TODO: this isn't a clean way at all to load in a moodel.
+        # TODO: this isn't a clean way at all to load in a model.
         old_name = self.model_config._model.name
         self.model_config._model.name = "NextTokenPrediction"
         self.model_config.load_trained_model()

@@ -1,6 +1,5 @@
 from optimization_playground_shared.distributed.MultipleGpuTrainWrapper import MultipleGpuTrainWrapper
 from .model_config import ModelConfig
-import torch
 
 class Trainer(MultipleGpuTrainWrapper):
     def __init__(self) -> None:

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from ..nlp.DocumentEncoderSequence import SimpleVocab, get_document_dataset
+from ..nlp.wordpiece.bpeDocumentDecoder import get_document_sequence as get_bpe_document_sequence 
 import os 
 import abc
 from typing import List
@@ -49,12 +50,8 @@ class BaseModel(HighLevelModel):
         for index, text in enumerate(docs):
             inputs = get_document_dataset(self.document_encoder, [text], SEQUENCE_LENGTH=self.sequence_length)
             inputs = inputs.to(device)
-            embedding = torch.zeros((self.embedding_size), device=device)
-            batch_size = self.embedding_size
-            for i in range(0, inputs.shape[0], batch_size):
-                output = self.model(inputs[i:i+batch_size]).mean(dim=0)
-                embedding += output
-            embeddings[index] = (embedding / inputs.shape[0])
+            embedding = self.model(inputs).mean(dim=0)
+            embeddings[index] = embedding
         return embeddings
 
     def save(self):
@@ -83,7 +80,6 @@ class BaseModel(HighLevelModel):
             path,
             self._prefix
         )
-        self.model.document_encoder = self.document_encoder
         return self
 
     @property
@@ -175,15 +171,26 @@ class GptEmbeddings(GptTransformerModel):
         return source.reshape((x.shape[0], -1))
 
     def get_embedding(self, docs, document_encoder, device):
-        embeddings = torch.zeros((len(docs), 512), device=device)
+        embeddings = torch.zeros((len(docs), 
+                                  #self.config.feed_forward * self.config.embedding_dim
+                                  self.config.sequence_length * self.config.embedding_dim
+                                ), device=device)
         for index, text in enumerate(docs):
-            X = get_document_dataset_sequence(
-                document_encoder, 
-                [text], 
-                SEQUENCE_LENGTH=self.config.sequence_length
-            ).to(device)
-            output =  self.forward(X)
-            embeddings[index] = output.mean(dim=0)
+            if isinstance(document_encoder, SimpleVocab):
+                X = get_document_dataset_sequence(
+                    document_encoder, 
+                    [text], 
+                    SEQUENCE_LENGTH=self.config.sequence_length
+                ).to(device)
+            else:
+                X = get_bpe_document_sequence(
+                    document_encoder, 
+                    [text], 
+                    SEQUENCE_LENGTH=self.config.sequence_length
+                ).to(device)
+            if X.shape[0] > 0:
+                output =  self.forward(X)
+                embeddings[index] = output.mean(dim=0)
         return embeddings
     
 
@@ -222,10 +229,10 @@ class TransformerModelWrapper(BaseModel):
                 assert self.document_encoder is not None
                 return self.model.get_embedding(docs, self.document_encoder, device=self._device)
             else:
-                model = GptTransformerModel(self.config).to(self._device)
+                model = GptEmbeddings(self.config).to(self._device)
                 model.load_state_dict(self.model.state_dict())
                 return model.get_embedding(docs, self.document_encoder, device=self._device)
-            
+
     def fine_tune_model(self, replacement: nn.Module):
         replacement.load_state_dict(self.model.state_dict(), strict=False)
         self.model = replacement

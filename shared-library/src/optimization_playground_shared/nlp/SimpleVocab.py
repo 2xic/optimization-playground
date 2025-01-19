@@ -129,6 +129,6 @@ class SimpleVocab:
         with open(self.get_path(path, prefix), "wb") as f:
             pickle.dump(self, f)
 
-    def load(self, path, prefix=""):
+    def load(self, path, prefix="") -> 'SimpleVocab':
         with open(self.get_path(path, prefix), "rb") as f:
             return pickle.load(f)

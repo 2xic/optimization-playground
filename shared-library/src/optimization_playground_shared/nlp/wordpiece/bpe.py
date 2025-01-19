@@ -5,6 +5,9 @@ from collections import defaultdict
 from typing import List
 import tqdm 
 from ..SimpleVocab import splitter
+import os
+import pickle
+import time
 
 class VocabIndex:
     def __init__(self) -> None:
@@ -58,10 +61,10 @@ class VocabIndex:
             self.tokens_index[pair[0] + pair[1]] = None
             # Delete the old token as we have optimized
 
-    def get_token_by_index(self, idx):
-        if idx in self.system_tokens:
-            return self.system_tokens[idx]
-        return self.tokens_index[idx]
+    def get_token_by_index(self, word):
+        if word in self.system_tokens:
+            return self.system_tokens[word]
+        return self.tokens_index[word]
 
     @property
     def size(self):
@@ -130,12 +133,26 @@ class BPE:
                     output,
                     pair
                 )
-        
+        # This should update it. 
+        self.set_index()
+        return True
+    
+    def set_index(self):
         for index, value in enumerate(list(self.index.system_tokens.keys()) + list(self.index.tokens_index.keys())):
             self.index.tokens_index[value] = index
             self.index.index_tokens[index] = value
         assert max(self.index.tokens_index.values()) <= self.size
-        return True
+
+    def fit(self, documents):
+        self.add_tokens(documents)
+        # Run the merger for one hour.
+        start = time.time() 
+        while (time.time() - start) > 3600:
+#        while (time.time() - start) > 60:
+            if not self.run_merge_step():
+                break
+        self.set_index()
+        return self
 
     def _get_stats(self):
         """
@@ -149,14 +166,14 @@ class BPE:
                 pairs[symbols[i], symbols[i + 1]] += frequency
         return pairs
     
-    def encode(self, sentence):
-        assert type(sentence) == str
+    def encode(self, document):
+        assert type(document) == str
         output = []
-        for sentence in splitter(sentence):
-            for word in self._encode(sentence):
+        for tokens in splitter(document):
+            for word in self._encode(tokens):
                 output.append(self.index.get_token_by_index(word))
         return output
-    
+
     def _encode(self, word):
         assert type(word) == str
         word = list(word) + ['</w>']  # Add end-of-word token
@@ -190,6 +207,17 @@ class BPE:
     @property
     def size(self):
         return len(self.index.tokens_index) + 1
+
+    def get_path(self, path, prefix=""):
+        return os.path.join(path, prefix + "bpe_vocab.pkl")
+
+    def save(self, path, prefix=""):
+        with open(self.get_path(path, prefix), "wb") as f:
+            pickle.dump(self, f)
+
+    def load(self, path, prefix="") -> 'BPE':
+        with open(self.get_path(path, prefix), "rb") as f:
+            return pickle.load(f)
 
 if __name__ == "__main__":
     # example word form the paper

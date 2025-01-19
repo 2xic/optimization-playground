@@ -837,7 +837,11 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 - [One of the best compute optimal models on the market](https://api-docs.deepseek.com/news/news1226#still-the-best-value-in-the-market-)
 - They trained using FP8. They also implemented some new traning frameworks(`HAI-LLM`) and algorithms (`DualPipe`) to train more compute optimal.
 - Solves the needle in the haystack problem without any issues.
-- 
+
+### [How has DeepSeek improved the Transformer architecture?](https://epoch.ai/gradient-updates/how-has-deepseek-improved-the-transformer-architecture)
+- Multi-head latent attention (MLA)
+- Mixture-of-experts innovations
+
 
 ### [Better & Faster Large Language Models via Multi-token Prediction](https://arxiv.org/pdf/2404.19737)
 - Instead of predicting one next token, predict multiple 
@@ -951,3 +955,18 @@ They alos releasted the [OpenAI o1 System Card](https://arxiv.org/pdf/2412.16720
 
 ## [Benchmarks LLMs have beaten](https://r0bk.github.io/killedbyllm/)
 Nice websites with benchmarks that LLMs have defated. 
+
+[arc](https://arcprize.org/blog/oai-o3-pub-breakthrough) was for instance recently beaten by the o3 model. While it still fails are some very simple tasks.
+
+# [Frontier language models have become much smaller](https://epoch.ai/gradient-updates/frontier-language-models-have-become-much-smaller)
+![https://epoch.ai/assets/images/gradient-updates/2024/frontier-language-models-have-become-much-smaller/token-economics.png](https://epoch.ai/assets/images/gradient-updates/2024/frontier-language-models-have-become-much-smaller/token-economics.png)
+
+## [Large Concept Models: Language Modeling in a Sentence Representation Space](https://ai.meta.com/research/publications/large-concept-models-language-modeling-in-a-sentence-representation-space/)
+- Trained to do sentence predictions in embedding spcae
+  - Modeling is high dimensional embeding space instead of discrete tokens
+- Based on [Sonar](https://arxiv.org/pdf/2308.11466)
+
+## [IDK token](https://arxiv.org/pdf/2412.06676v1)
+- Objective: whenever the model is about to output the wrong answer to something, increase the probability of the [IDK] token instead.
+- [Evals](https://arxiv.org/pdf/2412.06676v1#page=6)
+

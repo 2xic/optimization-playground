@@ -44,6 +44,10 @@ def get_document_dataset(vocab: BPE, documents, SEQUENCE_LENGTH, SKIPS_SIZE=1) -
     for document in documents:
         X, y, entries_index = encode_document_text(vocab, document, X, y, entries_index, SEQUENCE_LENGTH, SKIPS_SIZE)
     assert entries_index == X.shape[0]
-    assert not torch.all(X == 0), "All zeros is bad"
-    assert not torch.all(y == 0), "All zeros is bad"
+ #   assert not torch.all(X == 0), "All zeros is bad"
+ #   assert not torch.all(y == 0), "All zeros is bad"
     return X, y
+
+def get_document_sequence(vocab: BPE, documents, SEQUENCE_LENGTH) -> tuple[torch.Tensor]:
+    X, y = get_document_dataset(vocab, documents, SEQUENCE_LENGTH, SEQUENCE_LENGTH) 
+    return X

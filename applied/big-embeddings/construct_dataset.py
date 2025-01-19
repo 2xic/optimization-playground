@@ -30,4 +30,5 @@ async def main():
         f.write(zip_data)
 
 if __name__ == "__main__":
+    print("v2")
     asyncio.run(main())

@@ -11,6 +11,7 @@ from .resource_sender import get_cpu_resource_usage, get_ram_resource_usage, get
 import threading
 import time
 import queue
+import logging
 
 load_dotenv()
 
@@ -45,6 +46,7 @@ class Tracker:
             print("Running inside a notebook, no metrics are tracked.")
 
     def start_background_thread(self):
+        logging.basicConfig(level=logging.INFO)
         print("Starting to send resource usage")
         while not self.stop_background_thread.set() or not self.metric_queue.empty():
             #if not self.metric_queue.empty():

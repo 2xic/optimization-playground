@@ -27,4 +27,11 @@
 - VIT-VAE
 - Running on [etchded](https://www.etched.com/blog-posts/oasis), actually, no, it just seemed that way. There is this [article](https://www.technologyreview.com/2024/10/31/1106461/this-ai-generated-minecraft-may-represent-the-future-of-real-time-video-generation/) and saw this on [Twitter](https://x.com/__tinygrad__/status/1854851587773956569).
 
+### [DIFFUSION MODELS ARE REAL-TIME GAME ENGINES](https://arxiv.org/pdf/2408.14837)
+- Two phases of training
+  - RL-Agent plays the game and the sessions are recorded
+  - Diffusion model is trained to produce the next frame conditioned on the previous + action
+- Limitations are related to long term memory.
 
+## [Do generative video models learn physical principles from watching videos?](https://arxiv.org/pdf/2501.09038)
+- New dataset for testing physics understanding of a model.

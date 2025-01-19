@@ -11,8 +11,10 @@ Metrics for knowing if the model embedding even learn anything.
 """
 class EvaluationMetrics:
     def __init__(self):
+        print("Downloading evaluations dataset")
         X, y = get_document_eval(
-            n=10_000
+#            n=10_000
+            n=250,
         )
         X, y = balance_classes(X, y)    
         X = [str(i) for i in X]

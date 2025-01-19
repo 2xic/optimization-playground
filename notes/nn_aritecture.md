@@ -66,4 +66,7 @@ The most interesting results from this paper imo is the fact that you cna tradeo
 [Same as QRNN?](https://x.com/Smerity/status/1842012433281646606)
 - at least close to.
 
-
+### [SageAttention2](https://arxiv.org/pdf/2411.10958)
+[Source code](https://github.com/thu-ml/SageAttention)
+- Surpasses FlashAttention2
+- 

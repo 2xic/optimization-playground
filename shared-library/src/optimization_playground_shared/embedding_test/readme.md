@@ -28,4 +28,15 @@ Most deep learning models are based on context models. Things like bert, word2ve
 Some ideas
 - using tf-idf as anchor in the loss
 - sample a document into paragraphs and ask the model if the two sequences are part of it or not.
+- train gpt like model and just the things mentioned above during post-training
+- train gpt like model and fine-tune it using some ranking algorithms (RankNet, etc).
+
+## Training larger models
+- Mixed Precision
+  - https://pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/
+  - https://github.com/NVIDIA/apex
+- https://pytorch.org/docs/stable/distributed.elastic.html
+- Profiling
+  - https://huggingface.co/blog/train_memory?utm_source=pocket_shared
+  - 
 

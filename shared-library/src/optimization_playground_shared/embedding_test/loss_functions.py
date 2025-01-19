@@ -54,7 +54,7 @@ class NextTokenPrediction(torch.nn.Module):
         super(NextTokenPrediction, self).__init__()
         self.padding_index = padding_index
 
-    def forward(self, logits, y):
+    def forward(self, logits, y) -> torch.Tensor:
         return F.cross_entropy(
             logits,
             y.reshape((-1)),

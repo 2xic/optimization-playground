@@ -1,4 +1,5 @@
 import numpy as np
+np.random.seed(42)
 
 def cast_to_np_array(x):
     if type(x) == list:

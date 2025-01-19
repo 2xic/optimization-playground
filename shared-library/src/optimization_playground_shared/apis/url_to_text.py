@@ -100,6 +100,7 @@ def get_document_eval(n=50):
         results = requests.get(url).json()
         with open(cache_path, "w") as file:
             json.dump(results, file)
+        print("Save document eval to file")
     for i in results["entries"]:
         X.append(i["text"])
         y.append(i["is_good"])
@@ -111,8 +112,11 @@ async def get_document_dataset():
         urljoin(host, f"/api/dataset"),
         urljoin(host, f"/api/reading_list"),
     ]
-    for page in range(1_000):
-        urls.append(urljoin(host, f"/api/links/30/{page}"))
+    # Load in the top n pages links of links from the last month
+    for page in range(6_500):
+        urls.append(urljoin(host, f"/api/links/30/{page}?includeLinksWithFeedback=true"))
+    for page in range(1_00):
+        urls.append(urljoin(host, f"/api/links/365/{page}?includeLinksWithFeedback=true"))
     
     operator = lambda x: get_url(x)
     async for v in gather_batch(urls, operator):
