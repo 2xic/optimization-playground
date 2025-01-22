@@ -145,6 +145,13 @@ class OpenAiCompletion:
             responses.append(response)
         return "\n".join(responses)
 
+    def chat_model(self, messages):
+        response = self._get_completions(
+            messages,
+            response_format=None,
+        )
+        return response
+
     def _get_completions(self, messages, response_format):
         response = get_completion(
             messages=messages,

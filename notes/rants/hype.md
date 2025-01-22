@@ -9,4 +9,5 @@ But get a reality checked.
 
 ## claims
 - [Meta's will have AI on the level of midlevel engineers in 2025 - Zuckerberg](https://archive.is/SHoY9#selection-2342.0-2342.1)
-  - 
+- [2027 is the year of ASI](https://x.com/DaveShapi/status/1880254494790816012), but we get robots in 2026.
+- 

@@ -1,0 +1,1 @@
+ChatGPT has the concept of memory, this is just an api version of that, but for concepts. One thing I use this for is for instance for talking about improvements to sleep and experiments to aspects of life (when I eat, when I sleep, effects of naps, etc.).
