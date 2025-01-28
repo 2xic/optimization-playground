@@ -66,3 +66,11 @@ There are some examples from driving scene which the model is also able to corre
 - Task prompt + Image = Answer + Visualizations
 - https://x.com/___Harald___/status/1852039810812203198
 - 
+
+### [Janus-Pro: Unified Multimodal Understanding and Generation with Data and Model Scaling](https://github.com/deepseek-ai/Janus/blob/main/janus_pro_tech_report.pdf)
+- Builds on top of [Janus](https://arxiv.org/pdf/2410.13848) (model from late last year)
+- Improved by doing mainly three things
+  - Optimized training strategy.
+  - Expanded training data.
+  - Larger model size.
+- 

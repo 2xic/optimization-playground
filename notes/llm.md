@@ -970,3 +970,9 @@ Nice websites with benchmarks that LLMs have defated.
 - Objective: whenever the model is about to output the wrong answer to something, increase the probability of the [IDK] token instead.
 - [Evals](https://arxiv.org/pdf/2412.06676v1#page=6)
 
+## [DeepSeek-R1: Incentivizing Reasoning Capability in LLMs via Reinforcement Learning](https://arxiv.org/pdf/2501.12948)
+- Using pure RL to improve reasoning of the model
+- Use Group Relative Policy Optimization (GRPO), same as they used for DeepSeekv2.
+- Reward depends on the task, but output can be verified by compilers if the question is related to prgoraming. Math can be evaluated by answer, etc.
+- Some issues with the pure RL approach, but it can be solved with some serving some good quality data to account for the cold start problem.
+- [Arc Score](https://x.com/arcprize/status/1881761991116927066)

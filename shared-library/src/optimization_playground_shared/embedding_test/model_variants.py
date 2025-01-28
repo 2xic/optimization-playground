@@ -189,7 +189,12 @@ class GptEmbeddings(GptTransformerModel):
                     SEQUENCE_LENGTH=self.config.sequence_length
                 ).to(device)
             if X.shape[0] > 0:
-                output =  self.forward(X)
+                output = torch.zeros((1, self.config.sequence_length * self.config.embedding_dim), device=device)
+                for i in range(0, X.shape[0], 8):
+                    output = torch.concat((
+                        output,
+                        self.forward(X[i:i+8])
+                    ), dim=0)
                 embeddings[index] = output.mean(dim=0)
         return embeddings
     

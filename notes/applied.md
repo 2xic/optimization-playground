@@ -12,6 +12,7 @@
 
 [ByteDance](https://raw.githubusercontent.com/bytedance/Protenix/refs/heads/main/Protenix_Technical_Report.pdf) made a paper where they reproduce the research. They also open-sourced the model.
 
+[Lucidrains](https://github.com/lucidrains/alphafold3-pytorch?tab=readme-ov-file) is also working on an implementation.
 
 ## NeuralHash
 - Apple made it for some of their [safety features](https://www.apple.com/child-safety/pdf/CSAM_Detection_Technical_Summary.pdf)

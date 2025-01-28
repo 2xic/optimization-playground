@@ -1,5 +1,7 @@
+## Ilya Sutskever recommended papers
 
-There are a few places that list thesse
+
+There are a few places that list theses
 - [Primers • Ilya Sutskever's Top 30](https://aman.ai/primers/ai/top-30-papers/#gpipe-easy-scaling-with-micro-batch-pipeline-parallelism)
 - [The paper list](https://arc.net/folder/D0472A20-9C20-4D3F-B145-D2865C0A9FEE)
 
@@ -26,7 +28,7 @@ Dropout doesn't really work for RNNs and LSTMs. Unless you do it for the non rec
 ## [Keeping Neural Networks Simple by Minimizing the Description Length of the Weights](https://www.cs.toronto.edu/~hinton/absps/colt93.pdf)
 [Minimum description length](https://en.wikipedia.org/wiki/Minimum_description_length)
 
-- Weight pruning (dropout less foramlized ?)
+- Weight pruning (dropout less formalized ?)
 - Uses a coding schema to encode the weights
 
 TODO: need to look more into this one.
@@ -48,7 +50,7 @@ The [TSP table](https://arxiv.org/pdf/1506.03134#page=8) show that the model doe
 See [resnet](../../computer-vision/resnet/), the idea is to have the input of the residucal block be part of the output.
 ```
 X = Input to the block
-F(X)  = The core residucal block
+F(X)  = The core residual block
 ```
 
 Output is then `relu(F(X) + X)`
@@ -80,8 +82,17 @@ I love scaling laws, see [scale](../scale.md) and [scale folder](../model-scale/
 ## [A simple neural network module for relational reasoning](https://arxiv.org/pdf/1706.01427)
 - todo
 
-## [Variational Lossy Autoencoder](https://arxiv.org/abs/1611.02731)
-- todo
+## [Variational Lossy Autoencoder](https://arxiv.org/pdf/1611.02731)
+- Paper from OpenAi
+- References Bit-back coding a lot, there is a good blogpost on that [here](https://deeprender.ai/blog/BitsBackCoding).
+- Some general paper notes
+  - VAE focuses on representation learning, VLAE focuses on global structure. This improves the output after the reconstruction.
+  - https://www.cs.ubc.ca/labs/lci/mlrg/slides/2020-03-17-MLRG-VLAE-Dylan.pdf
+  - https://ruishu.io/2017/01/14/one-bit/
+  - https://github.com/duanzhiihao/lossy-vae/tree/main
+  - https://encode.su/threads/3886-Very-simplifued-small-example-Bits-back-coding
+  - http://zhat.io/bits-back-coding/
+  - 
 
 ## [Relational recurrent neural networks](https://arxiv.org/pdf/1806.01822)
 - todo
@@ -95,7 +106,7 @@ I love scaling laws, see [scale](../scale.md) and [scale folder](../model-scale/
 ## [A Tutorial Introduction to the Minimum Description Length Principle](https://arxiv.org/pdf/math/0406077)
 - todo
 
-## [Machine Super Inteligence](http://www.vetta.org/documents/Machine_Super_Intelligence.pdf)
+## [Machine Super Intelligence](http://www.vetta.org/documents/Machine_Super_Intelligence.pdf)
 Shane Legg (co-founder of DeepMind)
 - [slides](https://pdfs.semanticscholar.org/e758/b579456545f8691bbadaf26bcd3b536c7172.pdf) 
 - 
@@ -104,4 +115,4 @@ Shane Legg (co-founder of DeepMind)
 [Book](https://www.amazon.com/Kolmogorov-Complexity-Algorithmic-Randomness-Mathematical/dp/1470431823/ref=sr_1_1?crid=VGMWSMEXUNHK&dib=eyJ2IjoiMSJ9.MaOBOm3zOhbUF6HPcTrBlr9Cdwj_FBFyiowKOoXHcLgJuwUfdCiWc7w5Dg5PQKpzf0abKBShqG6SRwy0XW5x4nAhn1ks7Om6PqFBrQVH2X2AKeVQSNiqzrtg_jMZEKnLTf6t4GSwcfiQyvYQhYDvCg.r7m6lufVMX5tGVepNIsyPyPN5LkkgdRGByodt1aH_s8&dib_tag=se&keywords=Kolmogorov+Complexity+and+Algorithmic+Randomness&qid=1729951561&sprefix=%2Caps%2C236&sr=8-1)
 
 ## cs231n
-[Standford courcse ](https://cs231n.github.io/)
+[Standford course](https://cs231n.github.io/)

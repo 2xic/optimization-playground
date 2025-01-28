@@ -13,7 +13,8 @@ class TextDataloader(Dataset):
         self.IS_DEBUG_MODE = False
 
         self.SEQUENCE_LENGTH = 256
-        self.glob = sorted(glob.glob("/root/bpe/tensors/*"))
+        self.glob = sorted(glob.glob("/root/tensors/*"))
+        assert len(self.glob) > 0
         # Limit documents if we are in debug mode to do research faster.
         if self.IS_DEBUG_MODE:
             print("Debug mode, skipping some files ... ")

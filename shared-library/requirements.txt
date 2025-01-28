@@ -8,6 +8,6 @@ xgboost
 pyzmq
 flask
 torchvision
-
+wandb
 aiofiles
 aiohttp
