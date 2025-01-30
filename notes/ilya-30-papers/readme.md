@@ -80,7 +80,15 @@ I love scaling laws, see [scale](../scale.md) and [scale folder](../model-scale/
 - todo
 
 ## [A simple neural network module for relational reasoning](https://arxiv.org/pdf/1706.01427)
-- todo
+TLDR of the paper 
+- $$RN (O) = f_{\omega} ( \sum_{i,j} g_{\Omega} (o_i, o_j))$$
+- Where $O$ are set of objects (`i` and `j` are the nth objects), f and g are two neural networks.
+- See [Figure 2](https://arxiv.org/pdf/1706.01427#page=6) for how this would work in practice.
+
+
+Other sources
+- https://harshakokel.com/posts/relational-network/
+- https://ameroyer.github.io/architectures/a_simple_neural_network_module_for_relational_reasoning/
 
 ## [Variational Lossy Autoencoder](https://arxiv.org/pdf/1611.02731)
 - Paper from OpenAi

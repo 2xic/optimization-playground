@@ -4,7 +4,7 @@ import hashlib
 import json
 import numpy as np
 from tqdm import tqdm
-from local_embeddings_api import LocalEmbeddingsModelApi
+from optimization_playground_shared.utils.LocalEmbeddingsModelApi import LocalEmbeddingsModelApi
 """
 1. Get the dataset.
 2. Inference the models on the datasets
@@ -23,6 +23,8 @@ from local_embeddings_api import LocalEmbeddingsModelApi
 3. Run the t-sne model to compress to 2d points.
 """
 from sklearn.manifold import TSNE
+import os 
+
 
 def get_point(prediction):
     tsne = TSNE(random_state=1, n_components=2, n_iter=15000, metric="cosine", init='random', learning_rate='auto')
@@ -38,7 +40,7 @@ def build_dataset_file():
     X, _, metadata = get_dataset()
     results = {}
     for model in [
-        LocalEmbeddingsModelApi("gpt_like_model"),
+        LocalEmbeddingsModelApi("model", os.environ.get("LOCAL_HOST", "http://localhost:1245")),
         OpenAiEmbeddings("text-embedding-ada-002"),
         OpenAiEmbeddings("text-embedding-3-large"),
         OpenAiEmbeddings("text-embedding-3-small"),

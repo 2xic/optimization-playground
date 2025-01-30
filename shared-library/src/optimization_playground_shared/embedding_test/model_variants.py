@@ -5,6 +5,7 @@ from ..nlp.wordpiece.bpeDocumentDecoder import get_document_sequence as get_bpe_
 import os 
 import abc
 from typing import List
+import random
 
 class HighLevelModel(abc.ABC):
     model: nn.Module
@@ -161,6 +162,11 @@ from ..nlp.DocumentEncoderSequence import get_document_dataset as get_document_d
 class GptEmbeddings(GptTransformerModel):
     def __init__(self, config: Config) -> None:
         super().__init__(config)
+        self.transformer_decoder.layers = self.transformer_decoder.layers[:2]
+        self.final_layer = nn.Linear(
+            self._embedding_size,
+            self.embedding_size
+        )
 
     def forward(self, x):
         assert len(x.shape) == 2
@@ -168,36 +174,46 @@ class GptEmbeddings(GptTransformerModel):
         source = self.dropout(source)
         source = self.transformer_decoder(source)
         source = self.layer_norm(source)
-        return source.reshape((x.shape[0], -1))
+#        source = self.final_layer(source)
+        return self.final_layer(source.reshape((x.shape[0], -1)))
+    
+    def disable_require_grad_first_layer(self):
+        for i in list(self.embedding.parameters()) + list(self.pos_encoder.parameters()) +  list(self.transformer_decoder.parameters()):
+            i.requires_grad = False
+        return
+
+    @property
+    def _embedding_size(self):
+        return self.config.sequence_length * self.config.embedding_dim
+
+    @property
+    def embedding_size(self):
+        return 256
 
     def get_embedding(self, docs, document_encoder, device):
-        embeddings = torch.zeros((len(docs), 
-                                  #self.config.feed_forward * self.config.embedding_dim
-                                  self.config.sequence_length * self.config.embedding_dim
-                                ), device=device)
+        embeddings = torch.zeros((len(docs), self.embedding_size), device=device)
         for index, text in enumerate(docs):
             if isinstance(document_encoder, SimpleVocab):
                 X = get_document_dataset_sequence(
                     document_encoder, 
                     [text], 
                     SEQUENCE_LENGTH=self.config.sequence_length
-                ).to(device)
+                )
             else:
                 X = get_bpe_document_sequence(
                     document_encoder, 
                     [text], 
                     SEQUENCE_LENGTH=self.config.sequence_length
-                ).to(device)
+                )
             if X.shape[0] > 0:
-                output = torch.zeros((1, self.config.sequence_length * self.config.embedding_dim), device=device)
-                for i in range(0, X.shape[0], 8):
-                    output = torch.concat((
-                        output,
-                        self.forward(X[i:i+8])
-                    ), dim=0)
-                embeddings[index] = output.mean(dim=0)
+                n = 0
+                output = torch.zeros((1, self.embedding_size), device=device) 
+                indexes = range(0, X.shape[0], 8)
+                for i in random.sample(indexes, k=min(64, len(indexes))):
+                    output += self.forward(X[i:i+8].to(device)).mean(dim=0)
+                    n += 1
+                embeddings[index] = output / n
         return embeddings
-    
 
 class GptEmbeddingsFineTuned(GptEmbeddings):
     def __init__(self, config: Config) -> None:

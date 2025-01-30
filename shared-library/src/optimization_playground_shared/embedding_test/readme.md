@@ -40,3 +40,14 @@ Some ideas
   - https://huggingface.co/blog/train_memory?utm_source=pocket_shared
   - 
 
+## Pre-training 
+Using [applied/embeddings-documents-viz](applied/embeddings-documents-viz) to visualize the model output (the raw next token prediction model) without any fine tuning. 
+
+You can clearly see that our model is packed together a lot more than the other reference models.
+
+![vis](./readme/embeddings_viz.png)
+
+Doing some post training on the model results in the following:
+
+![vis](./readme/embeddings_viz_post_training.png)
+

@@ -17,6 +17,7 @@ from xgboost import XGBRegressor
 from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_classes
 from big_embeddings.Wrapper import Wrapper
 from torch_score_models.linear import ModelInterface
+from optimization_playground_shared.utils.LocalEmbeddingsModelApi import LocalEmbeddingsModelApi
 
 def evaluation():
     X, y = get_dataset()
@@ -27,6 +28,9 @@ def evaluation():
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
+        "local":[
+            LocalEmbeddingsModelApi("model", os.environ.get("LOCAL_HOST", "http://localhost:1245")),
+        ],
         "BM25": [
             BM25(),
         ],

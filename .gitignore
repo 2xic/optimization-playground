@@ -37,3 +37,5 @@ TODO.md
 project.metadata.json
 dataset.csv
 *.mp3
+dataset*.json
+*.pth

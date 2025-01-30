@@ -24,14 +24,8 @@ import glob
 from dotenv import load_dotenv
 import wandb
 import shutil
+from ..utils.RunHostedModel import ModelHost
 
-# start a new wandb run to track this script
-run = wandb.init(
-    project="my-awesome-project",
-    config={
-        "learning_rate": 0.02,
-    }
-)
 
 
 load_dotenv()
@@ -138,6 +132,13 @@ def get_vocab():
     return document_encoder
 
 def train():
+    # start a new wandb run to track this script
+    run = wandb.init(
+        project="my-awesome-project",
+        config={
+            "learning_rate": 0.02,
+        }
+    )
     document_encoder = get_vocab()
 #    document_encoder: SimpleVocab = SimpleVocab().load(
 #        "/root/", 
@@ -230,39 +231,49 @@ def train():
 class ModelEmbeddings:
     def __init__(self, name="gpt_raw_fast.pth"):
         self.document_encoder = get_vocab()
-        state = torch.load(name, weights_only=True)
+        state = torch.load(name, weights_only=True, map_location=torch.device("cuda:0"))
         config = get_config(state["vocab_size"])
         self.model = GptEmbeddings(config)
         self.model.load_state_dict(state["state_dict"], strict=False)
+        self.model.eval()
+        del state
+        device = torch.cuda.device_count() - 1
+        device = torch.device(f"cuda:{device}")
+        self.model.to(device)
+        self.device = device
 
     def transforms(self, documents):
-        self.model.eval()
-        batch_size = 4
+        batch_size = 2
         output = None
-        with torch.no_grad():
-            device = torch.device("cuda:1")
-            self.model.to(device)
-            for i in range(0, len(documents), batch_size):
-                batch_output = self.model.get_embedding(documents[i:i+batch_size], self.document_encoder, device)
-                if output is None:
-                    output = batch_output
-                else:
-                    output = torch.concat((
-                        output,
-                        batch_output
-                    ), dim=0)
-        return output
-    
+        for i in range(0, len(documents), batch_size):
+            batch_output = self.model.get_embedding(documents[i:i+batch_size], self.document_encoder, self.device)
+            if output is None:
+                output = batch_output
+            else:
+                output = torch.concat((
+                    output,
+                    batch_output
+                ), dim=0)
+        return output.cpu()
+
 def test(name):
     print(EvaluationMetrics().eval(
         ModelEmbeddings(name)
     ))
 
+def serve():
+    host = ModelHost()
+    model = ModelEmbeddings("latests_gpt_raw_fast.pth")
+    host.add_model("model", model)
+    host.run()    
+
 if __name__ == "__main__":
+    serve()
+
     # Loss: 3.1076
     # 
     #print("Hello :=)")
-    train()
+#    train()
 #    test()
 #    eval_on_dataset()
     # SimpleVocab   : 0.6154

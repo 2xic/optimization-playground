@@ -13,6 +13,7 @@ class VocabIndex:
     def __init__(self) -> None:
         self.system_tokens = { }
         self.padding_idx = self._add_system_token("<PADDING>")
+        self.unknown_idx = self._add_system_token("<UNKNOWN>")
         self._system_tokens_length = len(self.system_tokens)
         self.word_index = {}
         self.index_word = {}
@@ -64,7 +65,8 @@ class VocabIndex:
     def get_token_by_index(self, word):
         if word in self.system_tokens:
             return self.system_tokens[word]
-        return self.tokens_index[word]
+        # TODO, should actually be unknown_idx
+        return self.tokens_index.get(word, self.padding_idx)
 
     @property
     def size(self):
