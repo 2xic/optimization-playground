@@ -65,15 +65,18 @@ See [Token turning machines](../../architecture/token_turing_machines.md), but I
 I love scaling laws, see [scale](../scale.md) and [scale folder](../model-scale/).
 
 ## [Order Matters: Sequence to sequence for sets](https://arxiv.org/pdf/1511.06391)
-- todo
+Highlights that both input and output tokens affect the model performance. In theory, the encoder (RNN) in this case, would be a universal function approximate and shouldn't be affected, but they are and the author think the reason is that convex optimization.
 
-## [Multi-Scale Context Aggregation by Dilated Convolutions](https://arxiv.org/abs/1511.07122)
+In addition the paper, proposes Read-Process-Write architecture to deal with un-ordered inputs.
+
+
+## [Multi-Scale Context Aggregation by Dilated Convolutions](https://arxiv.org/pdf/1511.07122)
 - todo
 
 ## [Neural Message Passing for Quantum Chemistry](https://arxiv.org/pdf/1704.01212)
 - todo
 
-## [Neural Machine Translation by Jointly Learning to Align and Translate](https://arxiv.org/abs/1409.0473)
+## [Neural Machine Translation by Jointly Learning to Align and Translate](https://arxiv.org/pdf/1409.0473)
 - todo
 
 ## [Identity Mappings in Deep Residual Networks](https://arxiv.org/pdf/1603.05027)
@@ -103,7 +106,13 @@ Other sources
   - 
 
 ## [Relational recurrent neural networks](https://arxiv.org/pdf/1806.01822)
-- todo
+Standard memory models have problems doing relational understandings. Authors created a new memory module to combat this, Relational Memory Core (RMC). 
+
+Resources
+- https://xlnwel.github.io/blog/deep%20learning/RMC/
+- https://lyusungwon.github.io/studies/2018/09/07/rrnn/
+- https://neuralreasoning.github.io/slides/Lecture_3_10.pdf
+- https://truyentran.github.io/talks/Part-C-Advanced-topics.pdf
 
 ## [Quantifying the Rise and Fall of Complexity in Closed Systems: The Coffee Automaton](https://arxiv.org/pdf/1405.6903)
 - todo

@@ -10,3 +10,11 @@
 - [Late Chunking](https://weaviate.io/blog/late-chunking#late-interaction-and-colbert)
   - Embed the entire document first and then chunk the embeddings.
   - 
+
+
+## [Hamming Distance Metric Learning](http://www.cs.toronto.edu/~rsalakhu/papers/hamm_distance_metric_learning.pdf)
+[paper discussion page](https://wiki.math.uwaterloo.ca/statwiki/index.php?title=hamming_Distance_Metric_Learning)
+
+Learns Hamming distance metrics which learns from a discrete input space into binary codes. 
+- Asymmetric Hamming distance
+- Probably won't learn any meaningful embedding though given the embedding space would be binary codes, but it allows faster KNN classification times.

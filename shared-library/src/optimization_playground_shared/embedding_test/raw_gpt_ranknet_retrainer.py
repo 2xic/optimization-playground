@@ -12,6 +12,8 @@ import json
 import random
 import os 
 from ..utils.RunHostedModel import ModelHost
+from optimization_playground_shared.apis.openai import OpenAiEmbeddings
+from .evals import EvaluationMetrics
 
 class DocumentRankDataset(Dataset):
     def __init__(self):
@@ -82,6 +84,20 @@ class Model(nn.Module):
         state = torch.load(self.model_file, weights_only=True)
         self.load_state_dict(state["model_state"])
         return self
+    
+def class_base_model(
+    ref_a,
+    ref_b
+):
+    # First get the reference model.
+    a = OpenAiEmbeddings().get_embedding(
+        ref_a
+    )
+    b = OpenAiEmbeddings().get_embedding(
+        ref_b
+    )
+    cosine_sim = torch.nn.CosineSimilarity()
+    return cosine_sim(a, b)
 
 if __name__ == "__main__":
     batch_size = 32
@@ -103,27 +119,42 @@ if __name__ == "__main__":
     epoch_loss = []
     epoch_test_accuracy = []
     iterator = tqdm(range(100))
+    sum_loss = 0
+    eval = None
     for _ in iterator:
         sum_accuracy = torch.tensor(0.0)
         sum_loss = torch.tensor(0.0)
         count = torch.tensor(0.0)
-        for (x, y, label) in train_loader:
+        BATCH_SIZE = 8
+        for index, (x, y, label) in enumerate(train_loader):
+            our_embedding_x = backend.transforms([x])
+            our_embedding_y = backend.transforms([y])
             predicted = model(
-                backend.transforms([x]), 
-                backend.transforms([y])
+                our_embedding_x,
+                our_embedding_y
             )
-            model.zero_grad()
             backend.model.zero_grad()
-            loss = nn.BCELoss()(predicted, label.reshape(predicted.shape).float())   
+            loss = nn.BCELoss()(predicted, label.reshape(predicted.shape).float())  + torch.nn.functional.mse_loss(
+                torch.nn.functional.cosine_similarity(our_embedding_x, our_embedding_y),
+                predicted,
+            ) * 0.3
             loss.backward()
-
-            optimizer_embeddings.step()
-            optimizer.step()
-            
+            sum_loss += loss.item()
+            if index % BATCH_SIZE == 0:
+                iterator.set_description(f"loss {sum_loss / BATCH_SIZE}, eval {eval}")
+                model.zero_grad()
+                optimizer_embeddings.zero_grad()
+                optimizer_embeddings.step()
+                optimizer.step()
+                sum_loss = 0
+        if iterator.n % 10 == 0:
+            eval = (EvaluationMetrics().eval(
+                backend
+            ))
     # Load out the model
-    host = ModelHost()
-    host.add_model("model", backend)
-    host.run()    
+#    host = ModelHost()
+#    host.add_model("model", backend)
+#    host.run()    
 
 # python3 -m optimization_playground_shared.embedding_test.raw_gpt_ranknet_retrainer
 

@@ -32,6 +32,19 @@ class Memory:
                 }
             ]
         return self 
+    
+    @classmethod
+    def no_memory(self, context, prompt):
+        return [
+            {
+                "role": "system",
+                "content": context,
+            },
+            {
+                "role": "user",
+                "content": prompt,
+            }
+        ]
 
     def get_context(self, prompt):
         if len(self.history) == 0:
@@ -39,7 +52,7 @@ class Memory:
                 {
                     "role": "system",
                     "content": prompt,
-                }
+                },
             ]
         else:
             return self.history

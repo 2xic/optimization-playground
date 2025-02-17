@@ -120,3 +120,8 @@ They made some data observations which was kinda intresting
 
 [LLMZip: Lossless Text Compression using Large Language Models](https://arxiv.org/pdf/2306.04050)
 - Easier to read paper on the topic.
+
+## [Brain-to-Text Decoding: A Non-invasive Approach via Typing](https://ai.meta.com/research/publications/brain-to-text-decoding-a-non-invasive-approach-via-typing/)
+[Blog post](https://ai.meta.com/blog/brain-ai-research-human-communication/)
+
+Introduces a new architecture, namely Brain2Qwerty which can decode electro-(EEG) or magneto -encephalography(MEG) brain signals. The participants typed on a keyboard while the model was running and they got a character error rate of 32%.

@@ -51,3 +51,7 @@ Doing some post training on the model results in the following:
 
 ![vis](./readme/embeddings_viz_post_training.png)
 
+
+## Evaluations
+- https://zilliz.com/learn/evaluating-your-embedding-model
+- https://www.cambridge.org/core/services/aop-cambridge-core/content/view/EDF43F837150B94E71DBB36B28B85E79/S204877031900012Xa.pdf/div-class-title-evaluating-word-embedding-models-methods-and-experimental-results-div.pdf

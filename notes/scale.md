@@ -44,3 +44,10 @@ Aggressively filtering out data from common crawl results in a worse model. The 
 ## [INFERENCE SCALING LAWS: AN EMPIRICAL ANALYSIS OF COMPUTE-OPTIMAL INFERENCE FOR LLM PROBLEM-SOLVING](https://arxiv.org/pdf/2408.00724)
 Smaller models can beat larger models when using novel search. Example Llemma-7B model beats Llemma-34B when equipped with a novel tree search algorithm.
 - Instead of using MCTs they use `REBASE` (described in section 3.1.2)
+
+## Models can learn A -> B, but not B -> A
+- [Good tweet on it](https://x.com/cloneofsimo/status/1888975591359320273)
+  - https://arxiv.org/pdf/2407.21783#page=20
+  - https://arxiv.org/pdf/2309.12288
+
+I should explore this more.

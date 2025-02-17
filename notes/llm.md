@@ -976,3 +976,9 @@ Nice websites with benchmarks that LLMs have defated.
 - Reward depends on the task, but output can be verified by compilers if the question is related to prgoraming. Math can be evaluated by answer, etc.
 - Some issues with the pure RL approach, but it can be solved with some serving some good quality data to account for the cold start problem.
 - [Arc Score](https://x.com/arcprize/status/1881761991116927066)
+
+## [The Lessons of Developing Process Reward Models in Mathematical Reasoning](https://arxiv.org/pdf/2501.07301)
+Monte carlo estimation based data synthesis for PRM typically gives more inferiror performance and generelization compared to LLM-as-a-judge and human annotation methods.
+
+## [Can We Generate Images with CoT? Let’s Verify and Reinforce Image Generation Step by Step](https://arxiv.org/pdf/2501.13926)
+Usage of COT in autoagrresive image generation and associated reward models.  

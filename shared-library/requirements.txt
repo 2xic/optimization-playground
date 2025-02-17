@@ -11,3 +11,5 @@ torchvision
 wandb
 aiofiles
 aiohttp
+tiktoken
+pydub

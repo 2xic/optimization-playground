@@ -115,3 +115,11 @@ They invert the clip model with class inversion similar to DeepDream. KInda inte
 - They separately trained the model with an image editing adapter and a video generation adapter. They are both attached to the same text to image model. See Figure 2 of the paper.
 - "Factorized Diffusion Distillation" = fancy words for a form of transfer learning into the video generation model. 
 
+
+## [Inference-Time Scaling for Diffusion Models beyond Scaling Denoising Steps](https://arxiv.org/pdf/2501.09732)
+Scaling compute through search improves the performances of the models.
+- https://inference-scale-diffusion.github.io/
+- Zero-Order Search 
+- Search over Paths
+- 
+
