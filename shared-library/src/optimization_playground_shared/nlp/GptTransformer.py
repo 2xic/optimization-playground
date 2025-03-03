@@ -2,7 +2,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 from torch import Tensor
 import torch
-from .PositionalEncoding import PositionalEncoding
+from .PositionalEncoding import SinusoidalPositionalEncoding, RotaryPositionalEncoding
 from .utils.sampling import temperature_sampling, argmax_sampling
 import math
 
@@ -23,7 +23,6 @@ class Config:
     feed_forward: int
     # vocab config
     padding_index: int
-
 
 class TransformerDecoderWrapper(nn.Module):
     def __init__(self, layers) -> None:
@@ -63,20 +62,26 @@ class GptTransformerModel(nn.Module):
         self.output = nn.Sequential(*[
             nn.Linear(config.embedding_dim, config.vocab_size, bias=False),
         ])
-        self.pos_encoder = PositionalEncoding(
+        self.pos_encoder = SinusoidalPositionalEncoding(
             config.embedding_dim,
-            config.dropout,
             max_len=config.sequence_length,
         )
         self.sequence_size = config.sequence_length
         # (SEQ_LEN, BATCH_SIZE, EMBEDDING_DIM)
         self.dropout = nn.Dropout(config.dropout)
 
+    def with_rope_encoding(self):
+        self.pos_encoder = RotaryPositionalEncoding(
+            self.config.embedding_dim,
+            max_len=self.config.sequence_length,
+        )
+        return self
+
     def raw_forward(self, x: Tensor):
         assert len(x.shape) == 2
         # embedding -> positional tokens + pos encoder
         # (batch size, sequence size, embedding_size)
-        source = self.embedding(x) + self.pos_encoder(x)
+        source = self.pos_encoder(self.embedding(x))
         source = self.dropout(source)
         # forward
         # (batch size, sequence size, embedding_size)

@@ -982,3 +982,13 @@ Monte carlo estimation based data synthesis for PRM typically gives more inferir
 
 ## [Can We Generate Images with CoT? Let’s Verify and Reinforce Image Generation Step by Step](https://arxiv.org/pdf/2501.13926)
 Usage of COT in autoagrresive image generation and associated reward models.  
+
+## [open sourcing r1-1776](https://www.perplexity.ai/hub/blog/open-sourcing-r1-1776)
+Version of the DeepSeek-R1 from Perplexity without the censorship. They created at dataset with the help from a human expert which helped train a classifier which then again helped consstruct the dataset using user queries that triggered the classifier.
+
+## [Claude 3.7 Sonnet System Card](https://assets.anthropic.com/m/785e231869ea8b3b/original/claude-3-7-sonnet-system-card.pdf)
+- [SOTA on SWE benchmark](https://www.anthropic.com/news/claude-3-7-sonnet)
+- [Does better at playing Pokemon also](https://www.anthropic.com/news/visible-extended-thinking)
+- 
+
+

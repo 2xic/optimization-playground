@@ -6,12 +6,9 @@ class Tokenizer:
         self.word_idx = {}
 
     def encode_document_tensor(self, document, sequence_length):
-        #print(document)
         X = torch.zeros((1, sequence_length), dtype=torch.long)
         for index, i in enumerate(self._get_Tokens(document)[:sequence_length]):
-            #print((i, self._encode_token(i)))
             X[0][index] = self._encode_token(i)
-        #print(X)
         return X
     
     def encode_documents(self, documents):
@@ -40,4 +37,3 @@ class Tokenizer:
 
     def _get_Tokens(self, document):
         return document.split(" ")
-    

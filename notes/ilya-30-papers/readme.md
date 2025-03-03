@@ -80,7 +80,24 @@ In addition the paper, proposes Read-Process-Write architecture to deal with un-
 - todo
 
 ## [Identity Mappings in Deep Residual Networks](https://arxiv.org/pdf/1603.05027)
-- todo
+Remembering what we know from the original Resnet Paper
+
+```
+X     = Input to the block
+F(X)  = The core residual block
+```
+
+Which then construct the following.
+```
+F(X) + X
+```
+
+One question is ofc. what would be optimal way of constructing such residual block? The author constructs a series of experiments and preform them. They propose a new design using a restructured residual block. There are multiple implementation on Github like [here](https://github.com/FlorianMuellerklein/Identity-Mapping-ResNet-Lasagne/tree/master).
+
+- https://aman.ai/primers/ai/top-30-papers/#identity-mappings-in-deep-residual-networks
+- https://davidham3.github.io/blog/p/identity-mappings-in-deep-residual-networks/
+- https://shuzhanfan.github.io/2018/11/ResNet/
+
 
 ## [A simple neural network module for relational reasoning](https://arxiv.org/pdf/1706.01427)
 TLDR of the paper 

@@ -4,7 +4,6 @@
 This is the model architecture as laid out in the original paper [Attention Is All You Need](https://arxiv.org/abs/1706.03762) 
 ![The model](./model.png)
 
-
 ## The encoder
 So let's break down the layers
 - `Input embeddings` is a traditional embedding layer

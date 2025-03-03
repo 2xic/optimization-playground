@@ -31,9 +31,9 @@ class EncoderTransformer(nn.Module):
             nn.Sigmoid()
         ])
 
-    def forward(self, x):
-        x = self.embeddings(x)
-        y = PositionalEncoding().encode_tensor(x.size(0), d_model=(self.d_model * x.size(0))).reshape((
+    def forward(self, input):
+        x = self.embeddings(input)
+        y = PositionalEncoding().encode_tensor(input.size(1), d_model=(self.d_model * x.size(0))).reshape((
             x.shape
         ))
         x += y

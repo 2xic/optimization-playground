@@ -4,7 +4,7 @@ from EncoderTransformer import EncoderTransformer
 from train_transformer import train_transformer
 
 
-loss_t, acc_t = train_transformer(lambda tokens: Transformer(tokens=tokens, num_layers=2))
+loss_t, acc_t = train_transformer(lambda tokens: Transformer(num_tokens=tokens, num_layers=2))
 loss, acc = train_transformer(lambda tokens: EncoderTransformer(tokens=tokens, num_layers=4))
 
 fig, axes = plt.subplots(nrows=2, ncols=2)

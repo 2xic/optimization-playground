@@ -1,6 +1,8 @@
 import torch.nn as nn
 import torch
 from utils import Tokenizer
+from tqdm import tqdm
+from optimization_playground_shared.nlp.utils.sampling import temperature_sampling
 
 def train_transformer(Transformer):
     documents = [
@@ -9,15 +11,10 @@ def train_transformer(Transformer):
         "what is a hello",
         "what is a sentence"
     ]
-    targets = [
-        1,
-        1,
-        0,
-        0,
-    ]
     tokenizer = Tokenizer().encode_documents(documents)
     model = Transformer(
-        tokens=len(tokenizer.word_idx)
+        num_tokens=len(tokenizer.word_idx),
+        sequence_size=4,
     )
     optimizer = torch.optim.Adam(
         model.parameters()
@@ -29,18 +26,19 @@ def train_transformer(Transformer):
         [tokenizer.encode_document_tensor(x, sequence_length=4).flip(dims=(1, ))
         for x in documents]
     )
+
     y_truth = y_truth_labels.view(-1)
     y_pred = model(X)
 
     losses = []
     accuracy = []
 
-    for _ in range(10_000):
+    for _ in tqdm(range(1000)):
         y_pred = model(X)
-        prediction = y_pred.view(-1,y_pred.size(-1))
+        prediction = y_pred.view(-1, len(tokenizer.idx_words))
         
         optimizer.zero_grad()
-        error = nn.CrossEntropyLoss()(
+        error = nn.functional.cross_entropy(
             prediction.float(),
             y_truth
         )
@@ -52,12 +50,20 @@ def train_transformer(Transformer):
         losses.append(error.item())
 
     model.eval()
-    print(
-        documents
-    )        
+    print(accuracy[-5:])
+    print(losses[-5:])
+
+    print("Expected vs generated")
     print(
         [
-            tokenizer.decode(i) for i in model(X).argmax(dim=-1)
+            tokenizer.decode(i) for i in y_truth_labels
         ]
+    )    
+    out = model(X).view(-1, len(tokenizer.idx_words))
+    print(
+        tokenizer.decode(torch.tensor([
+            temperature_sampling(v)
+            for v in out[:4]
+        ]))
     )
     return losses, accuracy
