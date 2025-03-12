@@ -16,4 +16,4 @@ But get a reality checked.
   - https://www.metaculus.com/questions/17124/conditional-date-of-artificial-general-intelligence/
   - https://www.metaculus.com/questions/5121/date-of-artificial-general-intelligence/
 - [Good counter tweet](https://x.com/ercwl/status/1599878873629741056) to all of the above after the DeepSeek stuff.
-- 
+- [Dario Amodei - In 12 months nearly all code will be written by AI, but in the next 3 to 6 90% of all code will be written by AI](https://x.com/slow_developer/status/1899430284350616025)
