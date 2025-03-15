@@ -6,12 +6,14 @@ import os
 import torch
 import random
 from typing import Union
+from abc import ABC, abstractmethod
 
 class SimpleTextEncoder:
     def __init__(self):
         self.vocab_idx = {}
         self.idx_vocab = {}
         self.is_locked = False
+        self.padding_index = self.add_word("<PADDING>")
 
     def add_word(self, word):
         if word not in self.vocab_idx:
@@ -24,49 +26,32 @@ class SimpleTextEncoder:
         word_idx = word_idx.item() if isinstance(word_idx, torch.Tensor) else word_idx
         return self.idx_vocab[word_idx]
 
-class TextDataset(Dataset):
-    def __init__(self, documents, config: Config):
-        self.documents = documents
-        self.encoder = SimpleTextEncoder()
-        self.X, self.y = [], []
 
-        for doc in documents:
-            space = config.sequence_length * 2 + 1
-            for index, vocab in enumerate(doc[:-space]):
-                self.encoder.add_word(vocab)
-                n_tokens_forward = index + config.sequence_length + 1
-                self.X.append([
-                    self.encoder.add_word(v)
-                    for v in doc[index:n_tokens_forward]
-                ])
-                self.y.append([
-                    self.encoder.add_word(v)
-                    for v in doc[n_tokens_forward:n_tokens_forward + config.sequence_length + 1]
-                ])
+
+class TransformerDataset(ABC):
+    @property
+    @abstractmethod
+    def X(self):
+        pass
 
     @property
+    @abstractmethod
+    def y(self):
+        pass
+
+    @property
+    @abstractmethod
     def vocab_size(self):
-        return len(self.encoder.idx_vocab)
+        pass
 
-    @classmethod
-    def from_folder(cls, folder, config):
-        documents = []
-        for i in glob.glob(folder):
-            if os.path.isfile(i):
-                with open(i, "rb") as file:
-                    documents.append(splitter(file.read()))
-        print(documents)
-        assert len(documents) > 0
-        return TextDataset(documents, config)
+    @abstractmethod
+    def decode(self, X):
+        pass
 
-    @classmethod
-    def from_file(cls, txt, config):
-        documents = []
-        with open(txt, "rb") as file:
-            documents.append(splitter(file.read()))
-        assert len(documents) > 0
-        return TextDataset(documents, config)
-    
+    @property
+    def padding_index(self):
+        pass
+
     def __getitem__(self, index):
         return torch.tensor(self.X[index]), torch.tensor(self.y[index])
 
@@ -78,3 +63,107 @@ class TextDataset(Dataset):
 
     def sample(self, n):
         return list(map(lambda idx: [torch.tensor(self.X[idx]), torch.tensor(self.y[idx])], random.sample(range(len(self.X)), k=n)))
+
+class XorDataset(TransformerDataset):
+    def __init__(self):
+        self._X = torch.tensor([
+            [0, 0, 1],
+            [0, 1, 1],
+            [1, 0, 1],
+            [1, 1, 1] 
+        ])
+        self._y = torch.tensor([
+            [self.padding_index, self.padding_index, 0],
+            [self.padding_index, self.padding_index, 1],
+            [self.padding_index, self.padding_index, 1],
+            [self.padding_index, self.padding_index, 0],
+        ])
+        self._vocab_size = 3
+
+    @property
+    def X(self):
+        return self._X
+
+    @property
+    def y(self):
+        return self._y
+
+    @property
+    def vocab_size(self):
+        return self._vocab_size
+    
+    @property
+    def padding_index(self):
+        return 2
+
+    def decode(self, X):
+        if isinstance(X, torch.Tensor):
+            return str(X.item())
+        return str(X)
+
+class TransformerTextDataset(TransformerDataset, Dataset):
+    def __init__(self, X, y, encoder):
+        super().__init__()
+        self._X = X
+        self._y = y
+        self.encoder: SimpleTextEncoder = encoder
+        self._vocab_size = len(self.encoder.idx_vocab)
+
+    @property
+    def X(self):
+        return self._X
+
+    @property
+    def y(self):
+        return self._y
+
+    @property
+    def vocab_size(self):
+        return self._vocab_size
+
+    @classmethod
+    def from_folder(cls, folder, sequence_length):
+        documents = []
+        for i in glob.glob(folder):
+            if os.path.isfile(i):
+                with open(i, "rb") as file:
+                    documents.append(splitter(file.read()))
+        print(documents)
+        assert len(documents) > 0
+        return TransformerTextDataset._from_documents(documents, sequence_length)
+
+    @classmethod
+    def from_file(cls, txt, sequence_length):
+        documents = []
+        with open(txt, "rb") as file:
+            documents.append(splitter(file.read()))
+        assert len(documents) > 0
+        return TransformerTextDataset._from_documents(documents, sequence_length)
+    
+    @classmethod
+    def _from_documents(self, documents, sequence_length):
+        documents = documents
+        encoder = SimpleTextEncoder()
+        X, y = [], []
+
+        for doc in documents:
+            space = sequence_length * 2 + 1
+            for index, vocab in enumerate(doc[:-space]):
+                encoder.add_word(vocab)
+                n_tokens_forward = index + sequence_length + 1
+                X.append([
+                    encoder.add_word(v)
+                    for v in doc[index:n_tokens_forward]
+                ])
+                y.append([
+                    encoder.add_word(v)
+                    for v in doc[n_tokens_forward:n_tokens_forward + sequence_length + 1]
+                ])
+        return TransformerTextDataset(X, y, encoder)
+
+    def decode(self, word_idx):
+        return self.encoder.decode_idx(word_idx)
+
+    @property
+    def padding_index(self):
+        return self.encoder.padding_index

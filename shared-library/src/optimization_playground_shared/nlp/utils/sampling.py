@@ -1,13 +1,13 @@
 from torch.distributions import Categorical
 import torch
 
-def temperature_sampling(values, temperature=.95):
-    values = values.squeeze(0)
-    assert len(values.shape) == 1 
-    scaled_logits = values / temperature
-    probs = torch.softmax(scaled_logits, dim=0)
+
+def temperature_sampling(values: torch.Tensor, temperature: float = 0.95):
+    scaled_logits = values / temperature    
+    probs = torch.softmax(scaled_logits, dim=-1)    
     dist = Categorical(probs=probs)
-    return dist.sample()
+    sampled_values = dist.sample()
+    return sampled_values
 
 def argmax_sampling(values: torch.Tensor):
-    return values.argmax(dim=1)
+    return values.argmax(dim=-1)
