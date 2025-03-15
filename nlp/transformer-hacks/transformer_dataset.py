@@ -44,6 +44,11 @@ class TransformerDataset(ABC):
     def vocab_size(self):
         pass
 
+    @property
+    @abstractmethod
+    def sequence_size(self):
+        pass
+
     @abstractmethod
     def decode(self, X):
         pass
@@ -93,6 +98,10 @@ class XorDataset(TransformerDataset):
         return self._vocab_size
     
     @property
+    def sequence_size(self):
+        return 3
+    
+    @property
     def padding_index(self):
         return 2
 
@@ -102,12 +111,17 @@ class XorDataset(TransformerDataset):
         return str(X)
 
 class TransformerTextDataset(TransformerDataset, Dataset):
-    def __init__(self, X, y, encoder):
+    def __init__(self, X, y, encoder, sequence_size):
         super().__init__()
         self._X = X
         self._y = y
         self.encoder: SimpleTextEncoder = encoder
         self._vocab_size = len(self.encoder.idx_vocab)
+        self._sequence_size = sequence_size
+
+    @property
+    def sequence_size(self):
+        return self._sequence_size
 
     @property
     def X(self):
@@ -147,10 +161,10 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         X, y = [], []
 
         for doc in documents:
-            space = sequence_length * 2 + 1
+            space = sequence_length * 2
             for index, vocab in enumerate(doc[:-space]):
                 encoder.add_word(vocab)
-                n_tokens_forward = index + sequence_length + 1
+                n_tokens_forward = index + sequence_length
                 X.append([
                     encoder.add_word(v)
                     for v in doc[index:n_tokens_forward]
@@ -159,7 +173,7 @@ class TransformerTextDataset(TransformerDataset, Dataset):
                     encoder.add_word(v)
                     for v in doc[n_tokens_forward:n_tokens_forward + sequence_length + 1]
                 ])
-        return TransformerTextDataset(X, y, encoder)
+        return TransformerTextDataset(X, y, encoder, sequence_length)
 
     def decode(self, word_idx):
         return self.encoder.decode_idx(word_idx)

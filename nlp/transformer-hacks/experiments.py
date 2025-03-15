@@ -1,14 +1,33 @@
+from model import Config, PositionalEmbeddingType
+from plot import plot_accuracy_loss, Results, MinMaxArray
+from transformer_dataset import XorDataset
+from typing import Callable
 from train import train
-from plot import plot_accuracy_loss
 
-def base_line():
-    (epochs, epochs_accuracy, epochs_loss) = train()
+def positional_override(positional_embedding: PositionalEmbeddingType) -> Callable[[Config], Config]:
+    def override(config: Config):
+        config.positional_embedding = positional_embedding
+        return config
+    return override
+
+def positional_embeddings():
+    data = {}
+    for positional_embedding in [PositionalEmbeddingType.NN_EMBEDDING, PositionalEmbeddingType.SINUSOIDAL, PositionalEmbeddingType.ROTARY_POSITION_ENCODING]:
+        epochs_accuracy = MinMaxArray()
+        epochs_loss = MinMaxArray()
+        for _ in range(10):
+            (_, accuracy, loss) = train(XorDataset(), positional_override(positional_embedding))
+            epochs_accuracy.add(accuracy)
+            epochs_loss.add(loss)
+            assert len(epochs_accuracy.min_max_avg) == len(accuracy)
+        data[positional_embedding] = Results(
+            accuracy=epochs_accuracy,
+            loss=epochs_loss,
+        )
     plot_accuracy_loss(
-        epochs,
-        epochs_accuracy,
-        epochs_loss,
-        "baseline.png"
+        data,
+        "positional_embeddings.png"
     )
 
 if __name__ == "__main__":
-    base_line()
+    positional_embeddings()

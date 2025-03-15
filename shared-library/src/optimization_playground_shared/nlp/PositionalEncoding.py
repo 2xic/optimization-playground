@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 import math
-from abc import ABC, abstractmethod
-
 
 class SinusoidalPositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 512):

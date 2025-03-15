@@ -3,6 +3,7 @@ from transformer_dataset import TransformerDataset, TransformerTextDataset, XorD
 import torch
 import torch.optim as optim
 from optimization_playground_shared.nlp.utils.sampling import temperature_sampling, argmax_sampling
+from typing import Callable
 
 def create_config(vocab_size, padding_index, sequence_length):
     return  Config(
@@ -14,18 +15,13 @@ def create_config(vocab_size, padding_index, sequence_length):
         vocab_size=vocab_size,
     )
 
-def train():
-#    dataset = XorDataset()
-    sequence_length = 4
-    dataset = TransformerTextDataset.from_file(
-        "example.text",
-        sequence_length=(sequence_length - 1)
-    )
+def train(dataset: TransformerDataset, override: Callable[[Config], Config]= (lambda x: x)):
     config = create_config(
         dataset.vocab_size,
         dataset.padding_index,
-        sequence_length,
+        sequence_length=dataset.sequence_size,
     )
+    config = override(config)
     model = Model(config)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loader = dataset.iter(
@@ -84,4 +80,8 @@ def train():
     return (epochs, epochs_accuracy, epochs_loss)
 
 if __name__ == "__main__":
-    train()
+    text_dataset = TransformerTextDataset.from_file(
+        "example.text",
+        sequence_length=4
+    )
+    train(text_dataset)

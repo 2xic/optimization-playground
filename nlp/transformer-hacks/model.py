@@ -1,7 +1,14 @@
 from dataclasses import dataclass
 import torch.nn as nn
 import torch
-import math
+from optimization_playground_shared.nlp.PositionalEncoding import SinusoidalPositionalEncoding, RotaryPositionalEncoding
+from enum import Enum
+
+class PositionalEmbeddingType(Enum):
+    NN_EMBEDDING = 1
+    SINUSOIDAL = 2
+    ROTARY_POSITION_ENCODING = 3
+
 
 @dataclass
 class Config:
@@ -11,6 +18,7 @@ class Config:
     num_attention_heads: int
     num_transformer_layers: int
     padding_index: int
+    positional_embedding: PositionalEmbeddingType = PositionalEmbeddingType.NN_EMBEDDING
 
 class TransformerLayer(nn.Module):
     def __init__(self, config: Config):
@@ -32,14 +40,35 @@ class TransformerLayer(nn.Module):
         attn_output, _ = self.self_attention(X, X, X, attn_mask=mask)
         return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
 
-class PositionalEmbeddings(nn.Module):
+class NnPositionalEmbedding(nn.Module):
     def __init__(self, sequence_length: int, dim_embeddings: int):
         super().__init__()
         self.positional_embeddings = nn.Embedding(sequence_length, dim_embeddings)
 
     def forward(self, x: torch.Tensor):
         positions = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
-        return self.positional_embeddings(positions)
+        return x + self.positional_embeddings(positions)
+
+class PositionalEmbeddings(nn.Module):
+    def __init__(self, positional_embedding: PositionalEmbeddingType, sequence_length: int, dim_embeddings: int):
+        super().__init__()
+        if positional_embedding == PositionalEmbeddingType.NN_EMBEDDING:
+            self.positional_embeddings = NnPositionalEmbedding(sequence_length, dim_embeddings)
+        elif positional_embedding == PositionalEmbeddingType.SINUSOIDAL:
+            self.positional_embeddings = SinusoidalPositionalEncoding(
+                max_len=sequence_length,
+                d_model=dim_embeddings, 
+            )
+        elif positional_embedding == PositionalEmbeddingType.ROTARY_POSITION_ENCODING:
+            self.positional_embeddings = RotaryPositionalEncoding(
+                max_len=sequence_length,
+                d_model=dim_embeddings, 
+            )
+        else:
+            raise Exception(f"Unknown {positional_embedding}") 
+
+    def forward(self, x: torch.Tensor):
+        return self.positional_embeddings(x)
 
 class Model(nn.Module):
     def __init__(self, config: Config):
@@ -57,7 +86,8 @@ class Model(nn.Module):
             padding_idx=config.padding_index
         )
         self.positional_embeddings = PositionalEmbeddings(
-            self.config.sequence_length + 1,
+            self.config.positional_embedding,
+            self.config.sequence_length,
             self.config.dim_embeddings
         )
         self.transformer_layers = nn.ModuleList([
@@ -68,9 +98,10 @@ class Model(nn.Module):
         self.output_layer = nn.Linear(self.config.dim_embeddings, self.config.vocab_size)
         self.layer_norm = nn.LayerNorm(self.config.dim_embeddings) 
 
-    def forward(self, X: torch.Tensor):
-        x = self.embeddings(X) 
-        x += self.positional_embeddings(x)
+    def forward(self, x: torch.Tensor):
+        assert len(x.shape) == 2
+        x = self.embeddings(x)
+        x = self.positional_embeddings(x)
         mask = torch.triu(torch.ones(self.config.sequence_length, self.config.sequence_length), diagonal=1).bool()
         for layer in self.transformer_layers:
             x = layer(x, mask)
