@@ -1,12 +1,15 @@
 from model import Model, Config
-from transformer_dataset import TransformerDataset, TransformerTextDataset, XorDataset
+from transformer_dataset import TransformerDataset, TransformerTextDataset
 import torch
 import torch.optim as optim
-from optimization_playground_shared.nlp.utils.sampling import temperature_sampling, argmax_sampling
+from optimization_playground_shared.nlp.utils.sampling import (
+    temperature_sampling,
+)
 from typing import Callable
 
+
 def create_config(vocab_size, padding_index, sequence_length):
-    return  Config(
+    return Config(
         sequence_length=sequence_length,
         dim_embeddings=32,
         num_attention_heads=4,
@@ -15,7 +18,10 @@ def create_config(vocab_size, padding_index, sequence_length):
         vocab_size=vocab_size,
     )
 
-def train(dataset: TransformerDataset, override: Callable[[Config], Config]= (lambda x: x)):
+
+def train(
+    dataset: TransformerDataset, override: Callable[[Config], Config] = (lambda x: x)
+):
     config = create_config(
         dataset.vocab_size,
         dataset.padding_index,
@@ -34,18 +40,18 @@ def train(dataset: TransformerDataset, override: Callable[[Config], Config]= (la
         sum_loss = 0
         accuracy = 0
         rows = 0
-        for (X, y) in loader:
+        for X, y in loader:
             y_predicted = model(X)
             loss = torch.nn.functional.cross_entropy(
                 y_predicted.view(-1, config.vocab_size),
                 y.view(-1),
-                ignore_index=config.padding_index
+                ignore_index=config.padding_index,
             )
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             sum_loss += loss.item()
-            
+
             y_sample_next = temperature_sampling(y_predicted[:, -1, :])
             y_next = y[:, -1]
             assert y_sample_next.shape == y_next.shape
@@ -58,19 +64,16 @@ def train(dataset: TransformerDataset, override: Callable[[Config], Config]= (la
         epochs.append(i)
         assert acc <= 100, acc
         print(f"epoch: {i}, loss: {sum_loss}, accuracy {acc}")
-    
+
         rows = dataset.sample(n=2)
-        for (i, j) in rows:
+        for i, j in rows:
             i = i.reshape((1, -1))
             predicted = model(i)[0]
             word_idx = temperature_sampling(predicted)
 
             next_word_idx = word_idx[-1]
             expected_word_idx = j[-1]
-            context = "".join([
-                dataset.decode(idx)
-                for idx in i[0]
-            ])
+            context = "".join([dataset.decode(idx) for idx in i[0]])
             print(f"\tcontext: {context}")
             word = dataset.decode(next_word_idx)
             expected = dataset.decode(expected_word_idx.item())
@@ -79,9 +82,7 @@ def train(dataset: TransformerDataset, override: Callable[[Config], Config]= (la
             print("")
     return (epochs, epochs_accuracy, epochs_loss)
 
+
 if __name__ == "__main__":
-    text_dataset = TransformerTextDataset.from_file(
-        "example.text",
-        sequence_length=4
-    )
+    text_dataset = TransformerTextDataset.from_file("example.text", sequence_length=4)
     train(text_dataset)

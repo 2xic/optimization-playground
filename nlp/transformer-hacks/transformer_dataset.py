@@ -1,12 +1,12 @@
-import glob 
+import glob
 from torch.utils.data import DataLoader, Dataset
 from optimization_playground_shared.nlp.SimpleVocab import splitter
-from model import Config
-import os 
+import os
 import torch
 import random
 from typing import Union
 from abc import ABC, abstractmethod
+
 
 class SimpleTextEncoder:
     def __init__(self):
@@ -21,11 +21,10 @@ class SimpleTextEncoder:
             self.vocab_idx[word] = idx
             self.idx_vocab[idx] = word
         return self.vocab_idx[word]
-    
+
     def decode_idx(self, word_idx: Union[torch.Tensor, int]):
         word_idx = word_idx.item() if isinstance(word_idx, torch.Tensor) else word_idx
         return self.idx_vocab[word_idx]
-
 
 
 class TransformerDataset(ABC):
@@ -67,22 +66,25 @@ class TransformerDataset(ABC):
         return DataLoader(self, batch_size=batch_size)
 
     def sample(self, n):
-        return list(map(lambda idx: [torch.tensor(self.X[idx]), torch.tensor(self.y[idx])], random.sample(range(len(self.X)), k=n)))
+        return list(
+            map(
+                lambda idx: [torch.tensor(self.X[idx]), torch.tensor(self.y[idx])],
+                random.sample(range(len(self.X)), k=n),
+            )
+        )
+
 
 class XorDataset(TransformerDataset):
     def __init__(self):
-        self._X = torch.tensor([
-            [0, 0, 1],
-            [0, 1, 1],
-            [1, 0, 1],
-            [1, 1, 1] 
-        ])
-        self._y = torch.tensor([
-            [self.padding_index, self.padding_index, 0],
-            [self.padding_index, self.padding_index, 1],
-            [self.padding_index, self.padding_index, 1],
-            [self.padding_index, self.padding_index, 0],
-        ])
+        self._X = torch.tensor([[0, 0, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]])
+        self._y = torch.tensor(
+            [
+                [self.padding_index, self.padding_index, 0],
+                [self.padding_index, self.padding_index, 1],
+                [self.padding_index, self.padding_index, 1],
+                [self.padding_index, self.padding_index, 0],
+            ]
+        )
         self._vocab_size = 3
 
     @property
@@ -96,11 +98,11 @@ class XorDataset(TransformerDataset):
     @property
     def vocab_size(self):
         return self._vocab_size
-    
+
     @property
     def sequence_size(self):
         return 3
-    
+
     @property
     def padding_index(self):
         return 2
@@ -109,6 +111,7 @@ class XorDataset(TransformerDataset):
         if isinstance(X, torch.Tensor):
             return str(X.item())
         return str(X)
+
 
 class TransformerTextDataset(TransformerDataset, Dataset):
     def __init__(self, X, y, encoder, sequence_size):
@@ -153,7 +156,7 @@ class TransformerTextDataset(TransformerDataset, Dataset):
             documents.append(splitter(file.read()))
         assert len(documents) > 0
         return TransformerTextDataset._from_documents(documents, sequence_length)
-    
+
     @classmethod
     def _from_documents(self, documents, sequence_length):
         documents = documents
@@ -165,14 +168,15 @@ class TransformerTextDataset(TransformerDataset, Dataset):
             for index, vocab in enumerate(doc[:-space]):
                 encoder.add_word(vocab)
                 n_tokens_forward = index + sequence_length
-                X.append([
-                    encoder.add_word(v)
-                    for v in doc[index:n_tokens_forward]
-                ])
-                y.append([
-                    encoder.add_word(v)
-                    for v in doc[n_tokens_forward:n_tokens_forward + sequence_length + 1]
-                ])
+                X.append([encoder.add_word(v) for v in doc[index:n_tokens_forward]])
+                y.append(
+                    [
+                        encoder.add_word(v)
+                        for v in doc[
+                            n_tokens_forward : n_tokens_forward + sequence_length + 1
+                        ]
+                    ]
+                )
         return TransformerTextDataset(X, y, encoder, sequence_length)
 
     def decode(self, word_idx):

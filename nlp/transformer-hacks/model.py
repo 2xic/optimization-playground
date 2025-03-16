@@ -1,44 +1,204 @@
 from dataclasses import dataclass
 import torch.nn as nn
 import torch
-from optimization_playground_shared.nlp.PositionalEncoding import SinusoidalPositionalEncoding, RotaryPositionalEncoding
+from optimization_playground_shared.nlp.PositionalEncoding import (
+    SinusoidalPositionalEncoding,
+    RotaryPositionalEncoding,
+)
 from enum import Enum
+import torch.nn.functional as F
+from layers import SimpleGQA
 
 class PositionalEmbeddingType(Enum):
+    NONE = 0
     NN_EMBEDDING = 1
     SINUSOIDAL = 2
     ROTARY_POSITION_ENCODING = 3
 
 
+class TransformerLayerType(Enum):
+    SIMPLE_NO_ATTENTION = 0
+    SIMPLE = 1
+    GPT2 = 2
+    LLAMA2 = 3
+    LLAMA3 = 4
+
 @dataclass
 class Config:
     sequence_length: int
     vocab_size: int
-    dim_embeddings: int 
+    dim_embeddings: int
     num_attention_heads: int
     num_transformer_layers: int
     padding_index: int
     positional_embedding: PositionalEmbeddingType = PositionalEmbeddingType.NN_EMBEDDING
+    transformer_layer: TransformerLayerType = TransformerLayerType.SIMPLE
+    dropout: float = 0.01
 
-class TransformerLayer(nn.Module):
+class LlamaFeedForward(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.l1 = nn.Linear(
+            config.dim_embeddings, 256
+        )
+        self.l2 = nn.Linear(
+            256, config.dim_embeddings
+        )
+        self.gate = nn.Linear(
+            config.dim_embeddings, 256
+        )
+
+    def forward(self, X):
+        return self.l2(
+            F.silu(
+                self.l1(X) * self.gate(X)
+            )
+        )
+
+class RoPEMultiheadAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, max_len, gqa):
+        super().__init__()
+        if gqa:
+            self.mha = SimpleGQA(
+                embed_dim=embed_dim, 
+                num_query_heads=num_heads,
+                num_groups=1,
+            )
+        else:
+            self.mha = nn.MultiheadAttention(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                batch_first=True,
+            )
+        self.rope = RotaryPositionalEncoding(
+            d_model=embed_dim, max_len=max_len
+        )
+        
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+
+    def forward(self, x, mask):
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        q = self.rope(q)
+        k = self.rope(k)
+
+        attn_output, _ = self.mha(q, k, v, attn_mask=mask)
+        return attn_output
+
+class Llama2TransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.rope_attention = RoPEMultiheadAttention(
+            config.dim_embeddings,
+            config.num_attention_heads,
+            config.sequence_length,
+            gqa=False
+        )
+        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.linear = LlamaFeedForward(config)
+
+    def forward(self, X, mask):
+        first_half = self.rope_attention(self.norm_1(X), mask)
+        first_half += X
+        second_half = self.linear(first_half)
+        return self.norm_2(second_half + X)
+
+class Llama3TransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.rope_attention = RoPEMultiheadAttention(
+            config.dim_embeddings,
+            config.num_attention_heads,
+            config.sequence_length,
+            gqa=True
+        )
+        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.linear = LlamaFeedForward(config)
+
+    def forward(self, X, mask):
+        first_half = self.rope_attention(self.norm_1(X), mask)
+        first_half += X
+        second_half = self.linear(first_half)
+        return self.norm_2(second_half + X)
+
+class GptTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.configs = config
         self.self_attention = nn.MultiheadAttention(
-            embed_dim=config.dim_embeddings, 
-            num_heads=config.num_attention_heads, 
-            batch_first=True
+            embed_dim=config.dim_embeddings,
+            num_heads=config.num_attention_heads,
+            batch_first=True,
         )
-        self.module = nn.Sequential(*[
-            nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings),
-            nn.ReLU()
-        ])
+        self.dropout = nn.Dropout(p=self.configs.dropout)
+        self.linear = nn.Sequential(
+            *[
+                nn.Linear(self.configs.dim_embeddings, 256),
+                nn.GELU(),
+                nn.Linear(256, self.configs.dim_embeddings),
+            ]
+        )
         self.layer_norm_in = nn.LayerNorm(config.dim_embeddings)
         self.layer_norm_out = nn.LayerNorm(config.dim_embeddings)
 
     def forward(self, X, mask):
+        attn_output = self.get_attention_output(X, mask)
+        first_half = self.layer_norm_in(X + self.dropout(attn_output))
+        second_half = self.dropout(self.layer_norm_out(self.linear(first_half)))
+        return first_half + second_half
+
+    def get_attention_output(self, X, mask):
         attn_output, _ = self.self_attention(X, X, X, attn_mask=mask)
+        return attn_output
+
+class SimpleTransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.configs = config
+        self.self_attention = nn.MultiheadAttention(
+            embed_dim=config.dim_embeddings,
+            num_heads=config.num_attention_heads,
+            batch_first=True,
+        )
+        self.module = nn.Sequential(
+            *[
+                nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings),
+                nn.ReLU(),
+            ]
+        )
+        self.layer_norm_in = nn.LayerNorm(config.dim_embeddings)
+        self.layer_norm_out = nn.LayerNorm(config.dim_embeddings)
+
+    def forward(self, X, mask):
+        attn_output = self.get_attention_output(X, mask)
         return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
+
+    def get_attention_output(self, X, mask):
+        if self.configs.transformer_layer == TransformerLayerType.SIMPLE:
+            attn_output, _ = self.self_attention(X, X, X, attn_mask=mask)
+            return attn_output
+        elif self.configs.transformer_layer == TransformerLayerType.SIMPLE_NO_ATTENTION:
+            return torch.zeros_like(X)
+        else:
+            raise Exception(f"Unknown attention type {self.configs.attention_type}")
+
+def get_attention_layer(config: Config):
+    if config.transformer_layer in [TransformerLayerType.SIMPLE, TransformerLayerType.SIMPLE_NO_ATTENTION]:
+        return SimpleTransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.GPT2:
+        return GptTransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.LLAMA2:
+        return Llama2TransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.LLAMA3:
+        return Llama3TransformerLayer(config)
+    else:
+        raise Exception(f"unknown type {config.transformer_layer}")
 
 class NnPositionalEmbedding(nn.Module):
     def __init__(self, sequence_length: int, dim_embeddings: int):
@@ -49,26 +209,37 @@ class NnPositionalEmbedding(nn.Module):
         positions = torch.arange(x.shape[1], device=x.device).unsqueeze(0)
         return x + self.positional_embeddings(positions)
 
+
 class PositionalEmbeddings(nn.Module):
-    def __init__(self, positional_embedding: PositionalEmbeddingType, sequence_length: int, dim_embeddings: int):
+    def __init__(
+        self,
+        positional_embedding: PositionalEmbeddingType,
+        sequence_length: int,
+        dim_embeddings: int,
+    ):
         super().__init__()
-        if positional_embedding == PositionalEmbeddingType.NN_EMBEDDING:
-            self.positional_embeddings = NnPositionalEmbedding(sequence_length, dim_embeddings)
+        if positional_embedding == PositionalEmbeddingType.NONE:
+            self.positional_embeddings = lambda x: x
+        elif positional_embedding == PositionalEmbeddingType.NN_EMBEDDING:
+            self.positional_embeddings = NnPositionalEmbedding(
+                sequence_length, dim_embeddings
+            )
         elif positional_embedding == PositionalEmbeddingType.SINUSOIDAL:
             self.positional_embeddings = SinusoidalPositionalEncoding(
                 max_len=sequence_length,
-                d_model=dim_embeddings, 
+                d_model=dim_embeddings,
             )
         elif positional_embedding == PositionalEmbeddingType.ROTARY_POSITION_ENCODING:
             self.positional_embeddings = RotaryPositionalEncoding(
                 max_len=sequence_length,
-                d_model=dim_embeddings, 
+                d_model=dim_embeddings,
             )
         else:
-            raise Exception(f"Unknown {positional_embedding}") 
+            raise Exception(f"Unknown {positional_embedding}")
 
     def forward(self, x: torch.Tensor):
         return self.positional_embeddings(x)
+
 
 class Model(nn.Module):
     def __init__(self, config: Config):
@@ -83,26 +254,33 @@ class Model(nn.Module):
         self.embeddings = nn.Embedding(
             self.config.vocab_size,
             self.config.dim_embeddings,
-            padding_idx=config.padding_index
+            padding_idx=config.padding_index,
         )
         self.positional_embeddings = PositionalEmbeddings(
             self.config.positional_embedding,
             self.config.sequence_length,
-            self.config.dim_embeddings
+            self.config.dim_embeddings,
         )
-        self.transformer_layers = nn.ModuleList([
-            TransformerLayer(config)
-            for _ in range(self.config.num_transformer_layers)
-        ])
+        self.transformer_layers = nn.ModuleList(
+            [
+                get_attention_layer(config)
+                for _ in range(self.config.num_transformer_layers)
+            ]
+        )
 
-        self.output_layer = nn.Linear(self.config.dim_embeddings, self.config.vocab_size)
-        self.layer_norm = nn.LayerNorm(self.config.dim_embeddings) 
+        self.output_layer = nn.Linear(
+            self.config.dim_embeddings, self.config.vocab_size
+        )
+        self.layer_norm = nn.LayerNorm(self.config.dim_embeddings)
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 2
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
-        mask = torch.triu(torch.ones(self.config.sequence_length, self.config.sequence_length), diagonal=1).bool()
+        mask = torch.triu(
+            torch.ones(self.config.sequence_length, self.config.sequence_length),
+            diagonal=1,
+        ).bool()
         for layer in self.transformer_layers:
             x = layer(x, mask)
         x = self.layer_norm(x)

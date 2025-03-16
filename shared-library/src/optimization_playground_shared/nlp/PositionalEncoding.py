@@ -26,7 +26,6 @@ class SinusoidalPositionalEncoding(nn.Module):
 class RotaryPositionalEncoding(nn.Module):
     def __init__(self, d_model: int, max_len: int = 512):
         super().__init__()
-        print(d_model)
         position_encodings = self.get_rotary_position_embedding(
             max_seq_len=max_len,
             d_model=d_model,
