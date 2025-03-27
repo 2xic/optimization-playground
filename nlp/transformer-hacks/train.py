@@ -7,7 +7,6 @@ from optimization_playground_shared.nlp.utils.sampling import (
 )
 from typing import Callable
 
-
 def create_config(vocab_size, padding_index, sequence_length):
     return Config(
         sequence_length=sequence_length,

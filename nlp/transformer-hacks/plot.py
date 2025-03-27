@@ -102,4 +102,4 @@ def plot_accuracy_loss(results: Dict[str, Results], file_name: str):
 
     file_name = file_name.split(".")[0]
     plt.savefig(f"{file_name}.png")
-    plt.close()
+    plt.close('all')

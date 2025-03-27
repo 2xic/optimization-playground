@@ -7,7 +7,7 @@ from optimization_playground_shared.nlp.PositionalEncoding import (
 )
 from enum import Enum
 import torch.nn.functional as F
-from layers import SimpleGQA
+from layers import SimpleGQA, MultiheadAttention, DyT
 
 class PositionalEmbeddingType(Enum):
     NONE = 0
@@ -23,6 +23,11 @@ class TransformerLayerType(Enum):
     LLAMA2 = 3
     LLAMA3 = 4
 
+class NormalizationLayerType(Enum):
+    LAYER_NORM = 0
+    DyT = 1
+
+
 @dataclass
 class Config:
     sequence_length: int
@@ -33,7 +38,23 @@ class Config:
     padding_index: int
     positional_embedding: PositionalEmbeddingType = PositionalEmbeddingType.NN_EMBEDDING
     transformer_layer: TransformerLayerType = TransformerLayerType.SIMPLE
+    normalization_layer: NormalizationLayerType =NormalizationLayerType.LAYER_NORM
     dropout: float = 0.01
+
+class NormalizationLayer(nn.Module):
+    def __init__(self, config: Config, size):
+        super().__init__()
+        self.config = config
+        
+        if self.config.normalization_layer == NormalizationLayerType.DyT:
+            self.norm = DyT(size)
+        elif self.config.normalization_layer == NormalizationLayerType.LAYER_NORM:
+            self.norm = nn.LayerNorm(size)
+        else:
+            raise Exception(f"Unknown {self.config.normalization_layer}")
+
+    def forward(self, X):
+        return self.norm(X)
 
 class LlamaFeedForward(nn.Module):
     def __init__(self, config: Config):
@@ -65,10 +86,9 @@ class RoPEMultiheadAttention(nn.Module):
                 num_groups=1,
             )
         else:
-            self.mha = nn.MultiheadAttention(
+            self.mha = MultiheadAttention(
                 embed_dim=embed_dim,
-                num_heads=num_heads,
-                batch_first=True,
+                num_query_heads=num_heads,
             )
         self.rope = RotaryPositionalEncoding(
             d_model=embed_dim, max_len=max_len
@@ -131,10 +151,9 @@ class GptTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.configs = config
-        self.self_attention = nn.MultiheadAttention(
+        self.self_attention = MultiheadAttention(
             embed_dim=config.dim_embeddings,
-            num_heads=config.num_attention_heads,
-            batch_first=True,
+            num_query_heads=config.num_attention_heads,
         )
         self.dropout = nn.Dropout(p=self.configs.dropout)
         self.linear = nn.Sequential(
@@ -144,8 +163,8 @@ class GptTransformerLayer(nn.Module):
                 nn.Linear(256, self.configs.dim_embeddings),
             ]
         )
-        self.layer_norm_in = nn.LayerNorm(config.dim_embeddings)
-        self.layer_norm_out = nn.LayerNorm(config.dim_embeddings)
+        self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
+        self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
 
     def forward(self, X, mask):
         attn_output = self.get_attention_output(X, mask)
@@ -161,10 +180,9 @@ class SimpleTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
         self.configs = config
-        self.self_attention = nn.MultiheadAttention(
+        self.self_attention = MultiheadAttention(
             embed_dim=config.dim_embeddings,
-            num_heads=config.num_attention_heads,
-            batch_first=True,
+            num_query_heads=config.num_attention_heads,
         )
         self.module = nn.Sequential(
             *[
@@ -172,8 +190,8 @@ class SimpleTransformerLayer(nn.Module):
                 nn.ReLU(),
             ]
         )
-        self.layer_norm_in = nn.LayerNorm(config.dim_embeddings)
-        self.layer_norm_out = nn.LayerNorm(config.dim_embeddings)
+        self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
+        self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
 
     def forward(self, X, mask):
         attn_output = self.get_attention_output(X, mask)
@@ -271,7 +289,7 @@ class Model(nn.Module):
         self.output_layer = nn.Linear(
             self.config.dim_embeddings, self.config.vocab_size
         )
-        self.layer_norm = nn.LayerNorm(self.config.dim_embeddings)
+        self.layer_norm = NormalizationLayer(config, self.config.dim_embeddings)
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 2
