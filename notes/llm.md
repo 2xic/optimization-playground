@@ -837,6 +837,8 @@ Another good post from Karpathy. Basically special tokens used by LLM models can
 - [One of the best compute optimal models on the market](https://api-docs.deepseek.com/news/news1226#still-the-best-value-in-the-market-)
 - They trained using FP8. They also implemented some new traning frameworks(`HAI-LLM`) and algorithms (`DualPipe`) to train more compute optimal.
 - Solves the needle in the haystack problem without any issues.
+- [Good blogpost threads on it](https://dataturbo.medium.com/deepseek-technical-analysis-3-multi-token-prediction-f8f3ea7eaf9c)
+- 
 
 ### [How has DeepSeek improved the Transformer architecture?](https://epoch.ai/gradient-updates/how-has-deepseek-improved-the-transformer-architecture)
 - Multi-head latent attention (MLA)

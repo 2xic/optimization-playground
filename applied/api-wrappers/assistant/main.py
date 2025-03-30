@@ -38,6 +38,8 @@ concepts = get_concepts()
 
 def load(args):    
     option = get_options(list(concepts.keys())) if args.concept is None else args.concept
+    if option not in concepts:
+        raise Exception(f"Invalid option, {concepts}")
     context = concepts[option]
     if not args.skip_memory:
         memory = Memory(os.path.basename(context["path"]))

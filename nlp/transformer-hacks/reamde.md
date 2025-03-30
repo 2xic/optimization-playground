@@ -5,7 +5,8 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 - [LLAMA source code](https://github.com/meta-llama/llama/blob/main/llama/model.py)
 - [Transformers and Multi-Head Attention](https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html)
 
-## Post training
+## Post tr
+aining
 - [Speculative sampling](https://jaykmody.com/blog/speculative-sampling/)
 
 ## Interference

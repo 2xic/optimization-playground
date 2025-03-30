@@ -44,3 +44,9 @@ There is also a good blogpost by [Lilian Weng](https://lilianweng.github.io/post
 ## [Reinforcement Learning on Hundreds of Thousands of Cores](https://www.youtube.com/watch?v=ui4F_A46wN0)
 - OpenAI and the Redis setup they used for Dota 2
 
+## DeepSeek
+- [Fire-Flyer File System (3FS)](https://arxiv.org/pdf/2408.14158) which they have [also open sourced](https://github.com/deepseek-ai/3FS) with associated [design notes](https://github.com/deepseek-ai/3FS/blob/main/docs/design_notes.md).
+  - Parallel file system architecture which allows multiple algorithms to read the data without contentions.
+  - Uses RDMA and SSds for storage. Uses foundationdb as it's distributed storage layer.
+  - [Blogpost on Fire-Flyer](https://www-high--flyer-cn.translate.goog/blog/3fs/?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp) 
+- 

@@ -51,3 +51,7 @@ Smaller models can beat larger models when using novel search. Example Llemma-7B
   - https://arxiv.org/pdf/2309.12288
 
 I should explore this more.
+
+## Interesting cases of scaling
+- [GPT 4o learns a depth map](https://x.com/BorisMPower/status/1905501629237133414)
+

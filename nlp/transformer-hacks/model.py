@@ -7,7 +7,8 @@ from optimization_playground_shared.nlp.PositionalEncoding import (
 )
 from enum import Enum
 import torch.nn.functional as F
-from layers import SimpleGQA, MultiheadAttention, DyT
+from layers import SimpleGQA, MultiheadAttention, DyT, MultiHeadLatentAttention
+
 
 class PositionalEmbeddingType(Enum):
     NONE = 0
@@ -22,6 +23,8 @@ class TransformerLayerType(Enum):
     GPT2 = 2
     LLAMA2 = 3
     LLAMA3 = 4
+    DEEPSEEK = 5
+
 
 class NormalizationLayerType(Enum):
     LAYER_NORM = 0
@@ -38,14 +41,15 @@ class Config:
     padding_index: int
     positional_embedding: PositionalEmbeddingType = PositionalEmbeddingType.NN_EMBEDDING
     transformer_layer: TransformerLayerType = TransformerLayerType.SIMPLE
-    normalization_layer: NormalizationLayerType =NormalizationLayerType.LAYER_NORM
+    normalization_layer: NormalizationLayerType = NormalizationLayerType.LAYER_NORM
     dropout: float = 0.01
+
 
 class NormalizationLayer(nn.Module):
     def __init__(self, config: Config, size):
         super().__init__()
         self.config = config
-        
+
         if self.config.normalization_layer == NormalizationLayerType.DyT:
             self.norm = DyT(size)
         elif self.config.normalization_layer == NormalizationLayerType.LAYER_NORM:
@@ -56,32 +60,24 @@ class NormalizationLayer(nn.Module):
     def forward(self, X):
         return self.norm(X)
 
+
 class LlamaFeedForward(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.l1 = nn.Linear(
-            config.dim_embeddings, 256
-        )
-        self.l2 = nn.Linear(
-            256, config.dim_embeddings
-        )
-        self.gate = nn.Linear(
-            config.dim_embeddings, 256
-        )
+        self.l1 = nn.Linear(config.dim_embeddings, 256)
+        self.l2 = nn.Linear(256, config.dim_embeddings)
+        self.gate = nn.Linear(config.dim_embeddings, 256)
 
     def forward(self, X):
-        return self.l2(
-            F.silu(
-                self.l1(X) * self.gate(X)
-            )
-        )
+        return self.l2(F.silu(self.l1(X) * self.gate(X)))
+
 
 class RoPEMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, max_len, gqa):
         super().__init__()
         if gqa:
             self.mha = SimpleGQA(
-                embed_dim=embed_dim, 
+                embed_dim=embed_dim,
                 num_query_heads=num_heads,
                 num_groups=1,
             )
@@ -90,10 +86,8 @@ class RoPEMultiheadAttention(nn.Module):
                 embed_dim=embed_dim,
                 num_query_heads=num_heads,
             )
-        self.rope = RotaryPositionalEncoding(
-            d_model=embed_dim, max_len=max_len
-        )
-        
+        self.rope = RotaryPositionalEncoding(d_model=embed_dim, max_len=max_len)
+
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
@@ -109,6 +103,7 @@ class RoPEMultiheadAttention(nn.Module):
         attn_output, _ = self.mha(q, k, v, attn_mask=mask)
         return attn_output
 
+
 class Llama2TransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
@@ -117,7 +112,7 @@ class Llama2TransformerLayer(nn.Module):
             config.dim_embeddings,
             config.num_attention_heads,
             config.sequence_length,
-            gqa=False
+            gqa=False,
         )
         self.norm_2 = nn.RMSNorm(config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
@@ -127,6 +122,7 @@ class Llama2TransformerLayer(nn.Module):
         first_half += X
         second_half = self.linear(first_half)
         return self.norm_2(second_half + X)
+
 
 class Llama3TransformerLayer(nn.Module):
     def __init__(self, config: Config):
@@ -136,7 +132,7 @@ class Llama3TransformerLayer(nn.Module):
             config.dim_embeddings,
             config.num_attention_heads,
             config.sequence_length,
-            gqa=True
+            gqa=True,
         )
         self.norm_2 = nn.RMSNorm(config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
@@ -146,6 +142,28 @@ class Llama3TransformerLayer(nn.Module):
         first_half += X
         second_half = self.linear(first_half)
         return self.norm_2(second_half + X)
+
+
+class DeepSeekLikeTransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.attention = MultiHeadLatentAttention(
+            config.dim_embeddings,
+            config.num_attention_heads,
+            config.sequence_length,
+            num_groups=None,
+        )
+        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.linear = LlamaFeedForward(config)
+
+    def forward(self, X, mask):
+        X_norm = self.norm_1(X)
+        first_half = self.attention(X_norm, X_norm, X_norm, mask)
+        first_half += X
+        second_half = self.linear(first_half)
+        return self.norm_2(second_half + X)
+
 
 class GptTransformerLayer(nn.Module):
     def __init__(self, config: Config):
@@ -175,6 +193,7 @@ class GptTransformerLayer(nn.Module):
     def get_attention_output(self, X, mask):
         attn_output, _ = self.self_attention(X, X, X, attn_mask=mask)
         return attn_output
+
 
 class SimpleTransformerLayer(nn.Module):
     def __init__(self, config: Config):
@@ -206,8 +225,12 @@ class SimpleTransformerLayer(nn.Module):
         else:
             raise Exception(f"Unknown attention type {self.configs.attention_type}")
 
+
 def get_attention_layer(config: Config):
-    if config.transformer_layer in [TransformerLayerType.SIMPLE, TransformerLayerType.SIMPLE_NO_ATTENTION]:
+    if config.transformer_layer in [
+        TransformerLayerType.SIMPLE,
+        TransformerLayerType.SIMPLE_NO_ATTENTION,
+    ]:
         return SimpleTransformerLayer(config)
     elif config.transformer_layer == TransformerLayerType.GPT2:
         return GptTransformerLayer(config)
@@ -215,8 +238,11 @@ def get_attention_layer(config: Config):
         return Llama2TransformerLayer(config)
     elif config.transformer_layer == TransformerLayerType.LLAMA3:
         return Llama3TransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.DEEPSEEK:
+        return DeepSeekLikeTransformerLayer(config)
     else:
         raise Exception(f"unknown type {config.transformer_layer}")
+
 
 class NnPositionalEmbedding(nn.Module):
     def __init__(self, sequence_length: int, dim_embeddings: int):

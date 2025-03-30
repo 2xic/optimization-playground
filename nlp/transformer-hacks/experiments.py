@@ -1,4 +1,11 @@
-from model import Config, PositionalEmbeddingType, TransformerLayerType, NormalizationLayerType
+from model import (
+    Config,
+    PositionalEmbeddingType,
+    TransformerLayerType,
+    NormalizationLayerType,
+    Model
+)
+from layers_mixture_of_experts import MoE
 from plot import plot_accuracy_loss, Results, MinMaxArray
 from transformer_dataset import XorDataset
 from typing import Callable
@@ -8,13 +15,21 @@ from train import train
 TODO
 - We should run on multiple datasets
 """
+SAMPLE_SIZE = 1_00
 
 
-def positional_override(
-    positional_embedding: PositionalEmbeddingType,
+def config_override(
+    positional_embedding: PositionalEmbeddingType = None,
+    transformer_layer: TransformerLayerType = None,
+    normalization_layer: NormalizationLayerType = None,
 ) -> Callable[[Config], Config]:
     def override(config: Config):
-        config.positional_embedding = positional_embedding
+        if positional_embedding is not None:
+            config.positional_embedding = positional_embedding
+        if transformer_layer is not None:
+            config.transformer_layer = transformer_layer
+        if normalization_layer is not None:
+            config.normalization_layer = normalization_layer
         return config
 
     return override
@@ -30,9 +45,12 @@ def positional_embeddings():
     ]:
         epochs_accuracy = MinMaxArray()
         epochs_loss = MinMaxArray()
-        for _ in range(10):
+        for _ in range(SAMPLE_SIZE):
             (_, accuracy, loss) = train(
-                XorDataset(), positional_override(positional_embedding)
+                XorDataset(),
+                config_override(
+                    positional_embedding=positional_embedding,
+                ),
             )
             epochs_accuracy.add(accuracy)
             epochs_loss.add(loss)
@@ -43,6 +61,7 @@ def positional_embeddings():
         )
     plot_accuracy_loss(data, "positional_embeddings.png")
 
+
 def attention_override(
     attention_type: TransformerLayerType,
 ) -> Callable[[Config], Config]:
@@ -52,9 +71,11 @@ def attention_override(
 
     return override
 
+
 def transformer_layer():
     data = {}
-    for positional_embedding in [
+    for transformer_layer in [
+        TransformerLayerType.DEEPSEEK,
         TransformerLayerType.LLAMA2,
         TransformerLayerType.LLAMA3,
         TransformerLayerType.GPT2,
@@ -63,14 +84,17 @@ def transformer_layer():
     ]:
         epochs_accuracy = MinMaxArray()
         epochs_loss = MinMaxArray()
-        for _ in range(10):
+        for _ in range(SAMPLE_SIZE):
             (_, accuracy, loss) = train(
-                XorDataset(), attention_override(positional_embedding)
+                XorDataset(),
+                config_override(
+                    transformer_layer=transformer_layer,
+                ),
             )
             epochs_accuracy.add(accuracy)
             epochs_loss.add(loss)
             assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-        data[positional_embedding] = Results(
+        data[transformer_layer] = Results(
             accuracy=epochs_accuracy,
             loss=epochs_loss,
         )
@@ -86,29 +110,68 @@ def normalization_layer_override(
 
     return override
 
+
 def normalization_layer():
     data = {}
-    for positional_embedding in [
+    for normalization_layer in [
         NormalizationLayerType.LAYER_NORM,
         NormalizationLayerType.DyT,
     ]:
         epochs_accuracy = MinMaxArray()
         epochs_loss = MinMaxArray()
-        for _ in range(10):
+        for _ in range(SAMPLE_SIZE):
             (_, accuracy, loss) = train(
-                XorDataset(), normalization_layer_override(positional_embedding)
+                XorDataset(),
+                config_override(
+                    normalization_layer=normalization_layer,
+                ),
             )
             epochs_accuracy.add(accuracy)
             epochs_loss.add(loss)
             assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-        data[positional_embedding] = Results(
+        data[normalization_layer] = Results(
             accuracy=epochs_accuracy,
             loss=epochs_loss,
         )
     plot_accuracy_loss(data, "normalization_layer.png")
 
 
+def mixture_of_expert_model_vs_standard():
+    data = {}
+    for create_model, name in [
+        ((lambda x: Model(x), "normal")),
+        ((lambda x: MoE(x), "moe"))
+    ]:
+        epochs_accuracy = MinMaxArray()
+        epochs_loss = MinMaxArray()
+        for _ in range(SAMPLE_SIZE):
+            (_, accuracy, loss) = train(
+                XorDataset(),
+                create_model=create_model,
+            )
+            epochs_accuracy.add(accuracy)
+            epochs_loss.add(loss)
+            assert len(epochs_accuracy.min_max_avg) == len(accuracy)
+        data[name] = Results(
+            accuracy=epochs_accuracy,
+            loss=epochs_loss,
+        )
+    plot_accuracy_loss(data, "model_vs_moe.png")
+
+
+def test_pass():
+    (_, accuracy, loss) = train(
+        XorDataset(),
+        config_override(
+            transformer_layer=TransformerLayerType.DEEPSEEK,
+        ),
+    )
+    print(f"Accuracy {accuracy}, Loss: {loss}")
+
+
 if __name__ == "__main__":
-    positional_embeddings()
-    transformer_layer()
-    normalization_layer()
+    test_pass()
+    mixture_of_expert_model_vs_standard()
+  #  positional_embeddings()
+ #   transformer_layer()
+#    normalization_layer()

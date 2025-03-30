@@ -7,6 +7,7 @@ from optimization_playground_shared.nlp.utils.sampling import (
 )
 from typing import Callable
 
+
 def create_config(vocab_size, padding_index, sequence_length):
     return Config(
         sequence_length=sequence_length,
@@ -17,9 +18,10 @@ def create_config(vocab_size, padding_index, sequence_length):
         vocab_size=vocab_size,
     )
 
-
 def train(
-    dataset: TransformerDataset, override: Callable[[Config], Config] = (lambda x: x)
+    dataset: TransformerDataset, 
+    override: Callable[[Config], Config] = (lambda x: x),
+    create_model: Callable[[Config], Model] = (lambda x: Model(x))
 ):
     config = create_config(
         dataset.vocab_size,
@@ -27,7 +29,7 @@ def train(
         sequence_length=dataset.sequence_size,
     )
     config = override(config)
-    model = Model(config)
+    model = create_model(config)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loader = dataset.iter(
         batch_size=32,

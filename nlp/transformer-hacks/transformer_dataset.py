@@ -26,6 +26,7 @@ class SimpleTextEncoder:
         word_idx = word_idx.item() if isinstance(word_idx, torch.Tensor) else word_idx
         return self.idx_vocab[word_idx]
 
+
 class TransformerDataset(ABC):
     @property
     @abstractmethod
