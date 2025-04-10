@@ -1,7 +1,8 @@
 from model import Model, Config
 import torch
 import glob
-from dataset_tokenizer import SimpleTextEncoder, BpeTokenizer
+from dataset_tokenizer import SimpleTextEncoder, WordPieceBuilder, WordPiece
+from transformer_dataset import TransformerTextDataset
 
 def test_basic_model():
     config = Config(
@@ -27,38 +28,54 @@ def test_text_encoder():
     )
     tokenizer.save_cache()
     
-    new_tokenizer = SimpleTextEncoder(
+    new_tokenizer, cache = SimpleTextEncoder(
         "test"
     ).load_cache()
-    assert len(new_tokenizer.idx_vocab) == len(tokenizer.idx_vocab)
-
-def test_text_encoder():
-    tokenizer = SimpleTextEncoder(
-        "test"
-    ).build_from_files(
-        glob.iglob("*.py")
-    )
-    tokenizer.save_cache()
-    
-    new_tokenizer = SimpleTextEncoder(
-        "test"
-    ).load_cache()
+    assert cache
     assert len(new_tokenizer.idx_vocab) == len(tokenizer.idx_vocab)
 
 def test_bpe_encoder():
-    bpe = BpeTokenizer()
-    bpe.add_document("hello world")
-    len_tokens = len(bpe.index_word)
-    bpe.merge(n=1)
-    print(bpe.index_word)
-    bpe.merge(n=1000)
-    print(bpe.index_word)
-    assert len(bpe.index_word) != len_tokens
-    assert bpe.decode(bpe.encode("hello")) == "hello"
-
+    bpe = WordPieceBuilder("test")
     bpe.add_document("hello world")
     bpe.add_document("hello bagel")
     bpe.add_document("hello world")
-    bpe.merge()
-    assert bpe.decode(bpe.encode("hello")) == "hello"
-    assert bpe.decode(bpe.encode("bagel")) == "bagel"
+        
+    new_tokenizer = bpe.build(20)
+    assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
+    assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
+
+def test_bpe_encoder_from_file():
+    bpe = WordPieceBuilder("test")
+    bpe.build_from_iterator(
+        glob.iglob("*.py")
+    )
+    new_tokenizer = bpe.build(20)
+    assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
+    assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
+
+    new_tokenizer.save_cache()
+    (new_tokenizer, cached) = WordPiece.load_cache(bpe.name)
+    assert cached
+    assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
+    assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
+
+def test_transformer_dataset():
+    bpe = WordPieceBuilder("test")
+    bpe.build_from_iterator(
+        glob.iglob("*.py")
+    )
+    new_tokenizer = bpe.build(20)
+    assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
+    assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
+
+    dataset = TransformerTextDataset.from_iterator_single(
+        "test",
+        new_tokenizer,
+        glob.iglob("*.py"),
+        128
+    )
+  #  dataset.save("test")
+#    reloaded_dataset = TransformerTextDataset.load("test", new_tokenizer)
+ #   assert len(reloaded_dataset.X) == len(reloaded_dataset.y)
+ #   assert len(reloaded_dataset.X) > 0
+ #   assert len(reloaded_dataset.X) == len(dataset.y)

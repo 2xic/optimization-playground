@@ -1,5 +1,5 @@
 from model import Model, Config, DEVICE
-from transformer_dataset import TransformerDataset, TransformerTextDataset
+from transformer_dataset import TransformerDatasetBase, TransformerTextDataset
 import torch
 import torch.optim as optim
 from optimization_playground_shared.nlp.utils.sampling import (
@@ -7,10 +7,16 @@ from optimization_playground_shared.nlp.utils.sampling import (
 )
 from typing import Callable
 from dataset_tokenizer import SimpleTextEncoder
+from tqdm import tqdm
+from dataclasses import dataclass
 
 DEBUG = False
 
 print(DEVICE)
+
+@dataclass
+class TrainingOptions:
+    batch_size: int = (32 if DEVICE.type != "cuda" else 256)
 
 def debug_print(*args):
     if DEBUG:
@@ -27,9 +33,11 @@ def create_config(vocab_size, padding_index, sequence_length):
     )
 
 def train(
-    dataset: TransformerDataset, 
+    dataset: TransformerDatasetBase, 
     override: Callable[[Config], Config] = (lambda x: x),
-    create_model: Callable[[Config], Model] = (lambda x: Model(x))
+    create_model: Callable[[Config], Model] = (lambda x: Model(x)),
+    options: TrainingOptions = TrainingOptions(),
+    progress=range
 ):
     config = create_config(
         dataset.vocab_size,
@@ -40,12 +48,12 @@ def train(
     model = create_model(config).to(DEVICE)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     loader = dataset.iter(
-        batch_size=32,
+        batch_size=options.batch_size,
     )
     epochs = []
     epochs_loss = []
     epochs_accuracy = []
-    for i in range(1_000):
+    for i in progress(1_000):
         sum_loss = 0
         accuracy = 0
         rows = 0
@@ -98,8 +106,20 @@ def train(
 
 
 if __name__ == "__main__":
-    tokenizer = SimpleTextEncoder("example").build_from_files([
-        "example.text"
-    ])
+    tokenizer, cached = SimpleTextEncoder("example").load_cache()
+    if not cached:
+        print("Not cached building tokenizer.")
+        tokenizer = tokenizer.build_from_files([
+            "example.text"
+        ])
+        tokenizer.save_cache()
+    else:
+        print("Tokenizer is cached.")
     text_dataset = TransformerTextDataset.from_file(tokenizer, "example.text", sequence_length=4)
-    train(text_dataset)
+    train(
+        text_dataset,
+        options=TrainingOptions(
+            batch_size=256
+        ),
+        progress=lambda x: tqdm(range(x))
+    )

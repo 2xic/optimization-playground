@@ -7,14 +7,18 @@ from abc import ABC, abstractmethod
 from optimization_playground_shared.nlp.SimpleVocab import splitter
 import json
 import os
+import collections
 from collections import defaultdict
+from tqdm import tqdm
+import time 
+from functools import lru_cache
 
 class Tokenizer(ABC):
     name: str
     
     @property
     @abstractmethod
-    def add_word(self, word):
+    def encode(self, word):
         pass
 
     @property
@@ -26,21 +30,24 @@ class Tokenizer(ABC):
         return splitter(doc)
 
     def save_cache(self):
-        tokenizer_path = self.get_tokenizer_path()
+        tokenizer_path = Tokenizer.get_tokenizer_path(self.name)
         with open(tokenizer_path, "w") as file:
             json.dump(self.get_cache_fields(), file)
 
-    def load_cache(self) -> Dict[str, Any] :
-        tokenizer_path = self.get_tokenizer_path()
+    @classmethod
+    def load_cache(_cls, name) -> Dict[str, Any] :
+        tokenizer_path = Tokenizer.get_tokenizer_path(name)
         if os.path.isfile(tokenizer_path):
             with open(tokenizer_path, "r") as file:
                 return json.load(file)
+        return None
     
-    def get_tokenizer_path(self):
+    @classmethod
+    def get_tokenizer_path(_cls, name):
         tokenizer_path = os.path.join(
             os.path.dirname(__file__),
             "tokenizer",
-            self.name + ".json"
+            name + ".json"
         )
         os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
         return tokenizer_path
@@ -50,11 +57,11 @@ class Tokenizer(ABC):
         pass
 
     def build_from_files(self, iterator) -> 'Tokenizer':
-        for i in iterator:
+        for i in tqdm(iterator, desc="Building up files"):
             with open(i, "r") as file:
                 tokens = list(set(splitter(file.read())))
             for i in tokens:
-                self.add_word(i)
+                self.encode(i)
         return self
 
 class SimpleTextEncoder(Tokenizer):
@@ -63,7 +70,8 @@ class SimpleTextEncoder(Tokenizer):
         self.vocab_idx = {}
         self.idx_vocab = {}
         self.is_locked = False
-        self.padding_index = self.add_word("<PADDING>")
+        self.padding_index = self.encode("<PADDING>")
+        self.unknown_index = self.encode("<UNKNOWN>")
 
     def get_cache_fields(self):
         return {
@@ -71,17 +79,23 @@ class SimpleTextEncoder(Tokenizer):
             "idx_vocab": self.idx_vocab,
             "is_locked": self.is_locked,
             "padding_index": self.padding_index,
+            "unknown_index": self.unknown_index,
         }
     
     def load_cache(self):
-        cache_fields = super().load_cache()
-        self.vocab_idx = cache_fields["vocab_idx"]
-        self.idx_vocab = cache_fields["idx_vocab"]
-        self.is_locked = cache_fields["is_locked"]
-        self.padding_index = cache_fields["padding_index"]
-        return self
+        cache_fields = Tokenizer.load_cache(self.name)
+        if cache_fields is not None:
+            self.vocab_idx = cache_fields["vocab_idx"]
+            self.idx_vocab = cache_fields["idx_vocab"]
+            # TODO: THis shouldn't really be needed ?
+            self.idx_vocab = dict(map(lambda kv: (int(kv[0]), kv[1]), self.idx_vocab.items()))
+            self.is_locked = cache_fields["is_locked"]
+            self.padding_index = cache_fields["padding_index"]
+            self.unknown_index = cache_fields["unknown_index"]
+            return self, True
+        return self, False
     
-    def add_word(self, word):
+    def encode(self, word):
         if word not in self.vocab_idx:
             idx = len(self.vocab_idx)
             self.vocab_idx[word] = idx
@@ -91,152 +105,154 @@ class SimpleTextEncoder(Tokenizer):
 
     def decode_idx(self, word_idx: Union[torch.Tensor, int]):
         word_idx = word_idx.item() if isinstance(word_idx, torch.Tensor) else word_idx
-        return self.idx_vocab[word_idx]
+        return self.idx_vocab.get(word_idx, self.idx_vocab[self.unknown_index])
 
-# Rewritten version of the Bpe in wordpeice
-class BpeTokenizer(Tokenizer):
-    def __init__(self):
-        # Stats
-        self.word_index = {}
-        self.index_word = {}
-        self.word_frequency = {}
-        self.tokens_index = {}
-        self.merged_pairs = []
-        # System tokens
-        # Any tokens after this can be changed
-        self.system_tokens = []
-        self.padding_index = self.register_system_tokens("<PADDING>")
-        self.is_readonly = True
+class WordPieceBuilder:
+    def __init__(self, name):
+        self.char_vocab = collections.Counter()
+        
+        special_tokens = ["<UNKNOWN>", "<PADDING>"]
+        self.final_vocab = {token: 1 for token in special_tokens}
+        self.subwords = defaultdict(int)
+        self.name = name
 
-    def register_system_tokens(self, token):
-        idx = len(self.system_tokens)
-        self.system_tokens.append(token)
-        return idx
+    def build_from_iterator(self, iterator) -> 'WordPieceBuilder':
+        for i in tqdm(iterator, desc="Building up files"):
+            with open(i, "r") as file:
+                self.add_document(file.read())
+        return self
+
+    def add_document(self, document):
+        assert type(document) == str
+        for word in splitter(document):
+            for char in word:
+                self.char_vocab[char] += 1
+            self.subwords[" ".join(list(word))] += 1
+        return self
+        
+    def build(self, vocab_size) -> 'WordPiece':
+        for char, count in self.char_vocab.items():
+            self.final_vocab[char] = count
+
+        path = self.get_cache_path(self.name)
+        with open(path, "w") as file:
+            json.dump({
+                "final_vocab": self.final_vocab,
+                "subwords": self.subwords,
+            }, file)
+        
+        return WordPiece.train_wordpiece(self.name, self.final_vocab, self.subwords, vocab_size)
+    
+    def build_from_cache(self, vocab_size):
+        path = self.get_cache_path(self.name)
+        with open(path, "r") as file:
+            obj = json.load(file)
+        
+        return WordPiece.train_wordpiece(self.name, obj["final_vocab"], obj["subwords"], vocab_size)
+
+    def get_cache_path(self, name):
+        tokenizer_path = os.path.join(
+            os.path.dirname(__file__),
+            "wordpiece",
+            name + ".json"
+        )
+        os.makedirs(os.path.dirname(tokenizer_path), exist_ok=True)
+        return tokenizer_path
+
+
+class RegularPrinter:
+    def __init__(self, interval_seconds=60):
+        self.last_print = time.time()
+        self.interval_seconds = interval_seconds
+
+    def print(self, *x):
+        if self.interval_seconds < time.time() - self.last_print:
+            print(*x)
+
+class WordPiece(Tokenizer):
+    def __init__(self, name, final_vocab, subwords):
+        self.name = name
+        self.subwords = subwords
+
+        # Build the index.
+        self.idx_vocab = {}
+        self.vocab_idx = {}
+        for index, vocab in enumerate(final_vocab.keys()):
+            self.idx_vocab[index] = vocab
+            self.vocab_idx[vocab] = index
 
     def get_cache_fields(self):
         return {
-            "word_index": self.word_index,
-            "index_word": self.index_word,
-            "word_frequency": self.word_frequency,
-            "tokens_index": self.tokens_index,
-            "system_tokens": self.system_tokens,
-            "padding_index": self.padding_index,
+            "vocab_idx": self.vocab_idx,
+            "idx_vocab": self.idx_vocab,
+            "subwords": self.subwords,
         }
     
-    def add_document(self, document):
-        for i in self.split(document):
-            self.add_word(i)
-
-    def encode(self, document):
-        assert type(document) == str
-        output = []
-        for token in self.split(document):
-            for word in self._encode(token):
-                output.append(self.tokens_index[word])
-        return output
-
-    def _encode(self, word):
-        # Should only contain system tokens
-        if word in self.word_index:
-            return self.word_index[word]
-        assert type(word) == str
-        # Add end-of-word token
-        word = list(word) + ['</w>']
-        for pair in self.merged_pairs:
-            i = 0
-            while i < len(word) - 1:
-                if (word[i], word[i + 1]) == pair:
-                    word[i] = word[i] + word[i + 1]
-                    del word[i + 1]
-                else:
-                    i += 1
-        return word[:-1]
-
-    def decode(self, tokens):
-        assert type(tokens) == list
-        output = []
-        padding_token = self.padding_index
-        for token in tokens:
-            if padding_token == token:
-                continue
-            print(token, self.index_word)
-            output.append(self.index_word[token])
-        return "".join(output)
-    
-    def decode_idx(self, token):
-        return self.decode([token])
-
-    def merge(self, n=10):
-        for i in range(n):
-            self._merge()
-
-    def _merge(self):
-        pairs = self._get_stats()
-        if len(pairs) == 0:
-            return False
-        pair = max(
-            pairs,
-            key=lambda x: pairs[x]
-        )
-        self.merged_pairs.append(pair)
-        for index in self.index_word:
-            word: str = self.index_word[index]
-            joined = "".join(pair)
-            splitted = " ".join(pair)
-            output = word.replace(splitted, joined)
-            # Pair got jointed need to update
-            if word != output:
-                self.update(
-                    word,
-                    output,
-                    pair
-                )
-        # This should update it. 
-        for index, value in enumerate(set(self.system_tokens + list(self.tokens_index.keys()))):
-            self.tokens_index[value] = index
-            self.index_word[index] = value
-        assert max(self.tokens_index.values()) <= len(self.tokens_index)
-        return True
-
-    def _get_stats(self):
-        """
-        We get the frequency of word pairs in the total vocab
-        """
-        pairs = defaultdict(int)
-        for word in self.word_index:
-            frequency = self.word_frequency[word]
-            symbols = word.split()
-            for i in range(len(symbols) - 1):
-                pairs[symbols[i], symbols[i + 1]] += frequency
-        return pairs
-
-    """
-    Indexing logic
-    """
-    def add_word(self, word):
-        word = self._tokenize_words(word)
-        if word in self.word_frequency:
-            self.word_frequency[word] += 1
+    @classmethod
+    def load_cache(cls, name):
+        cache_fields = Tokenizer.load_cache(name)
+        if cache_fields is not None:
+            vocab_idx = cache_fields["vocab_idx"]
+            sub_words = cache_fields["subwords"]
+            return cls(name, vocab_idx, sub_words), True
         else:
-            idx = len(self.word_index)
-            self.word_index[word] = idx
-            self.index_word[idx] = word
-            self.word_frequency[word] = 1
-        
-        for symbol in word:
-            if not symbol in self.tokens_index:
-                self.tokens_index[symbol] = None
+            raise Exception("Not yet created")
 
-    def update(self, from_word, to_word, pair):
-    #    print(self.word_index[to_word])
-        self.word_index[to_word] = self.word_index[from_word]
-        self.index_word[self.word_index[to_word]] = to_word
-        self.word_frequency[to_word] = self.word_frequency[from_word]
-        del self.word_index[from_word]
-        del self.word_frequency[from_word]
-        # Update the mapping token if not already updated
-        if pair[0] in self.tokens_index:
-            self.tokens_index[pair[0] + pair[1]] = None
+    @classmethod
+    def train_wordpiece(self, name, final_vocab, subwords, vocab_size):
+        start = time.time()
+        progress = RegularPrinter()
+        iteration = 0
+        while len(final_vocab) < vocab_size and (time.time() - start) < 3600:
+            progress.print(f"Delta {time.time() - start}, iteration {iteration}")
+            pair_counts = collections.Counter()
+            for word_subwords, count in subwords.items():
+                word_subwords = word_subwords.split(" ")
+                for i in range(len(word_subwords) - 1):
+                    pair = (word_subwords[i], word_subwords[i + 1])
+                    pair_counts[pair] += count
 
-    def _tokenize_words(self, word: str):
-        return " ".join(list(word))
+            if not pair_counts:
+                break
+            best_pair = max(pair_counts, key=pair_counts.get)            
+            new_subwords = defaultdict(int)
+            merged = 0
+            for word_subwords, count in subwords.items():
+                word_subwords = word_subwords.split(" ")
+
+                merged_word = []
+                i = 0
+                while i < len(word_subwords):
+                    if i < len(word_subwords) - 1 and (word_subwords[i], word_subwords[i + 1]) == best_pair:
+                        merged_word.append(word_subwords[i] + word_subwords[i + 1]) 
+                        merged += 1
+                        i += 2
+                    else:
+                        merged_word.append(word_subwords[i])
+                        i += 1
+                new_subwords[" ".join(merged_word)] += count
+            
+            subwords = new_subwords
+            merged_token = "".join(best_pair)
+            final_vocab[merged_token] = pair_counts[best_pair]
+            iteration += 1
+        return WordPiece(name, final_vocab, subwords)
+            
+    def decode_idx(self, idx):
+        return self.decode([idx])
+
+    @lru_cache(maxsize=2 << 15)
+    def encode(self, word):
+        tokens = list(word)
+        i = 0
+        while i < len(tokens) - 1:
+            combined = tokens[i] + tokens[i + 1]
+            if combined in self.vocab_idx:
+                tokens[i] = combined
+                tokens.pop(i + 1)
+            else:
+                i += 1
+        return list(map(lambda x: self.vocab_idx[x], tokens))
+    
+    def decode(self, tokens):
+        return "".join(list(map(lambda x: self.idx_vocab[x], tokens)))
