@@ -48,7 +48,7 @@ Games with that aren't perfect information games = AI ?
 
 
 ### Evolution of GANs, why are Gan better?
-[4.5 years of GAN progress in one image](https://blog.acolyer.org/wp-content/uploads/2019/02/gans-tweet-1.jpeg?w=480) so image generations are clearly something the models are getting better at, but how ? 
+[4.5 years of GAN progress in one image](https://web.archive.org/web/20220503230349/https://blog.acolyer.org/wp-content/uploads/2019/02/gans-tweet-1.jpeg?w=480) so image generations are clearly something the models are getting better at, but how ? 
 Compute, "smarter" algorithms (smarter is up for debate here, we could also just call it clever tricks), architecture changes.
 
 - [Soo much compute](http://www.transistorcount.com/)

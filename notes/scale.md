@@ -1,3 +1,5 @@
+# Scaling laws
+
 ## [Scaling Laws for Autoregressive Generative Modeling](https://arxiv.org/pdf/2010.14701)
 - Cross-entropy scaling laws are seen in four domains
   - generative image modeling
@@ -51,6 +53,9 @@ Smaller models can beat larger models when using novel search. Example Llemma-7B
   - https://arxiv.org/pdf/2309.12288
 
 I should explore this more.
+
+## O1 vs O3 performance / cost
+- https://x.com/polynoamial/status/1912564068168450396
 
 ## Interesting cases of scaling
 - [GPT 4o learns a depth map](https://x.com/BorisMPower/status/1905501629237133414)

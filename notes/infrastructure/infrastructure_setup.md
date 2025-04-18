@@ -49,4 +49,4 @@ There is also a good blogpost by [Lilian Weng](https://lilianweng.github.io/post
   - Parallel file system architecture which allows multiple algorithms to read the data without contentions.
   - Uses RDMA and SSds for storage. Uses foundationdb as it's distributed storage layer.
   - [Blogpost on Fire-Flyer](https://www-high--flyer-cn.translate.goog/blog/3fs/?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp) 
-- 
+- [An Intro to DeepSeek's Distributed File System](https://maknee.github.io/blog/2025/3FS-Performance-Journal-1/)
