@@ -95,7 +95,7 @@ for _ in range(1024 * 8):
     tokens, x_tokens = model.rollout(
         X[0].tolist(), 
         128,
-        sampling="argmax"
+        sampling="temperature"
     )
     print("Predicted vs actual tokens for X[0]")
     print("\t" + str(tokens[config.sequence_length:]))

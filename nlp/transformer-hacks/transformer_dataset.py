@@ -7,13 +7,11 @@ from optimization_playground_shared.nlp.SimpleVocab import splitter
 from abc import ABC, abstractmethod
 from dataset_tokenizer import SimpleTextEncoder
 import pickle
-from multiprocessing import Process, Queue, Value
-import time 
 import aiofiles
 import asyncio
-import numpy as np
 from tqdm import tqdm
 from itertools import chain
+from typing import List
 from functools import lru_cache
 
 MAX_WORKERS = 16
@@ -43,7 +41,7 @@ class TransformerDatasetBase(ABC):
         pass
 
     @abstractmethod
-    def decode(self, X):
+    def decode_tokens(self, X: List[int]):
         pass
 
     @property
@@ -54,18 +52,18 @@ class TransformerDatasetBase(ABC):
     def __len__(self):
         pass
 
-    def iter(self, batch_size=4):
-        return DataLoader(self, batch_size=batch_size, num_workers=4)
+    def iter(self, batch_size=4, workers=4):
+        return DataLoader(self, batch_size=batch_size, num_workers=workers)
 
     def sample(self, n):
         return list(
             map(
                 lambda idx: [*self.__getitem__(idx)],
-                random.sample(range(self.__len__()), k=n),
+                random.sample(range(self.__len__()), k=min(n, self.__len__())),
             )
         )
 
-class TransformerDataset(ABC):
+class TransformerDataset(TransformerDatasetBase):
     @property
     @abstractmethod
     def X(self):
@@ -118,7 +116,7 @@ class XorDataset(TransformerDataset):
     def padding_index(self):
         return 2
 
-    def decode(self, X):
+    def decode_tokens(self, X: List[int]):
         if isinstance(X, torch.Tensor):
             return str(X.item())
         return str(X)
@@ -173,16 +171,24 @@ class PartialMemoryTensor:
             return data
 
     def get_path(self, batch_id):
-        dir_path = os.path.dirname(__file__)
-        dir_path = os.path.join(
-            dir_path,
-            "tensors",
-        )
-        name = self.name
+        dir_path = self.get_dir_path(self.name)
         os.makedirs(dir_path, exist_ok=True)
         if batch_id is None:
-            return os.path.join(dir_path, name + f".pkl")
-        return os.path.join(dir_path, name + f"_{batch_id}.pkl")
+            return os.path.join(dir_path, f"metadata.pkl")
+        return os.path.join(dir_path, f"{batch_id}.pkl")
+    
+    @classmethod
+    def get_dir_path(self, name):
+        return os.path.join(
+            os.path.dirname(__file__),
+            "tensors",
+            name,
+        )
+    
+    @classmethod
+    def does_exists(self, name):
+        return os.path.isdir(PartialMemoryTensor.get_dir_path(name))
+
 
 class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
     def __init__(self, partial_memory_tensor_name, tokenizer):
@@ -204,8 +210,18 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         for i in (sorted(self.lookup.keys())):
             assert (i - prev) == 1, f"{i} != {prev}"
             prev = i
-        # TODO: 
         self.tokenizer = tokenizer  
+        self.max_size = float('inf')
+        self._sequence_size = 256
+
+    @classmethod
+    def load(self, name, tokenizer):
+        if PartialMemoryTensor.does_exists(name):
+            return TransformerTextDatasetLazy(
+                name,
+                tokenizer,
+            )
+        return None
 
     @property
     def padding_index(self):
@@ -213,13 +229,13 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
 
     @property
     def vocab_size(self):
-        return len(self.tokenizer.vocab_idx)
+        return self.tokenizer.vocab_size
 
     @property
     def sequence_size(self):
-        return 256
+        return self._sequence_size
 
-    def decode(self, X):
+    def decode_tokens(self, X: List[int]):
         return self.tokenizer.decode(X)
     
     @lru_cache(2048)
@@ -235,7 +251,8 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         return X, y
 
     def __len__(self):
-        return self.rows
+        size =  min(self.rows, self.max_size)
+        return size
 
     def iter(self, batch_size=4):
         return DataLoader(self, batch_size=batch_size, num_workers=1, shuffle=False)
@@ -247,8 +264,12 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         self._X = X
         self._y = y
         self.encoder: SimpleTextEncoder = encoder
-        self._vocab_size = len(self.encoder.idx_vocab)
+        self._vocab_size = self.encoder.vocab_size
         self._sequence_size = sequence_size
+        self._len = len(self.X)
+
+    def __len__(self):
+        return self._len
 
     @property
     def sequence_size(self):
@@ -274,7 +295,7 @@ class TransformerTextDataset(TransformerDataset, Dataset):
                 with open(i, "rb") as file:
                     documents.append(splitter(file.read()))
         assert len(documents) > 0
-        return TransformerTextDataset._from_documents(documents, sequence_length)
+        return TransformerTextDataset.from_documents(documents, sequence_length)
 
     @classmethod
     def from_file(cls, tokenizer, txt, sequence_length):
@@ -283,17 +304,17 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         with open(txt, "rb") as file:
             documents.append(file.read())
         assert len(documents) > 0
-        return TransformerTextDataset._from_documents(tokenizer, documents, sequence_length)
+        return TransformerTextDataset.from_documents(tokenizer, documents, sequence_length)
     
     @classmethod
-    def from_iterator_single(cls, name, tokenizer, iterator, sequence_length):
+    def from_iterator_single(cls, name, tokenizer, iterator, sequence_length) -> TransformerTextDatasetLazy:
         tokenizer.is_locked = True
         batch_sizer = PartialMemoryTensor(name)
         def add_batch(doc):
             encoded = list(chain.from_iterable(tokenizer.encode(v) for v in doc))
-            view = encoded
-            chunked_encoded = [view[i:i+sequence_length + 1] for i in range(0, len(view), sequence_length)]
+            chunked_encoded = [encoded[i:i+sequence_length + 1] for i in range(0, len(encoded), sequence_length)]
             for encoded in chunked_encoded:
+                # TODO, maybe this is the issue?
                 if not sequence_length < len(encoded):
                     encoded += [1, ] * (sequence_length - len(encoded) + 1)
                 X = encoded[:-1]
@@ -361,28 +382,27 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         return None
 
     @classmethod
-    def _from_documents(self, tokenizer: SimpleTextEncoder, documents, sequence_length):
+    def from_documents(self, tokenizer: SimpleTextEncoder, documents, sequence_length):
         X, y = [], []
         tokenizer.is_locked = True
 
+        def read_sequence(arr, index):
+            return arr[index:index+sequence_length]
+
         for doc in documents:
-            doc = tokenizer.split(doc)
-            space = sequence_length * 2
-            for index, _ in enumerate(doc[:-space]):
-                n_tokens_forward = index + sequence_length
-                X.append([tokenizer.encode(v) for v in doc[index:n_tokens_forward]])
-                y.append(
-                    [
-                        tokenizer.encode(v)
-                        for v in doc[
-                            n_tokens_forward : n_tokens_forward + sequence_length 
-                        ]
-                    ]
-                )
+            tokens = tokenizer.split(doc)
+            for index, _ in enumerate(tokens):
+                next_tokens_index = index + sequence_length
+                current_tokens = [tokenizer.encode_idx(v) for v in read_sequence(tokens, index)]
+                next_tokens = [tokenizer.encode_idx(v) for v in read_sequence(tokens, next_tokens_index)]
+                if len(next_tokens) != sequence_length:
+                    continue
+                X.append(current_tokens)
+                y.append(next_tokens)
         return TransformerTextDataset(X, y, tokenizer, sequence_length)
 
-    def decode(self, word_idx):
-        return self.encoder.decode_idx(word_idx)
+    def decode_tokens(self, tokens: List[int]):
+        return self.encoder.decode(tokens)
 
     @property
     def padding_index(self):

@@ -122,4 +122,9 @@ What is more interesting is the engineering section
 ## [Badllama 3: removing safety finetuning from Llama 3 in minutes](https://arxiv.org/pdf/2407.01376)
 It's easy to remove safety features when you have access to the model.
 
+## [Does Reinforcement Learning Really Incentivize Reasoning Capacity in LLMs Beyond the Base Model?](https://arxiv.org/pdf/2504.13837)
+[Website](https://limit-of-rlvr.github.io/)
+
+The author conclusion suggests that RL doesn't seem to cause LLM to acquire better reasoning capabilities, but instead it makes them more sample efficient. Distilled models on the other hand, seems to improve the reasoning capabilities of the base model.
+
 

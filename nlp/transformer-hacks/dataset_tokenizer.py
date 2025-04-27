@@ -1,8 +1,10 @@
 """
 When working on larger dataset, you might want to be able to preprocess the dataset for the tokenizer etc.
 """
+import os 
+os.environ["TOKENIZERS_PARALLELISM"] = "TRUE"
 import torch
-from typing import Union, Optional, Dict, Any
+from typing import Union, Dict, Any
 from abc import ABC, abstractmethod
 from optimization_playground_shared.nlp.SimpleVocab import splitter
 import json
@@ -12,6 +14,9 @@ from collections import defaultdict
 from tqdm import tqdm
 import time 
 from functools import lru_cache
+from tokenizers import Tokenizer as HfTokenizer
+from tokenizers.models import BPE
+import os 
 
 class Tokenizer(ABC):
     name: str
@@ -56,6 +61,11 @@ class Tokenizer(ABC):
     def get_cache_fields(self) -> Dict[str, any]:
         pass
 
+    @property
+    @abstractmethod
+    def vocab_size(self):
+        pass
+
     def build_from_files(self, iterator) -> 'Tokenizer':
         for i in tqdm(iterator, desc="Building up files"):
             with open(i, "r") as file:
@@ -70,8 +80,8 @@ class SimpleTextEncoder(Tokenizer):
         self.vocab_idx = {}
         self.idx_vocab = {}
         self.is_locked = False
-        self.padding_index = self.encode("<PADDING>")
-        self.unknown_index = self.encode("<UNKNOWN>")
+        self.padding_index = self.encode_idx("<PADDING>")
+        self.unknown_index = self.encode_idx("<UNKNOWN>")
 
     def get_cache_fields(self):
         return {
@@ -82,30 +92,58 @@ class SimpleTextEncoder(Tokenizer):
             "unknown_index": self.unknown_index,
         }
     
-    def load_cache(self):
-        cache_fields = Tokenizer.load_cache(self.name)
-        if cache_fields is not None:
-            self.vocab_idx = cache_fields["vocab_idx"]
-            self.idx_vocab = cache_fields["idx_vocab"]
-            # TODO: THis shouldn't really be needed ?
-            self.idx_vocab = dict(map(lambda kv: (int(kv[0]), kv[1]), self.idx_vocab.items()))
-            self.is_locked = cache_fields["is_locked"]
-            self.padding_index = cache_fields["padding_index"]
-            self.unknown_index = cache_fields["unknown_index"]
-            return self, True
-        return self, False
+    def build_from_iterator(self, iterator):
+        for file in tqdm(iterator):
+            with open(file, "r") as file:
+                tokens = list(set(splitter(file.read())))
+                for i in tokens:
+                    self.encode(i)
+        return self
     
-    def encode(self, word):
-        if word not in self.vocab_idx:
+    @classmethod
+    def load_cache(cls, name):
+        cache_fields = Tokenizer.load_cache(name)
+        encoder = SimpleTextEncoder(name)
+        if cache_fields is not None:
+            encoder.vocab_idx = cache_fields["vocab_idx"]
+            encoder.idx_vocab = cache_fields["idx_vocab"]
+            # TODO: THis shouldn't really be needed ?
+            encoder.idx_vocab = dict(map(lambda kv: (int(kv[0]), kv[1]), encoder.idx_vocab.items()))
+            encoder.is_locked = cache_fields["is_locked"]
+            encoder.padding_index = cache_fields["padding_index"]
+            encoder.unknown_index = cache_fields["unknown_index"]
+            return encoder, True
+        return encoder, False
+
+    def encode_document(self, document):
+        return self.encode(document)
+    
+    def encode(self, doc):
+        return [self.encode_idx(i) for i in self.split(doc)]
+        
+    def encode_idx(self, word):
+        if self.is_locked and word not in self.vocab_idx:
+            return self.padding_index
+        elif word not in self.vocab_idx:
             idx = len(self.vocab_idx)
             self.vocab_idx[word] = idx
             self.idx_vocab[idx] = word
             assert type(word) == str, f"Word == {word}, Idx == {idx}"
         return self.vocab_idx[word]
+    
+    def decode(self, tokens):
+        decoded_tokens = []
+        for tok in tokens:
+            decoded_tokens.append(self.decode_idx(tok))
+        return "".join(decoded_tokens)
 
     def decode_idx(self, word_idx: Union[torch.Tensor, int]):
         word_idx = word_idx.item() if isinstance(word_idx, torch.Tensor) else word_idx
         return self.idx_vocab.get(word_idx, self.idx_vocab[self.unknown_index])
+
+    @property
+    def vocab_size(self):
+        return len(self.vocab_idx)
 
 class WordPieceBuilder:
     def __init__(self, name):
@@ -237,7 +275,14 @@ class WordPiece(Tokenizer):
             final_vocab[merged_token] = pair_counts[best_pair]
             iteration += 1
         return WordPiece(name, final_vocab, subwords)
-            
+
+    def encode_document(self, document):
+        tokens = []
+        for words in self.split(document):
+            for piece in self.encode(words):
+                tokens.append(piece)
+        return tokens
+
     def decode_idx(self, idx):
         return self.decode([idx])
 
@@ -256,3 +301,58 @@ class WordPiece(Tokenizer):
     
     def decode(self, tokens):
         return "".join(list(map(lambda x: self.idx_vocab[x], tokens)))
+
+    @property
+    def vocab_size(self):
+        return len(self.vocab_idx)
+
+
+"""
+Wrappers around existing tokenizers
+"""
+class HuggingFaceTokenizerWrapper(Tokenizer):
+    def __init__(self, name):
+        self.bpe = BPE()
+        self.tokenizer = HfTokenizer(self.bpe)
+        self.tokenizer.add_special_tokens(["<PADDING>"])
+        self.padding_index = self.tokenizer.encode("<PADDING>").ids[0]
+        assert self.decode_idx(self.padding_index) == "<PADDING>"
+        self.is_locked = False
+        self.name = name
+
+    def encode_document(self, documents):
+        assert type(documents) != str
+        self.tokenizer.train_from_iterator(documents)
+
+    def encode(self, doc):
+        return self.tokenizer.encode(doc).ids
+
+    def encode_idx(self, doc):
+        return self.tokenizer.encode(doc).ids[0]
+    
+    def decode(self, ids):
+        return self.tokenizer.decode(ids, skip_special_tokens=True)
+
+    def decode_idx(self, idx):
+        return self.tokenizer.decode([idx], skip_special_tokens=False)
+
+    @property
+    def vocab_size(self):
+        return self.tokenizer.get_vocab_size()
+
+    def get_cache_fields(self):
+        raise Exception("not implemented")
+
+    def save_cache(self):
+        tokenizer_path = Tokenizer.get_tokenizer_path(self.name)
+        self.tokenizer.save(tokenizer_path)
+
+    @classmethod
+    def load_cache(cls, name):
+        tokenizer_path = Tokenizer.get_tokenizer_path(name)
+        print(tokenizer_path)
+        hf = HuggingFaceTokenizerWrapper(name)
+        if os.path.isfile(tokenizer_path):
+            hf.tokenizer = hf.tokenizer.from_file(tokenizer_path)
+            return hf, True
+        return hf, False

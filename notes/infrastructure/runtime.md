@@ -6,4 +6,4 @@
 
 ### Visualizations
 - [Tensorboard](https://pytorch.org/tutorials/recipes/recipes/tensorboard_with_pytorch.html)
-- [Wanddb](https://wandb.ai/site)
+- [wandb](https://wandb.ai/site)

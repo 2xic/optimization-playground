@@ -1,8 +1,8 @@
-from model import Model, Config
 import torch
 import glob
+from model import Model, Config
 from dataset_tokenizer import SimpleTextEncoder, WordPieceBuilder, WordPiece
-from transformer_dataset import TransformerTextDataset
+from transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
 
 def test_basic_model():
     config = Config(
@@ -28,9 +28,7 @@ def test_text_encoder():
     )
     tokenizer.save_cache()
     
-    new_tokenizer, cache = SimpleTextEncoder(
-        "test"
-    ).load_cache()
+    new_tokenizer, cache = SimpleTextEncoder.load_cache("test")
     assert cache
     assert len(new_tokenizer.idx_vocab) == len(tokenizer.idx_vocab)
 
@@ -72,10 +70,49 @@ def test_transformer_dataset():
         "test",
         new_tokenizer,
         glob.iglob("*.py"),
-        128
+        256
     )
-  #  dataset.save("test")
-#    reloaded_dataset = TransformerTextDataset.load("test", new_tokenizer)
- #   assert len(reloaded_dataset.X) == len(reloaded_dataset.y)
- #   assert len(reloaded_dataset.X) > 0
- #   assert len(reloaded_dataset.X) == len(dataset.y)
+    assert len(dataset) > 0
+    restored_dataset = TransformerTextDatasetLazy(
+        "test",
+        new_tokenizer,
+    )
+    assert len(restored_dataset) == len(dataset)
+    assert len(restored_dataset) == len(dataset)
+    for X, y in restored_dataset.iter(batch_size=1):
+        start_x = X[0, 1:]
+        start_y = y[0, :-1]
+        assert torch.all(start_x == start_y)
+        assert start_x.shape[0] == 255
+        assert start_y.shape[0] == 255
+#        assert not torch.all(start_x == new_tokenizer)
+
+def test_transformer_dataset_simple():
+    test_code = "test_simple_encoder"
+    new_tokenizer = SimpleTextEncoder(test_code)
+    new_tokenizer.build_from_iterator(
+        glob.iglob("*.py")
+    )
+    print(new_tokenizer.encode("hello"))
+    assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
+    assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
+
+    dataset = TransformerTextDataset.from_iterator_single(
+        test_code,
+        new_tokenizer,
+        glob.iglob("*.py"),
+        256
+    )
+    assert len(dataset) > 0
+    restored_dataset = TransformerTextDatasetLazy(
+        test_code,
+        new_tokenizer,
+    )
+    assert len(restored_dataset) == len(dataset)
+    for X, y in restored_dataset.iter(batch_size=1):
+        start_x = X[0, 1:]
+        start_y = y[0, :-1]
+        assert torch.all(start_x == start_y)
+        assert start_x.shape[0] == 255
+        assert start_y.shape[0] == 255
+        assert not torch.all(start_x == new_tokenizer.padding_index)

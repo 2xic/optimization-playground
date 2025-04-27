@@ -5,8 +5,14 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 - [LLAMA source code](https://github.com/meta-llama/llama/blob/main/llama/model.py)
 - [Transformers and Multi-Head Attention](https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html)
 
-## Post tr
-aining
+## Embeddings
+- [LLM2Vec](https://arxiv.org/pdf/2404.05961)
+  - Remove the mask from the attention training
+  - Use [MASK] tokens
+  - Contrastive learning
+- 
+
+## Post training
 - [Speculative sampling](https://jaykmody.com/blog/speculative-sampling/)
 
 ## Interference

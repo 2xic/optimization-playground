@@ -163,13 +163,12 @@ def mixture_of_expert_model_vs_standard():
 
 
 def test_pass():
-    (_, accuracy, loss) = train(
+    (_, _accuracy, _loss) = train(
         XorDataset(),
         config_override(
             transformer_layer=TransformerLayerType.DEEPSEEK,
         ),
     )
-#    print(f"Accuracy {accuracy}, Loss: {loss}")
 
 
 if __name__ == "__main__":

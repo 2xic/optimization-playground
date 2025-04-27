@@ -4,7 +4,6 @@ import torch.nn.functional as F
 
 DEVICE = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-
 class MultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_query_heads, num_groups=None):
         super().__init__()

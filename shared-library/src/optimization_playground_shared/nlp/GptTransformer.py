@@ -69,6 +69,7 @@ class GptTransformerModel(nn.Module):
         self.sequence_size = config.sequence_length
         # (SEQ_LEN, BATCH_SIZE, EMBEDDING_DIM)
         self.dropout = nn.Dropout(config.dropout)
+        self.use_raw_forward = False
 
     def with_rope_encoding(self):
         self.pos_encoder = RotaryPositionalEncoding(
@@ -94,6 +95,8 @@ class GptTransformerModel(nn.Module):
 
     def forward(self, x: Tensor):
         results = self.raw_forward(x)
+        if self.use_raw_forward:
+            return results
         # (batch size, sequence size, vocab_size)
         reshaped = results.view(-1, self.config.vocab_size)
         return reshaped
