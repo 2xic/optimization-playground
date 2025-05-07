@@ -255,8 +255,7 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         return size
 
     def iter(self, batch_size=4):
-        return DataLoader(self, batch_size=batch_size, num_workers=1, shuffle=False)
-
+        return DataLoader(self, batch_size=batch_size, num_workers=2, shuffle=False)
 
 class TransformerTextDataset(TransformerDataset, Dataset):
     def __init__(self, X, y, encoder, sequence_size):
@@ -390,11 +389,11 @@ class TransformerTextDataset(TransformerDataset, Dataset):
             return arr[index:index+sequence_length]
 
         for doc in documents:
-            tokens = tokenizer.split(doc)
+            tokens = tokenizer.encode_document(doc)
             for index, _ in enumerate(tokens):
                 next_tokens_index = index + sequence_length
-                current_tokens = [tokenizer.encode_idx(v) for v in read_sequence(tokens, index)]
-                next_tokens = [tokenizer.encode_idx(v) for v in read_sequence(tokens, next_tokens_index)]
+                current_tokens = read_sequence(tokens, index)
+                next_tokens = read_sequence(tokens, next_tokens_index)
                 if len(next_tokens) != sequence_length:
                     continue
                 X.append(current_tokens)

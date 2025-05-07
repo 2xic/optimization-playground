@@ -107,3 +107,20 @@ def get_text_to_speech(text):
         stream=True
     )
     return response
+
+def get_web_searches(query):
+    assert type(query) == str
+    assert token is not None
+    response = requests.post(
+       "https://api.openai.com/v1/responses",
+        json={
+            "model": "gpt-4.1",
+            "tools": [{"type": "web_search_preview"}],
+            "input": query
+        },
+        headers={
+            "Authorization": f"Bearer {token}" 
+        },
+        stream=True
+    )
+    return response

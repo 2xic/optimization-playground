@@ -45,6 +45,7 @@ class Config:
     transformer_layer: TransformerLayerType = TransformerLayerType.SIMPLE
     normalization_layer: NormalizationLayerType = NormalizationLayerType.LAYER_NORM
     dropout: float = 0.01
+    feed_forward_layer: int = 2048
 
 
 class NormalizationLayer(nn.Module):
@@ -254,10 +255,10 @@ def get_transformer_layer(config: Config):
         return TransformerDecoderWrapper(nn.TransformerDecoderLayer(
             d_model=config.dim_embeddings, 
             nhead=config.num_attention_heads, 
-            dim_feedforward=128, 
+            dim_feedforward=2048, 
             dropout=config.dropout,
             batch_first=True,
-            activation=nn.functional.gelu,
+          #  activation=nn.functional.gelu,
         ))
     else:
         raise Exception(f"unknown type {config.transformer_layer}")

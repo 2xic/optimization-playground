@@ -11,15 +11,21 @@ from tqdm import tqdm
 from dataclasses import dataclass
 import os 
 import time
-# FOR DEBUGGING ONLY
-from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config as GtpConfig
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
-from transformers import get_cosine_schedule_with_warmup
+from performance_benchmarker import Timer
+from scheduler import NoamScheduler, lr_lambda
+from torch.optim.lr_scheduler import LambdaLR
 
 DEBUG = False
+# This slows down the training a lot ... 
+VALIDATION_DEBUG = True
 
 print(DEVICE)
+
+WEIGHT_DECAY = 1e-1
+BETA_1 = 0.90
+BETA_2 = 0.95
+#GRADIENT_CLIP = 1
+GRADIENT_CLIP = None
 
 class ModelStateSaver:
     def __init__(self, name):
@@ -83,13 +89,35 @@ def create_config(vocab_size, padding_index, sequence_length):
         transformer_layer=TransformerLayerType.GPT2,
     )
 
+def timer_iterator(dataset):
+    iterator = iter(dataset)
+    for i in range(len(dataset)):
+        with Timer("timer_iterator"):
+            X, y = next(iterator)
+        yield X, y
+
+def create_transformer_model(config: Config):
+    from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config as GtpConfig
+    model = GptTransformerModel(GtpConfig(
+        config.vocab_size,
+        config.dim_embeddings,
+        config.sequence_length,
+        config.num_transformer_layers,
+        config.num_attention_heads,
+        config.dropout,
+        config.feed_forward_layer,
+        config.padding_index,
+    )).to(DEVICE)
+    model.forward = model.raw_forward
+    return model
 
 def train(
     dataset: TransformerDatasetBase, 
     override: Callable[[Config], Config] = (lambda x: x),
     create_model: Callable[[Config], Model] = (lambda x: Model(x)),
     options: TrainingOptions = TrainingOptions(),
-    progress=range
+    progress=range,
+    sampling=temperature_sampling
 ):
     config = create_config(
         dataset.vocab_size,
@@ -98,30 +126,25 @@ def train(
     )
     config = override(config)
     model = create_model(config).to(DEVICE)
-    if False:
-        model = GptTransformerModel(GtpConfig(
-            config.vocab_size,
-            config.dim_embeddings,
-            config.sequence_length,
-            config.num_transformer_layers,
-            config.num_attention_heads,
-            config.dropout,
-            128,
-            config.padding_index,
-        )).to(DEVICE)
-        model.forward = model.raw_forward
-
+#    model = create_transformer_model(config).to(DEVICE)
+    print(model)
 
     state_saver = ModelStateSaver("loading-test")
-    optimizer = optim.Adam(model.parameters(), lr=options.learning_rate, weight_decay=1e-2)
+    optimizer = optim.AdamW(
+        model.parameters(), 
+        lr=options.learning_rate, 
+        weight_decay=WEIGHT_DECAY,
+        betas=(BETA_1, BETA_2),
+    )
+#    scheduler = NoamScheduler(
+#        optimizer=optimizer,
+#        d_model=config.dim_embeddings,
+#        warmup_steps=1000,
+#        factor=1
+#    )
+    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
     loader = dataset.iter(batch_size=options.batch_size)
 
-    total_steps = len(loader) * options.epochs
-    scheduler = get_cosine_schedule_with_warmup(
-        optimizer,
-        num_warmup_steps=(total_steps * 0.05),
-        num_training_steps=total_steps
-    )
     epochs = []
     epochs_loss = []
     epochs_accuracy = []
@@ -132,71 +155,85 @@ def train(
         sum_loss = 0
         accuracy = 0
         rows = 0
-        iterator = tqdm(loader)
-        for X, y in iterator:
-            X, y = X.to(DEVICE), y.to(DEVICE)
-            y_predicted = model(X)
+        with Timer("epoch"):
+            with Timer("creating_iterator"):
+                tqdm_loader = tqdm(loader)
+                iterator = timer_iterator(tqdm_loader)
+           # print(scheduler.get_last_lr())
+            for index, (X, y) in enumerate(iterator):
+                with Timer("move_to_device"):
+                    X, y = X.to(DEVICE), y.to(DEVICE)
+                with Timer("predictions"):
+                    y_predicted = model(X)
 
-            loss = torch.nn.functional.cross_entropy(
-                y_predicted.view(-1, config.vocab_size),
-                y.view(-1),
-                ignore_index=config.padding_index,
-            )
-            optimizer.zero_grad()
-            loss.backward()
-          #  torch.nn.utils.clip_grad_norm_(model.parameters(), options.max_grad_norm)
-            optimizer.step()
-         #   scheduler.step()
-            sum_loss += loss.item()
-            # Accuracy metrics
-            y_sample_next = temperature_sampling(y_predicted[:, -1, :])
-            y_next = y[:, -1]
-            assert y_sample_next.shape == y_next.shape
-            assert y_sample_next.shape == y_next.shape
-            accuracy += (y_sample_next == y_next).sum()
-            rows += y_next.shape.numel()
-            if timer.done():
-                break
-            iterator.set_description("Accuracy {acc}, Loss {loss}".format(
-                acc=(accuracy / rows * 100), 
-                loss=sum_loss
-            ))
+                with Timer("optimizer"):
+                    loss = torch.nn.functional.cross_entropy(
+                        y_predicted.view(-1, config.vocab_size),
+                        y.view(-1),
+                        ignore_index=config.padding_index,
+                    )
+                    optimizer.zero_grad()
+                    loss.backward()
+                    if GRADIENT_CLIP != None:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), GRADIENT_CLIP)
+                    optimizer.step()
+                    scheduler.step()
+
+                if index % 10 == 0 and VALIDATION_DEBUG:
+                    with Timer("metrics"):
+                        sum_loss += loss.item()
+                        # Accuracy metrics
+                        y_sample_next = sampling(y_predicted[:, -1, :])
+                        y_next = y[:, -1]
+                        assert y_sample_next.shape == y_next.shape
+                        assert y_sample_next.shape == y_next.shape
+                        accuracy += (y_sample_next == y_next).sum()
+                        rows += y_next.shape.numel()
+                        if timer.done():
+                            break
+                if index % 10 == 0 and VALIDATION_DEBUG:
+                    with Timer("update stats"):
+                        tqdm_loader.set_description("Accuracy {acc}, Loss {loss}".format(
+                            acc=(accuracy / rows * 100), 
+                            loss=sum_loss
+                        ))
         
-        state_saver.save(model, optimizer, i, sum_loss)
-        acc = accuracy / rows * 100
-        epochs_accuracy.append(acc.item())
-        epochs_loss.append(loss.item())
-        epochs.append(i)
-        assert acc <= 100, acc
-        debug_print(f"epoch: {i}, loss: {sum_loss}, accuracy {acc}")
+        if VALIDATION_DEBUG:
+            state_saver.save(model, optimizer, i, sum_loss)
+            acc = accuracy / rows * 100
+            epochs_accuracy.append(acc.item())
+            epochs_loss.append(loss.item())
+            epochs.append(i)
+            assert acc <= 100, acc
+            debug_print(f"epoch: {i}, loss: {sum_loss}, accuracy {acc}")
 
-        with torch.no_grad():
-            rows = dataset.sample(n=2)
-            for i, j in rows:
-                i, j = i.to(DEVICE), j.to(DEVICE)
-                i = i.reshape((1, -1))
-                predicted = model(i)[0]
-                word_idx = temperature_sampling(predicted, temperature=0)
+            with torch.no_grad():
+                rows = dataset.sample(n=2)
+                for i, j in rows:
+                    i, j = i.to(DEVICE), j.to(DEVICE)
+                    i = i.reshape((1, -1))
+                    predicted = model(i)[0]
+                    word_idx = sampling(predicted)
 
-                next_word_idx = word_idx[-1].item()
-                expected_word_idx = j[-1].item()
+                    next_word_idx = word_idx[-1].item()
+                    expected_word_idx = j[-1].item()
 
-                input_document = i[0]
-                context = "".join(dataset.decode_tokens(input_document.tolist()))
-                debug_print(f"\tcontext: {context}")
+                    input_document = i[0]
+                    context = "".join(dataset.decode_tokens(input_document.tolist()))
+                    debug_print(f"\tcontext: {context}")
 
-                word = dataset.decode_tokens([next_word_idx])
-                expected = dataset.decode_tokens([expected_word_idx])
-                debug_print(f"\tnext token: '{word}'")
-                debug_print(f"\texpected token: '{expected}'")
-                debug_print("")
+                    word = dataset.decode_tokens([next_word_idx])
+                    expected = dataset.decode_tokens([expected_word_idx])
+                    debug_print(f"\tnext token: '{word}'")
+                    debug_print(f"\texpected token: '{expected}'")
+                    debug_print("")
         # Check that the model converges to something.
         with torch.no_grad():
             accuracy = 0
             for index, (X, y) in enumerate(dataset.sample(128)):
                 X = X.to(DEVICE)
                 predicted = model(X.reshape((1, -1)))
-                y_sample_next = temperature_sampling(predicted[:, -1, :])
+                y_sample_next = sampling(predicted[:, -1, :])
                 accuracy += (y_sample_next.item() == y[-1].item())
             print((accuracy / index) * 100)
 

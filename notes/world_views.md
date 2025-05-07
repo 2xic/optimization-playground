@@ -41,7 +41,6 @@ Somewhat inspired from the last section "A Summary of Popular Positions" by [Xan
 
 ## Evolutionary algorithms
 - [Taelin](https://twitter.com/VictorTaelin/status/1781480313497018848) likes evolutionary algorithms. They don't have smooth curves so harder to predict, but they might be more powerful. He [wants to run them](https://twitter.com/VictorTaelin/status/1781519111937212799). 
-- 
 
 ## Other
 - [halvarflake](https://addxorrol.blogspot.com/2024/07/someone-is-wrong-on-internet-agi-doom.html?m=1)

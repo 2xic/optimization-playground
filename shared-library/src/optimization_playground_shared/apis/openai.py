@@ -3,7 +3,7 @@ import numpy as np
 import tiktoken
 from io import BytesIO
 from pydub import AudioSegment
-import os 
+from typing import Optional
 
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     """Returns the number of tokens in a text string."""
@@ -145,6 +145,31 @@ class OpenAiCompletion:
             )
             responses.append(response)
         return "\n".join(responses)
+    
+    def process_image(self, system_prompt: str, input_image: str):
+        assert type(input_image) == str
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{input_image}"
+                        }                        
+                    },
+                ]
+            }
+        ]
+     #   print(messages)
+        return self._get_completions(
+            messages,
+            response_format=None,
+        )
 
     def chat_model(self, messages):
         response = self._get_completions(

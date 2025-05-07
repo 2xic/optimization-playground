@@ -1,5 +1,5 @@
 from transformer_dataset import PartialMemoryTensor, TransformerTextDatasetLazy
-from dataset_tokenizer import WordPiece
+from dataset_tokenizer import WordPiece, HuggingFaceTokenizerWrapper
 from train import train,TrainingOptions
 from tqdm import tqdm
 
@@ -33,8 +33,9 @@ print((time.time() - start) / N * (N_ITEMS / N))
 
 
 
-name = "smart_contract_fiesta"
-(new_tokenizer, cached) = WordPiece.load_cache(name)
+name = "smart_contract_fiesta_word_idx_hf"
+#(new_tokenizer, cached) = WordPiece.load_cache(name)
+(new_tokenizer, cached) = HuggingFaceTokenizerWrapper.load_cache(name)
 
 text_dataset = TransformerTextDatasetLazy("smart_contract_fiesta", new_tokenizer)
 
@@ -48,6 +49,10 @@ for (id, _) in ids:
     print((X[0]))
     print((y[0]))
 """
+#for (X, y) in tqdm(text_dataset.iter(batch_size=32)):
+#    print(i)
+
+"""
 
 train(
     text_dataset,
@@ -56,3 +61,4 @@ train(
     ),
     progress=lambda x: tqdm(range(x))
 )
+"""

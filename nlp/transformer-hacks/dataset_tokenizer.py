@@ -15,8 +15,10 @@ from tqdm import tqdm
 import time 
 from functools import lru_cache
 from tokenizers import Tokenizer as HfTokenizer
-from tokenizers.models import BPE
+from tokenizers.models import BPE, Unigram, WordPiece as HfWordPiece
+from tokenizers.trainers import BpeTrainer
 import os 
+from tokenizers import trainers, Tokenizer as HfTokenizer, normalizers, ByteLevelBPETokenizer, SentencePieceBPETokenizer
 
 class Tokenizer(ABC):
     name: str
@@ -93,11 +95,11 @@ class SimpleTextEncoder(Tokenizer):
         }
     
     def build_from_iterator(self, iterator):
-        for file in tqdm(iterator):
-            with open(file, "r") as file:
-                tokens = list(set(splitter(file.read())))
-                for i in tokens:
-                    self.encode(i)
+        for content in tqdm(iterator):
+            #with open(file, "r") as file:
+            tokens = list(set(splitter(content)))
+            for i in tokens:
+                self.encode(i)
         return self
     
     @classmethod
@@ -116,6 +118,7 @@ class SimpleTextEncoder(Tokenizer):
         return encoder, False
 
     def encode_document(self, document):
+        print(document)
         return self.encode(document)
     
     def encode(self, doc):
@@ -311,18 +314,28 @@ class WordPiece(Tokenizer):
 Wrappers around existing tokenizers
 """
 class HuggingFaceTokenizerWrapper(Tokenizer):
-    def __init__(self, name):
-        self.bpe = BPE()
-        self.tokenizer = HfTokenizer(self.bpe)
+    def __init__(self, name, vocab_size=50265):
+        #self.bpe = HfWordPiece() # Unigram() # BPE()
+        #self.tokenizer = HfTokenizer(self.bpe)
+        self.tokenizer = ByteLevelBPETokenizer()
+        #self.tokenizer = SentencePieceBPETokenizer()
         self.tokenizer.add_special_tokens(["<PADDING>"])
         self.padding_index = self.tokenizer.encode("<PADDING>").ids[0]
         assert self.decode_idx(self.padding_index) == "<PADDING>"
         self.is_locked = False
         self.name = name
+        self._preferred_vocab_size = vocab_size
 
-    def encode_document(self, documents):
+    def train_tokenizer(self, documents):
         assert type(documents) != str
-        self.tokenizer.train_from_iterator(documents)
+        #self.tokenizer.train_from_iterator(documents)#, trainer=BpeTrainer())
+        self.tokenizer.train_from_iterator(documents, vocab_size=self._preferred_vocab_size, min_frequency=2, special_tokens=[
+            "<s>",
+            "<pad>",
+            "</s>",
+            "<unk>",
+            "<mask>",
+        ])
 
     def encode(self, doc):
         return self.tokenizer.encode(doc).ids
@@ -347,12 +360,19 @@ class HuggingFaceTokenizerWrapper(Tokenizer):
         tokenizer_path = Tokenizer.get_tokenizer_path(self.name)
         self.tokenizer.save(tokenizer_path)
 
+    def encode_document(self, document):
+        return self.tokenizer.encode(document).ids
+
+    def split(self, document):
+        raise Exception("This method should not be used by the hf")
+
     @classmethod
     def load_cache(cls, name):
-        tokenizer_path = Tokenizer.get_tokenizer_path(name)
+        tokenizer_path = cls.get_tokenizer_path(name)
         print(tokenizer_path)
         hf = HuggingFaceTokenizerWrapper(name)
         if os.path.isfile(tokenizer_path):
-            hf.tokenizer = hf.tokenizer.from_file(tokenizer_path)
+#            hf.tokenizer = HfTokenizer()
+            hf.tokenizer = HfTokenizer.from_file(tokenizer_path)
             return hf, True
         return hf, False

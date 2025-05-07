@@ -51,6 +51,7 @@ def get_cache(url):
 
 def get_text(url, cache_only=False):
     cache_path = get_cache(url)
+    print(_get_id(url))
     if os.path.isfile(cache_path):
         with open(cache_path, "r") as file:
             content = file.read()

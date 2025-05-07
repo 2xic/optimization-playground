@@ -1,35 +1,48 @@
-from dataset_tokenizer import SimpleTextEncoder, HuggingFaceTokenizerWrapper
+from dataset_tokenizer import HuggingFaceTokenizerWrapper, SimpleTextEncoder
 from transformer_dataset import TransformerTextDataset
 from train import train,  ModelStateSaver, create_config, Model, DEVICE, Config, TransformerLayerType, TrainingOptions
 from model import PositionalEmbeddingType
 import torch
 from optimization_playground_shared.nlp.utils.sampling import (
-    temperature_sampling,
-    simple_temperature_sampling
+    temperature_sampling
 )
+from optimization_playground_shared.nlp.SimpleVocab import splitter
 import argparse
 
-SEQUENCE_LENGTH = 128
-TEMPERATURE = 0.7
+SEQUENCE_LENGTH = 32
+TEMPERATURE = 0.8
 
 def get_dataset():
-    with open("example.text", "r") as file:
+    with open("example_small.text", "r") as file:
         content = file.read()
-    #tokenizer = SimpleTextEncoder("example")
-    tokenizer = HuggingFaceTokenizerWrapper()
-    tokenizer.encode_document([content])
-    print(tokenizer.vocab_size)
+    tokenizer = HuggingFaceTokenizerWrapper(
+        "example",
+        vocab_size=len(list(set(splitter(content)))) * 32,
+    )
+    tokenizer.train_tokenizer([content])
+#    tokenizer = SimpleTextEncoder("test")
+#    tokenizer.build_from_iterator([content])
    
     dataset = TransformerTextDataset.from_documents(tokenizer, [content], SEQUENCE_LENGTH)
-   # dataset._len = 100_000
     return tokenizer, dataset
+
+def sampling_predictions(y_predictions):
+    return temperature_sampling(y_predictions)
+    """
+    return temperature_sampling(
+        y_predictions,
+        TEMPERATURE,
+        top_k=10,
+        top_p=0.6
+    )
+    """
 
 def override_config(config: Config) -> Config:
     config.num_transformer_layers = 3
     config.dim_embeddings = 256
     config.num_attention_heads = 8
-    config.dropout = 0.2
-    config.positional_embedding = PositionalEmbeddingType.SINUSOIDAL
+    config.dropout = 0
+    config.positional_embedding = PositionalEmbeddingType.ROTARY_POSITION_ENCODING
     config.transformer_layer = TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER
     return config
 
@@ -42,9 +55,10 @@ def train_model():
         override=override_config,
         options=TrainingOptions(
             batch_size=32,
-            learning_rate=1e-4,
-            epochs=10
-        )
+            learning_rate=1e-3,
+            epochs=50
+        ),
+        sampling=sampling_predictions
     )
     sample_from_model(text_dataset, model)
 
@@ -63,7 +77,7 @@ def sample_from_model(text_dataset, model):
     raw_outputs = []
     for i in range(128):
         predicted = model(INPUT_TOKENS.reshape((1, -1)))
-        y_sample_next = temperature_sampling(predicted[:, -1, :], temperature=TEMPERATURE, top_k=10, top_p=0.2)
+        y_sample_next = sampling_predictions(predicted[:, -1, :])
         INPUT_TOKENS[:-1] = INPUT_TOKENS[1:].clone()
         INPUT_TOKENS[-1] = y_sample_next
         raw_outputs.append(y_sample_next.item())
@@ -93,8 +107,8 @@ def sample_model():
         for index, (X, y) in enumerate(text_dataset.sample(SEQUENCE_LENGTH)):
             X = X.to(DEVICE)
             predicted = model(X.reshape((1, -1)))
-            y_sample_next = temperature_sampling(predicted[:, -1, :], temperature=TEMPERATURE, top_k=10, top_p=0.2)
-            
+            y_sample_next = sampling_predictions(predicted[:, -1, :])
+
             y_predicted_next = y_sample_next.item()
             y_actual_next = y[-1].item()
             assert  type(y_predicted_next) == type(y_actual_next) and type(y_actual_next) == int

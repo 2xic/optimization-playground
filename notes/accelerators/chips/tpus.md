@@ -45,6 +45,10 @@ The slides by themselves were not that useful.This lead me however to find [this
 ### [Learning to Fuse](http://mlforsystems.org/assets/papers/neurips2019/learning_abdolrashidi_2019.pdf)
 Use ML to learn when to fuse - kinda cool.
 
+## [Ironwood](https://blog.google/products/google-cloud/ironwood-tpu-age-of-inference/)
+- First Google TPU designed specifically for inference
+- 
+
 # Other recourses
 - [Geohot again did some (small) documentation on this](https://github.com/tinygrad/tinygrad/tree/a8f2c16f8e1670ce199b068a771b9b0d6f7ba7df/extra/accel/tpu)
 - [OpenXLA](https://github.com/openxla/xla) which is an open source compiler
