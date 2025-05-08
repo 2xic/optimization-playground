@@ -5,27 +5,21 @@ import torch.optim as optim
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
-from typing import Callable
+from typing import Callable, Tuple, Optional
 from dataset_tokenizer import SimpleTextEncoder
 from tqdm import tqdm
 from dataclasses import dataclass
 import os 
 import time
 from performance_benchmarker import Timer
-from scheduler import NoamScheduler, lr_lambda
 from torch.optim.lr_scheduler import LambdaLR
 
 DEBUG = False
 # This slows down the training a lot ... 
 VALIDATION_DEBUG = True
 
-print(DEVICE)
-
-WEIGHT_DECAY = 1e-1
 BETA_1 = 0.90
 BETA_2 = 0.95
-#GRADIENT_CLIP = 1
-GRADIENT_CLIP = None
 
 class ModelStateSaver:
     def __init__(self, name):
@@ -39,6 +33,7 @@ class ModelStateSaver:
             'loss': loss
         }
         torch.save(checkpoint, self.get_file_path())
+        print("save checkpoint")
 
     def load_model_state(self, model: torch.nn.Module):
         state = torch.load(self.get_file_path())
@@ -70,9 +65,7 @@ class TrainingTimer:
 @dataclass
 class TrainingOptions:
     batch_size: int = (32 if DEVICE.type != "cuda" else 256)
-    learning_rate: float = 3e-4
     epochs: int = 100
-    max_grad_norm: float = 1
 
 def debug_print(*args):
     if DEBUG:
@@ -115,6 +108,7 @@ def train(
     dataset: TransformerDatasetBase, 
     override: Callable[[Config], Config] = (lambda x: x),
     create_model: Callable[[Config], Model] = (lambda x: Model(x)),
+    create_optimizer: Callable[[torch.nn.Module, Config], Tuple[optim.Optimizer, Optional[LambdaLR]]] = lambda model, config: (optim.Adam(model.parameters(), lr=config.learning_Rate, betas=(BETA_1, BETA_2)), None),
     options: TrainingOptions = TrainingOptions(),
     progress=range,
     sampling=temperature_sampling
@@ -126,23 +120,9 @@ def train(
     )
     config = override(config)
     model = create_model(config).to(DEVICE)
-#    model = create_transformer_model(config).to(DEVICE)
-    print(model)
+    optimizer, scheduler = create_optimizer(model, config)
 
     state_saver = ModelStateSaver("loading-test")
-    optimizer = optim.AdamW(
-        model.parameters(), 
-        lr=options.learning_rate, 
-        weight_decay=WEIGHT_DECAY,
-        betas=(BETA_1, BETA_2),
-    )
-#    scheduler = NoamScheduler(
-#        optimizer=optimizer,
-#        d_model=config.dim_embeddings,
-#        warmup_steps=1000,
-#        factor=1
-#    )
-    scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
     loader = dataset.iter(batch_size=options.batch_size)
 
     epochs = []
@@ -174,10 +154,11 @@ def train(
                     )
                     optimizer.zero_grad()
                     loss.backward()
-                    if GRADIENT_CLIP != None:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), GRADIENT_CLIP)
+                    if config.max_grad_norm != None:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
                     optimizer.step()
-                    scheduler.step()
+                    if scheduler is not None:
+                        scheduler.step()
 
                 if index % 10 == 0 and VALIDATION_DEBUG:
                     with Timer("metrics"):
@@ -185,7 +166,6 @@ def train(
                         # Accuracy metrics
                         y_sample_next = sampling(y_predicted[:, -1, :])
                         y_next = y[:, -1]
-                        assert y_sample_next.shape == y_next.shape
                         assert y_sample_next.shape == y_next.shape
                         accuracy += (y_sample_next == y_next).sum()
                         rows += y_next.shape.numel()
@@ -197,9 +177,9 @@ def train(
                             acc=(accuracy / rows * 100), 
                             loss=sum_loss
                         ))
-        
+
+        state_saver.save(model, optimizer, i, sum_loss)
         if VALIDATION_DEBUG:
-            state_saver.save(model, optimizer, i, sum_loss)
             acc = accuracy / rows * 100
             epochs_accuracy.append(acc.item())
             epochs_loss.append(loss.item())

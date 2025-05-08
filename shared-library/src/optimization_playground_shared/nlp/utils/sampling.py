@@ -9,6 +9,11 @@ def simple_temperature_sampling(values: torch.Tensor, temperature: float = 0.95)
     sampled_values = dist.sample()
     return sampled_values
 
+def simple_sampling(logits: torch.Tensor) -> torch.Tensor:
+    probs = F.softmax(logits, dim=-1)
+    token_idx = torch.multinomial(probs, num_samples=1)
+    return token_idx.squeeze(-1)
+
 def temperature_sampling(logits, temperature=0.95, top_k=10, top_p=0.6):
     batch_size, vocab_size = logits.shape    
     if temperature == 0:

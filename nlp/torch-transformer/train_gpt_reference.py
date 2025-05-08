@@ -1,11 +1,8 @@
 """
 Using https://github.com/karpathy/nanoGPT as a reference
 
-Mostly using info form https://github.com/karpathy/nanoGPT/blob/master/train.py
-
+Mostly using info from https://github.com/karpathy/nanoGPT/blob/master/train.py
 """
-import math
-
 from optimization_playground_shared.nlp.utils.sampling import temperature_sampling
 from reference.minigpt_model import GPT, GPTConfig
 from train_gpt import source_vocab, get_dataloader

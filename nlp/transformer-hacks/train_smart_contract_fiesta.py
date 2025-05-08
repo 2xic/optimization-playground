@@ -2,12 +2,18 @@ from train import train,  ModelStateSaver, create_config, Model, DEVICE, Config,
 import torch
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
-    argmax_sampling
+    simple_sampling
 )
 import argparse
 from train import train,  ModelStateSaver, create_config, Model, DEVICE, Config, TransformerLayerType, TrainingOptions
 from model import PositionalEmbeddingType
 from smart_contract_fiesta_dataset_creator import get_dataset
+from transformer_dataset import TransformerTextDatasetLazy
+from train import (
+    BETA_1,
+    BETA_2,
+)
+from scheduler import NoamScheduler, lr_lambda
 
 #GB_8 = 8 * 1000 * 1000 * 1000
 #print(GB_8)
@@ -29,33 +35,64 @@ def sampling_predictions(y_predictions):
 def override_config(config: Config) -> Config:
     config.num_transformer_layers = 6
     config.dim_embeddings = 256
-    config.dropout = 0.4
-    config.positional_embedding = PositionalEmbeddingType.SINUSOIDAL
+    config.dropout = 0
+    config.positional_embedding = PositionalEmbeddingType.NN_EMBEDDING
     config.transformer_layer = TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER
     config.num_attention_heads = 8
+    # Getting the learning rate is important for stable training
+    config.learning_rate = 3e-4 # Used to be 1e-3
+    config.max_grad_norm = 1
     return config
+
+def create_optimizer(module: torch.nn.Module, config: Config):
+    optimizer =  torch.optim.AdamW(
+        module.parameters(), 
+        lr=config.learning_rate, 
+        weight_decay=config.weight_decay,
+        betas=(BETA_1, BETA_2),
+    )
+    scheduler = NoamScheduler(optimizer, d_model=config.dim_embeddings, warmup_steps=10_00) if False else None
+    return optimizer, scheduler
+
 
 def train_model():
     tokenizer, text_dataset = get_dataset(NAME, SEQUENCE_LENGTH)
     assert tokenizer.is_locked
     print("Starting training .. ", text_dataset)
-    text_dataset.max_size = 1_00
+   # text_dataset.max_size = 1_00
 
-    train(
+    (_, _, _, model) = train(
         text_dataset,
         override=override_config,
         options=TrainingOptions(
             batch_size=32,
-            learning_rate=1e-3,
-            epochs=1_0,
+            epochs=128,
         ),
+        create_optimizer=create_optimizer,
         sampling=sampling_predictions,
     )
+    sample_from_model(text_dataset, model)
+
+def sample_from_model(text_dataset: TransformerTextDatasetLazy, model: Model):
+    # Now we need to sample from the model.
+    model.to(DEVICE)
+    X, _ = text_dataset.sample(1)[0]
+    ORIGINAL_INPUT = X.clone().to(DEVICE)
+
+    print("")
+    print("Naive sampling")
+    tokens = model.generate(ORIGINAL_INPUT, 128, sampler=simple_sampling)
+    print(text_dataset.decode_tokens(tokens))
+    print("")
+    print("")
+    print("Less naive sampling")
+    tokens = model.generate(ORIGINAL_INPUT, 128, sampler=sampling_predictions)
+    print(text_dataset.decode_tokens(tokens))
+
 
 def sample_model():
-   # DEVICE = "cpu"
     with torch.no_grad():
-        new_tokenizer, text_dataset = get_dataset(NAME, SEQUENCE_LENGTH)
+        _, text_dataset = get_dataset(NAME, SEQUENCE_LENGTH)
         model = Model(
             override_config(create_config(
                 text_dataset.vocab_size,
@@ -63,36 +100,11 @@ def sample_model():
                 text_dataset.sequence_size,
             ))
         )
+        model.eval()
         state_saver = ModelStateSaver("loading-test")
         state_saver.load_model_state(model)
 
-        # Now we need to sample from the model.
-        model.to(DEVICE)
-        tokens = new_tokenizer.encode(
-            "// This contract is part of Zellic"
-        )
-        INPUT_TOKENS = torch.zeros((text_dataset.sequence_size)).long().to(DEVICE)
-        INPUT_TOKENS[-len(tokens):] = torch.tensor(tokens)
-
-        ORIGINAL_INPUT = INPUT_TOKENS.clone()
-
-        X, _y = text_dataset.sample(1)[0]
-        INPUT_TOKENS = X.to(DEVICE)
-        ORIGINAL_INPUT = X.clone().to(DEVICE)
-
-        for i in range(SEQUENCE_LENGTH):
-            predicted = model(INPUT_TOKENS.reshape((1, -1)))
-            # y_sample_next = argmax_sampling(predicted[:, -1, :])
-            y_sample_next = sampling_predictions(predicted[:, -1, :])
-            INPUT_TOKENS[:-1] = INPUT_TOKENS[1:].clone()
-            INPUT_TOKENS[-1] = y_sample_next
-
-        next_tokens = text_dataset.decode_tokens(ORIGINAL_INPUT.tolist())
-        print(next_tokens)
-        print("=" * 32)
-        next_tokens = text_dataset.decode_tokens(INPUT_TOKENS.tolist())
-        print(next_tokens)
-
+        sample_from_model(text_dataset, model)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process training or sampling.')

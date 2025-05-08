@@ -4,17 +4,24 @@ from train import train,  ModelStateSaver, create_config, Model, DEVICE, Config,
 from model import PositionalEmbeddingType
 import torch
 from optimization_playground_shared.nlp.utils.sampling import (
-    temperature_sampling
+    temperature_sampling,
+    simple_sampling
 )
 from optimization_playground_shared.nlp.SimpleVocab import splitter
 import argparse
-
-SEQUENCE_LENGTH = 32
+from scheduler import NoamScheduler, lr_lambda
+from train import (
+    BETA_1,
+    BETA_2,
+)
+SEQUENCE_LENGTH = 64
 TEMPERATURE = 0.8
 
 def get_dataset():
     with open("example_small.text", "r") as file:
         content = file.read()
+#    with open("example_small.text", "r") as file:
+#        content = file.read()
     tokenizer = HuggingFaceTokenizerWrapper(
         "example",
         vocab_size=len(list(set(splitter(content)))) * 32,
@@ -27,6 +34,7 @@ def get_dataset():
     return tokenizer, dataset
 
 def sampling_predictions(y_predictions):
+    """
     return temperature_sampling(y_predictions)
     """
     return temperature_sampling(
@@ -35,15 +43,27 @@ def sampling_predictions(y_predictions):
         top_k=10,
         top_p=0.6
     )
-    """
+
+def create_optimizer(module: torch.nn.Module, config: Config):
+    optimizer =  torch.optim.AdamW(
+        module.parameters(), 
+        lr=config.learning_rate, 
+        weight_decay=config.weight_decay,
+        betas=(BETA_1, BETA_2),
+    )
+    scheduler = NoamScheduler(optimizer, d_model=config.dim_embeddings, warmup_steps=10_00) if False else None
+    return optimizer, scheduler
 
 def override_config(config: Config) -> Config:
     config.num_transformer_layers = 3
     config.dim_embeddings = 256
     config.num_attention_heads = 8
     config.dropout = 0
-    config.positional_embedding = PositionalEmbeddingType.ROTARY_POSITION_ENCODING
+    config.positional_embedding = PositionalEmbeddingType.NN_EMBEDDING
     config.transformer_layer = TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER
+    # Getting the learning rate is important for stable training
+    config.learning_rate = 3e-4 # Used to be 1e-3
+    config.max_grad_norm = 1
     return config
 
 def train_model():
@@ -55,37 +75,29 @@ def train_model():
         override=override_config,
         options=TrainingOptions(
             batch_size=32,
-            learning_rate=1e-3,
-            epochs=50
+            epochs=64
         ),
-        sampling=sampling_predictions
+        create_optimizer=create_optimizer,
+        sampling=simple_sampling
     )
     sample_from_model(text_dataset, model)
 
-def sample_from_model(text_dataset, model):
+def sample_from_model(text_dataset: TransformerTextDataset, model: Model):
     # Now we need to sample from the model.
     model.to(DEVICE)
-
     X, _ = text_dataset.sample(1)[0]
-    INPUT_TOKENS = X.to(DEVICE)
     ORIGINAL_INPUT = X.clone().to(DEVICE)
 
-    next_tokens = text_dataset.decode_tokens(ORIGINAL_INPUT.tolist())
-    print(next_tokens)
-    print("=" * 32)
+    print("")
+    print("Naive sampling")
+    tokens = model.generate(ORIGINAL_INPUT, 128, sampler=simple_sampling)
+    print(text_dataset.decode_tokens(tokens))
+    print("")
+    print("")
+    print("Less naive sampling")
+    tokens = model.generate(ORIGINAL_INPUT, 128, sampler=sampling_predictions)
+    print(text_dataset.decode_tokens(tokens))
 
-    raw_outputs = []
-    for i in range(128):
-        predicted = model(INPUT_TOKENS.reshape((1, -1)))
-        y_sample_next = sampling_predictions(predicted[:, -1, :])
-        INPUT_TOKENS[:-1] = INPUT_TOKENS[1:].clone()
-        INPUT_TOKENS[-1] = y_sample_next
-        raw_outputs.append(y_sample_next.item())
-    print("Model decoded:")
-    print(raw_outputs)
-    next_tokens = text_dataset.decode_tokens(raw_outputs)
-    print(next_tokens)
-    print("=" * 32)
 
 def sample_model():
     with torch.no_grad():
@@ -102,18 +114,6 @@ def sample_model():
         state_saver.load_model_state(model)
 
         sample_from_model(text_dataset, model)
-
-        accuracy = 0
-        for index, (X, y) in enumerate(text_dataset.sample(SEQUENCE_LENGTH)):
-            X = X.to(DEVICE)
-            predicted = model(X.reshape((1, -1)))
-            y_sample_next = sampling_predictions(predicted[:, -1, :])
-
-            y_predicted_next = y_sample_next.item()
-            y_actual_next = y[-1].item()
-            assert  type(y_predicted_next) == type(y_actual_next) and type(y_actual_next) == int
-            accuracy += (y_predicted_next == y_actual_next)
-        print((accuracy / index) * 100)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process training or sampling.')

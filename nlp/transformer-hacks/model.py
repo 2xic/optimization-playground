@@ -8,7 +8,7 @@ from optimization_playground_shared.nlp.PositionalEncoding import (
 from enum import Enum
 import torch.nn.functional as F
 from layers import SimpleGQA, MultiheadAttention, DyT, MultiHeadLatentAttention, DEVICE
-
+from typing import Optional
 
 class PositionalEmbeddingType(Enum):
     NONE = 0
@@ -46,7 +46,11 @@ class Config:
     normalization_layer: NormalizationLayerType = NormalizationLayerType.LAYER_NORM
     dropout: float = 0.01
     feed_forward_layer: int = 2048
-
+    bias: bool = False
+    # Optimizer
+    weight_decay = 1e-1
+    learning_rate= 6e-4
+    max_grad_norm: Optional[float] = 1
 
 class NormalizationLayer(nn.Module):
     def __init__(self, config: Config, size):
@@ -255,10 +259,10 @@ def get_transformer_layer(config: Config):
         return TransformerDecoderWrapper(nn.TransformerDecoderLayer(
             d_model=config.dim_embeddings, 
             nhead=config.num_attention_heads, 
-            dim_feedforward=2048, 
+            dim_feedforward=config.feed_forward_layer, 
             dropout=config.dropout,
             batch_first=True,
-          #  activation=nn.functional.gelu,
+            activation=nn.functional.gelu,
         ))
     else:
         raise Exception(f"unknown type {config.transformer_layer}")
@@ -331,13 +335,27 @@ class Model(nn.Module):
                 for _ in range(self.config.num_transformer_layers)
             ]
         )
+        self.dropout = nn.Dropout(config.dropout)
+        self.layer_norm = NormalizationLayer(config, self.config.dim_embeddings)
         self.output_layer = nn.Linear(
             self.config.dim_embeddings, 
             self.config.vocab_size,
             bias=False,
         )
-        self.layer_norm = NormalizationLayer(config, self.config.dim_embeddings)
-        self.dropout = nn.Dropout(config.dropout)
+
+        # Weight Tying
+        # https://paperswithcode.com/method/weight-tying
+        # Found using minigpt
+        self.embeddings.weight = self.output_layer.weight
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 2
@@ -354,3 +372,14 @@ class Model(nn.Module):
         # Output
         x = self.layer_norm(x)
         return self.output_layer(x)
+
+    @torch.no_grad()
+    def generate(self, input_tokens: torch.Tensor, num_tokens_generate, sampler):
+        output = input_tokens
+        output = output.unsqueeze(0)
+        for _ in range(num_tokens_generate):
+            logits = self.forward(output[:, -self.config.sequence_length:])
+            last_token = logits[:, -1, :]
+            next_token = sampler(last_token).unsqueeze(0)
+            output = torch.cat((output, next_token), dim=1)
+        return output[0].tolist()
