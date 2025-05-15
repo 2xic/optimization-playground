@@ -1,17 +1,17 @@
 from torch.optim.lr_scheduler import _LRScheduler
-from torch.optim.lr_scheduler import LambdaLR
+
 
 class NoamScheduler(_LRScheduler):
     def __init__(self, optimizer, d_model, warmup_steps, factor=1.0, last_epoch=-1):
         self.d_model = d_model
         self.warmup_steps = warmup_steps
         super(NoamScheduler, self).__init__(optimizer, last_epoch)
-    
+
     def get_lr(self):
         step = max(1, self.last_epoch)
-        scale = (self.d_model ** -0.5) * min(
-            step ** -0.5, step * (self.warmup_steps ** -1.5))
+        scale = (self.d_model**-0.5) * min(step**-0.5, step * (self.warmup_steps**-1.5))
         return [base_lr * scale for base_lr in self.base_lrs]
+
 
 def lr_lambda(step):
     if step < 100:
@@ -23,5 +23,5 @@ def lr_lambda(step):
     else:
         return 1e-4  # Return lr=2
 
-#scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)
 
+# scheduler = LambdaLR(optimizer, lr_lambda=lr_lambda)

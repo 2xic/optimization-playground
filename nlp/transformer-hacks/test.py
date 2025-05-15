@@ -3,12 +3,14 @@ import glob
 from model import Model, Config
 from dataset_tokenizer import SimpleTextEncoder, WordPieceBuilder, WordPiece
 from transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
+from plot import MinMaxAvgArray
+
 
 def test_basic_model():
     config = Config(
-        sequence_length=3, 
-        dim_embeddings=8, 
-        vocab_size=8, 
+        sequence_length=3,
+        dim_embeddings=8,
+        vocab_size=8,
         num_transformer_layers=1,
         num_attention_heads=2,
         padding_index=-1,
@@ -20,33 +22,30 @@ def test_basic_model():
         tensor
     ).shape
 
+
 def test_text_encoder():
-    tokenizer = SimpleTextEncoder(
-        "test"
-    ).build_from_files(
-        glob.iglob("*.py")
-    )
+    tokenizer = SimpleTextEncoder("test").build_from_files(glob.iglob("*.py"))
     tokenizer.save_cache()
-    
+
     new_tokenizer, cache = SimpleTextEncoder.load_cache("test")
     assert cache
     assert len(new_tokenizer.idx_vocab) == len(tokenizer.idx_vocab)
+
 
 def test_bpe_encoder():
     bpe = WordPieceBuilder("test")
     bpe.add_document("hello world")
     bpe.add_document("hello bagel")
     bpe.add_document("hello world")
-        
+
     new_tokenizer = bpe.build(20)
     assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
     assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
 
+
 def test_bpe_encoder_from_file():
     bpe = WordPieceBuilder("test")
-    bpe.build_from_iterator(
-        glob.iglob("*.py")
-    )
+    bpe.build_from_iterator(glob.iglob("*.py"))
     new_tokenizer = bpe.build(20)
     assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
     assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
@@ -57,20 +56,16 @@ def test_bpe_encoder_from_file():
     assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
     assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
 
+
 def test_transformer_dataset():
     bpe = WordPieceBuilder("test")
-    bpe.build_from_iterator(
-        glob.iglob("*.py")
-    )
+    bpe.build_from_iterator(glob.iglob("*.py"))
     new_tokenizer = bpe.build(20)
     assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
     assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
 
     dataset = TransformerTextDataset.from_iterator_single(
-        "test",
-        new_tokenizer,
-        glob.iglob("*.py"),
-        256
+        "test", new_tokenizer, glob.iglob("*.py"), 256
     )
     assert len(dataset) > 0
     restored_dataset = TransformerTextDatasetLazy(
@@ -85,23 +80,21 @@ def test_transformer_dataset():
         assert torch.all(start_x == start_y)
         assert start_x.shape[0] == 255
         assert start_y.shape[0] == 255
+
+
 #        assert not torch.all(start_x == new_tokenizer)
+
 
 def test_transformer_dataset_simple():
     test_code = "test_simple_encoder"
     new_tokenizer = SimpleTextEncoder(test_code)
-    new_tokenizer.build_from_iterator(
-        glob.iglob("*.py")
-    )
+    new_tokenizer.build_from_iterator(glob.iglob("*.py"))
     print(new_tokenizer.encode("hello"))
     assert new_tokenizer.decode(new_tokenizer.encode("hello")) == "hello"
     assert new_tokenizer.decode(new_tokenizer.encode("bagel")) == "bagel"
 
     dataset = TransformerTextDataset.from_iterator_single(
-        test_code,
-        new_tokenizer,
-        glob.iglob("*.py"),
-        256
+        test_code, new_tokenizer, glob.iglob("*.py"), 256
     )
     assert len(dataset) > 0
     restored_dataset = TransformerTextDatasetLazy(
@@ -116,3 +109,14 @@ def test_transformer_dataset_simple():
         assert start_x.shape[0] == 255
         assert start_y.shape[0] == 255
         assert not torch.all(start_x == new_tokenizer.padding_index)
+
+
+def test_min_max_avg():
+    epochs_accuracy = MinMaxAvgArray()
+    epochs_accuracy.add([0, 25, 50])
+    epochs_accuracy.add([25, 25, 50])
+    epochs_accuracy.add([0, 25, 50])
+    (min, max, avg) = epochs_accuracy.get_arrays()
+    assert min[0] != 0
+    assert max[0] != 0
+    assert avg[0] != 0

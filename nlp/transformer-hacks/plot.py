@@ -5,64 +5,76 @@ from dataclasses import dataclass
 
 
 @dataclass
-class MinMaxAvg:
-    min: float
-    max: float
-    avg: float
-    n: int = 1
+class ConfidenceInterval:
+    count: int = 0
+    mean: float = 0.0
+    m2: float = 0.0
 
     @classmethod
-    def create(self, value):
-        return MinMaxAvg(
-            min=value,
-            max=value,
-            avg=value,
-        )
+    def create(cls, value):
+        return cls(count=1, mean=value, m2=0.0)
 
     def update(self, value):
-        self.min = min(self.min, value)
-        self.max = max(self.max, value)
-        self.avg = self.avg + (value - self.avg) / (self.n)
-        self.n += 1
-
+        self.count += 1
+        delta = value - self.mean
+        self.mean += delta / self.count
+        delta2 = value - self.mean
+        self.m2 += delta * delta2
         return self
 
+    @property
+    def variance(self):
+        return self.m2 / self.count if self.count > 1 else 0.0
 
-class MinMaxArray:
+    @property
+    def std(self):
+        return self.variance**0.5
+
+    @property
+    def lower_bound(self):
+        return self.mean - self.std
+
+    @property
+    def upper_bound(self):
+        return self.mean + self.std
+
+
+class MinMaxAvgArray:
     def __init__(self):
-        self.min_max_avg: List[MinMaxAvg] = []
+        self.min_max_avg: List[ConfidenceInterval] = []
 
     def add(self, entries):
         is_new = len(self.min_max_avg) == 0
         assert is_new or len(self.min_max_avg) == len(entries)
         for index, i in enumerate(entries):
             if is_new:
-                self.min_max_avg.append(MinMaxAvg.create(i))
+                self.min_max_avg.append(ConfidenceInterval.create(i))
             else:
                 self.min_max_avg[index].update(i)
 
     def get_arrays(self):
-        min = list(map(lambda x: x.min, self.min_max_avg))
-        max = list(map(lambda x: x.max, self.min_max_avg))
-        avg = list(map(lambda x: x.avg, self.min_max_avg))
+        min = list(map(lambda x: x.lower_bound, self.min_max_avg))
+        max = list(map(lambda x: x.upper_bound, self.min_max_avg))
+        avg = list(map(lambda x: x.mean, self.min_max_avg))
         return min, max, avg
 
 
 @dataclass
 class Results:
-    accuracy: MinMaxArray
-    loss: MinMaxArray
+    accuracy: MinMaxAvgArray
+    loss: MinMaxAvgArray
 
 
 def running_average(data):
     running_sum = 0
     for i, value in enumerate(data, 1):
         running_sum += value
-        running_avg = running_sum / i
+        if i > 0:
+            running_avg = running_sum / i
         yield running_avg
 
 
-def plot_accuracy_loss(results: Dict[str, Results], file_name: str):
+def plot_accuracy_loss(results: Dict[str, Results], file_path: str):
     _, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 8))
 
     # Plot Accuracy
@@ -72,9 +84,11 @@ def plot_accuracy_loss(results: Dict[str, Results], file_name: str):
     for index, (key, value) in enumerate(results.items()):
         (min, max, avg) = value.accuracy.get_arrays()
         x = np.arange(len(min))
-        avg = list(running_average(avg))
-        min = list(running_average(min))
-        max = list(running_average(max))
+        # avg = list(running_average(avg))
+        # min = list(running_average(min))
+        # max = list(running_average(max))
+
+        #  print((min, max, avg))
 
         ax1.plot(x, avg, color=colors[index], label=f"Accuracy ({key})", alpha=0.6)
         ax1.fill_between(x, min, max, color=colors[index], alpha=0.2)
@@ -99,6 +113,6 @@ def plot_accuracy_loss(results: Dict[str, Results], file_name: str):
     ax2.legend(loc="upper right")
     ax2.set_title("Loss")
 
-    file_name = file_name.split(".")[0]
-    plt.savefig(f"{file_name}.png")
+    file_path = file_path.split(".")[0]
+    plt.savefig(f"{file_path}.png")
     plt.close("all")

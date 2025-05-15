@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from layers import SimpleGQA, MultiheadAttention, DyT, MultiHeadLatentAttention, DEVICE
 from typing import Optional
 
+
 class PositionalEmbeddingType(Enum):
     NONE = 0
     NN_EMBEDDING = 1
@@ -49,8 +50,11 @@ class Config:
     bias: bool = False
     # Optimizer
     weight_decay = 1e-1
-    learning_rate= 6e-4
+    learning_rate = 3e-4
     max_grad_norm: Optional[float] = 1
+    # Debug
+    model_name: Optional[str] = None
+
 
 class NormalizationLayer(nn.Module):
     def __init__(self, config: Config, size):
@@ -241,6 +245,7 @@ class TransformerDecoderWrapper(nn.Module):
     def forward(self, x, mask):
         return self.layer(x, torch.zeros_like(x), tgt_mask=mask)
 
+
 def get_transformer_layer(config: Config):
     if config.transformer_layer in [
         TransformerLayerType.SIMPLE,
@@ -255,15 +260,19 @@ def get_transformer_layer(config: Config):
         return Llama3TransformerLayer(config)
     elif config.transformer_layer == TransformerLayerType.DEEPSEEK:
         return DeepSeekLikeTransformerLayer(config)
-    elif config.transformer_layer == TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER:
-        return TransformerDecoderWrapper(nn.TransformerDecoderLayer(
-            d_model=config.dim_embeddings, 
-            nhead=config.num_attention_heads, 
-            dim_feedforward=config.feed_forward_layer, 
-            dropout=config.dropout,
-            batch_first=True,
-            activation=nn.functional.gelu,
-        ))
+    elif (
+        config.transformer_layer == TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER
+    ):
+        return TransformerDecoderWrapper(
+            nn.TransformerDecoderLayer(
+                d_model=config.dim_embeddings,
+                nhead=config.num_attention_heads,
+                dim_feedforward=config.feed_forward_layer,
+                dropout=config.dropout,
+                batch_first=True,
+                activation=nn.functional.gelu,
+            )
+        )
     else:
         raise Exception(f"unknown type {config.transformer_layer}")
 
@@ -338,7 +347,7 @@ class Model(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.layer_norm = NormalizationLayer(config, self.config.dim_embeddings)
         self.output_layer = nn.Linear(
-            self.config.dim_embeddings, 
+            self.config.dim_embeddings,
             self.config.vocab_size,
             bias=False,
         )
@@ -361,10 +370,12 @@ class Model(nn.Module):
         assert len(x.shape) == 2
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
-        x = self.dropout(x)  
-        # Attention mask  
+        x = self.dropout(x)
+        # Attention mask
         mask = torch.triu(
-            torch.ones(self.config.sequence_length, self.config.sequence_length, device=DEVICE),
+            torch.ones(
+                self.config.sequence_length, self.config.sequence_length, device=DEVICE
+            ),
             diagonal=1,
         ).bool()
         for layer in self.transformer_layers:
@@ -377,8 +388,10 @@ class Model(nn.Module):
     def generate(self, input_tokens: torch.Tensor, num_tokens_generate, sampler):
         output = input_tokens
         output = output.unsqueeze(0)
+        print(output.shape)
+        
         for _ in range(num_tokens_generate):
-            logits = self.forward(output[:, -self.config.sequence_length:])
+            logits = self.forward(output[:, -self.config.sequence_length :])
             last_token = logits[:, -1, :]
             next_token = sampler(last_token).unsqueeze(0)
             output = torch.cat((output, next_token), dim=1)

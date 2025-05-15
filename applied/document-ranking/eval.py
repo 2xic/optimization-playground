@@ -28,9 +28,9 @@ def evaluation():
         X, y, test_size=0.33, random_state=42
     )
     model_pipeline_configs = {
-        "local":[
-            LocalEmbeddingsModelApi("model", os.environ.get("LOCAL_HOST", "http://localhost:1245")),
-        ],
+#        "local":[
+#            LocalEmbeddingsModelApi("model", os.environ.get("LOCAL_HOST", "http://localhost:1245")),
+#        ],
         "BM25": [
             BM25(),
         ],

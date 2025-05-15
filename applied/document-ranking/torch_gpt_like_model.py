@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch import Tensor
 from dataclasses import dataclass
-from optimization_playground_shared.nlp.PositionalEncoding import PositionalEncoding
+from optimization_playground_shared.nlp.PositionalEncoding import SinusoidalPositionalEncoding
 from optimization_playground_shared.dataloaders.RawTensorToDataloader import get_dataloader as get_raw_dataloader
 from optimization_playground_shared.training_loops.TrainingLoop import TrainingLoop
 from dataset import get_dataset
@@ -37,7 +37,7 @@ class TinyModel(nn.Module):
         self.output = nn.Sequential(*[
             nn.Linear(config.embedding_dim * config.sequence_size, config.vocab_size),
         ])
-        self.pos_encoder = PositionalEncoding(
+        self.pos_encoder = SinusoidalPositionalEncoding(
             config.embedding_dim,
             config.dropout
         )

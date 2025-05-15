@@ -2,7 +2,7 @@ import torch.nn as nn
 from dataclasses import dataclass
 from torch import Tensor
 import torch
-from optimization_playground_shared.nlp.PositionalEncoding import PositionalEncoding
+from optimization_playground_shared.nlp.PositionalEncoding import SinusoidalPositionalEncoding
 from optimization_playground_shared.nlp.SimpleVocab import SimpleVocab
 import pickle
 import os
@@ -49,7 +49,7 @@ class TinyDeltaModel(nn.Module):
             nn.Linear(512, 128),
             nn.Tanh(),
         ])
-        self.pos_encoder = PositionalEncoding(
+        self.pos_encoder = SinusoidalPositionalEncoding(
             config.embedding_dim,
             config.dropout,
             max_len=config.sequence_size

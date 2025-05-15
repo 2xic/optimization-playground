@@ -21,3 +21,4 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 
 ## TODO
 - Benchmark [DeepSeek v3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py) layers also
+- 

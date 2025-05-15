@@ -39,7 +39,6 @@ class RotaryPositionalEncoding(nn.Module):
         self.instance_id = RotaryPositionalEncoding._instance_count
         self.register_buffer(f'position_encodings', position_encodings, persistent=True)
         RotaryPositionalEncoding._instance_count += 1
-        print("I registered it ... did it work?")
 
     def forward(self, x: Tensor) -> Tensor:
         """

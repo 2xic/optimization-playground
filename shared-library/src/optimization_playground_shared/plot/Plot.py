@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 import torch
 from typing import List
 import os
-import torchvision
+#import torchvision
 
 @dataclass
 class Figure:

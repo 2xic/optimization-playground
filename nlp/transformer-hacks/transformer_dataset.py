@@ -17,15 +17,15 @@ from functools import lru_cache
 MAX_WORKERS = 16
 BATCH_SIZE = 2 << 12
 
+
 async def read_file(filename):
-    async with aiofiles.open(filename, mode='r') as file:
+    async with aiofiles.open(filename, mode="r") as file:
         contents = await file.read()
         return contents
 
+
 async def gather_tasks(tasks):
-    item = await asyncio.gather(
-        *tasks
-    )
+    item = await asyncio.gather(*tasks)
     return item
 
 
@@ -53,7 +53,9 @@ class TransformerDatasetBase(ABC):
         pass
 
     def iter(self, batch_size=4, workers=4):
-        return DataLoader(self, batch_size=batch_size, num_workers=workers)
+        return DataLoader(
+            self, batch_size=batch_size, num_workers=workers, persistent_workers=True
+        )
 
     def sample(self, n):
         return list(
@@ -62,6 +64,7 @@ class TransformerDatasetBase(ABC):
                 random.sample(range(self.__len__()), k=min(n, self.__len__())),
             )
         )
+
 
 class TransformerDataset(TransformerDatasetBase):
     @property
@@ -147,10 +150,13 @@ class PartialMemoryTensor:
         path = self.get_path(self.counter)
         self.sizes.append([self.counter, self.size])
         with open(path, "wb") as file:
-            pickle.dump({
-                "X": self.X,
-                "y": self.y,
-            }, file)
+            pickle.dump(
+                {
+                    "X": self.X,
+                    "y": self.y,
+                },
+                file,
+            )
         path = self.get_path(None)
         with open(path, "wb") as file:
             pickle.dump(self.sizes, file)
@@ -174,9 +180,9 @@ class PartialMemoryTensor:
         dir_path = self.get_dir_path(self.name)
         os.makedirs(dir_path, exist_ok=True)
         if batch_id is None:
-            return os.path.join(dir_path, f"metadata.pkl")
+            return os.path.join(dir_path, "metadata.pkl")
         return os.path.join(dir_path, f"{batch_id}.pkl")
-    
+
     @classmethod
     def get_dir_path(self, name):
         return os.path.join(
@@ -184,7 +190,7 @@ class PartialMemoryTensor:
             "tensors",
             name,
         )
-    
+
     @classmethod
     def does_exists(self, name):
         return os.path.isdir(PartialMemoryTensor.get_dir_path(name))
@@ -196,22 +202,22 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         self.memory = PartialMemoryTensor(partial_memory_tensor_name)
         self.ids = self.memory.ids()
         self.rows = 0
-        for (id, size) in self.ids:
+        for id, size in self.ids:
             self.rows += size
         self.lookup = {}
         self.row_index = {}
         running_counter = 0
-        for (id, size) in self.ids:
+        for id, size in self.ids:
             for v in range(0, size):
                 self.lookup[running_counter] = id
                 self.row_index[running_counter] = v
                 running_counter += 1
         prev = -1
-        for i in (sorted(self.lookup.keys())):
+        for i in sorted(self.lookup.keys()):
             assert (i - prev) == 1, f"{i} != {prev}"
             prev = i
-        self.tokenizer = tokenizer  
-        self.max_size = float('inf')
+        self.tokenizer = tokenizer
+        self.max_size = float("inf")
         self._sequence_size = 256
 
     @classmethod
@@ -237,7 +243,7 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
 
     def decode_tokens(self, X: List[int]):
         return self.tokenizer.decode(X)
-    
+
     @lru_cache(2048)
     def load_file(self, id):
         return self.memory.load(id)
@@ -251,11 +257,12 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         return X, y
 
     def __len__(self):
-        size =  min(self.rows, self.max_size)
+        size = min(self.rows, self.max_size)
         return size
 
     def iter(self, batch_size=4):
-        return DataLoader(self, batch_size=batch_size, num_workers=2, shuffle=False)
+        return DataLoader(self, batch_size=batch_size, num_workers=2, shuffle=False, persistent_workers=True)
+
 
 class TransformerTextDataset(TransformerDataset, Dataset):
     def __init__(self, X, y, encoder, sequence_size):
@@ -303,19 +310,29 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         with open(txt, "rb") as file:
             documents.append(file.read())
         assert len(documents) > 0
-        return TransformerTextDataset.from_documents(tokenizer, documents, sequence_length)
-    
+        return TransformerTextDataset.from_documents(
+            tokenizer, documents, sequence_length
+        )
+
     @classmethod
-    def from_iterator_single(cls, name, tokenizer, iterator, sequence_length) -> TransformerTextDatasetLazy:
+    def from_iterator_single(
+        cls, name, tokenizer, iterator, sequence_length
+    ) -> TransformerTextDatasetLazy:
         tokenizer.is_locked = True
         batch_sizer = PartialMemoryTensor(name)
+
         def add_batch(doc):
             encoded = list(chain.from_iterable(tokenizer.encode(v) for v in doc))
-            chunked_encoded = [encoded[i:i+sequence_length + 1] for i in range(0, len(encoded), sequence_length)]
+            chunked_encoded = [
+                encoded[i : i + sequence_length + 1]
+                for i in range(0, len(encoded), sequence_length)
+            ]
             for encoded in chunked_encoded:
                 # TODO, maybe this is the issue?
                 if not sequence_length < len(encoded):
-                    encoded += [1, ] * (sequence_length - len(encoded) + 1)
+                    encoded += [
+                        1,
+                    ] * (sequence_length - len(encoded) + 1)
                 X = encoded[:-1]
                 y = encoded[1:]
 
@@ -335,9 +352,9 @@ class TransformerTextDataset(TransformerDataset, Dataset):
                     add_batch(doc)
                 promises = []
             else:
-                promises.append(read_file(path))     
+                promises.append(read_file(path))
         items = asyncio.run(gather_tasks(promises))
-        
+
         for doc in items:
             add_batch(doc)
 
@@ -346,7 +363,7 @@ class TransformerTextDataset(TransformerDataset, Dataset):
             name,
             tokenizer,
         )
-    
+
     @classmethod
     def get_path(self, name):
         dir_path = os.path.dirname(__file__)
@@ -360,12 +377,15 @@ class TransformerTextDataset(TransformerDataset, Dataset):
     def save(self, name):
         path = self.get_path(name)
         with open(path, "wb") as file:
-            pickle.dump({
-                "X": self.X,
-                "y": self.y,
-                "sequence_length": self._sequence_size,
-            }, file)
-    
+            pickle.dump(
+                {
+                    "X": self.X,
+                    "y": self.y,
+                    "sequence_length": self._sequence_size,
+                },
+                file,
+            )
+
     @classmethod
     def load(self, name, tokenizer):
         path = self.get_path(name)
@@ -386,7 +406,7 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         tokenizer.is_locked = True
 
         def read_sequence(arr, index):
-            return arr[index:index+sequence_length]
+            return arr[index : index + sequence_length]
 
         for doc in documents:
             tokens = tokenizer.encode_document(doc)

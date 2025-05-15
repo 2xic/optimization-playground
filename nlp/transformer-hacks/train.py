@@ -9,17 +9,18 @@ from typing import Callable, Tuple, Optional
 from dataset_tokenizer import SimpleTextEncoder
 from tqdm import tqdm
 from dataclasses import dataclass
-import os 
+import os
 import time
 from performance_benchmarker import Timer
 from torch.optim.lr_scheduler import LambdaLR
 
 DEBUG = False
-# This slows down the training a lot ... 
-VALIDATION_DEBUG = True
+# This slows down the training a lot ...
+VALIDATION_DEBUG = False
 
 BETA_1 = 0.90
 BETA_2 = 0.95
+
 
 class ModelStateSaver:
     def __init__(self, name):
@@ -27,31 +28,32 @@ class ModelStateSaver:
 
     def save(self, model, optimizer, epoch, loss):
         checkpoint = {
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict() if optimizer is not None else None,
-            'epoch': epoch,
-            'loss': loss
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict()
+            if optimizer is not None
+            else None,
+            "epoch": epoch,
+            "loss": loss,
         }
         torch.save(checkpoint, self.get_file_path())
+        torch.save(checkpoint, self.get_file_path_epoch(epoch))
         print("save checkpoint")
 
     def load_model_state(self, model: torch.nn.Module):
         state = torch.load(self.get_file_path())
-        model.load_state_dict(
-            state["model_state_dict"]
-        )
+        model.load_state_dict(state["model_state_dict"])
         return model
 
     def get_file_path(self):
-        dir_name = os.path.join(
-            os.path.dirname(__file__),
-            self.name
-        )
+        dir_name = os.path.join(os.path.dirname(__file__), self.name)
         os.makedirs(dir_name, exist_ok=True)
-        return os.path.join(
-            dir_name,
-            "checkpoint.pth"
-        )
+        return os.path.join(dir_name, "checkpoint.pth")
+
+    def get_file_path_epoch(self, epoch):
+        dir_name = os.path.join(os.path.dirname(__file__), self.name)
+        os.makedirs(dir_name, exist_ok=True)
+        return os.path.join(dir_name, f"{epoch}_checkpoint.pth")
+
 
 class TrainingTimer:
     def __init__(self, minutes):
@@ -61,15 +63,20 @@ class TrainingTimer:
     def done(self):
         return (time.time() - self.start) > self.minutes * 60
 
+    def reset(self):
+        self.start = time.time()
+
 
 @dataclass
 class TrainingOptions:
-    batch_size: int = (32 if DEVICE.type != "cuda" else 256)
+    batch_size: int = 32 if DEVICE.type != "cuda" else 256
     epochs: int = 100
+
 
 def debug_print(*args):
     if DEBUG:
         print(*args)
+
 
 def create_config(vocab_size, padding_index, sequence_length):
     return Config(
@@ -82,36 +89,30 @@ def create_config(vocab_size, padding_index, sequence_length):
         transformer_layer=TransformerLayerType.GPT2,
     )
 
+
 def timer_iterator(dataset):
-    iterator = iter(dataset)
+    with Timer("create_iterator"):
+        iterator = iter(dataset)
     for i in range(len(dataset)):
         with Timer("timer_iterator"):
             X, y = next(iterator)
         yield X, y
 
-def create_transformer_model(config: Config):
-    from optimization_playground_shared.nlp.GptTransformer import GptTransformerModel, Config as GtpConfig
-    model = GptTransformerModel(GtpConfig(
-        config.vocab_size,
-        config.dim_embeddings,
-        config.sequence_length,
-        config.num_transformer_layers,
-        config.num_attention_heads,
-        config.dropout,
-        config.feed_forward_layer,
-        config.padding_index,
-    )).to(DEVICE)
-    model.forward = model.raw_forward
-    return model
 
 def train(
-    dataset: TransformerDatasetBase, 
+    dataset: TransformerDatasetBase,
     override: Callable[[Config], Config] = (lambda x: x),
     create_model: Callable[[Config], Model] = (lambda x: Model(x)),
-    create_optimizer: Callable[[torch.nn.Module, Config], Tuple[optim.Optimizer, Optional[LambdaLR]]] = lambda model, config: (optim.Adam(model.parameters(), lr=config.learning_Rate, betas=(BETA_1, BETA_2)), None),
+    create_optimizer: Callable[
+        [torch.nn.Module, Config], Tuple[optim.Optimizer, Optional[LambdaLR]]
+    ] = lambda model, config: (
+        optim.Adam(model.parameters(), lr=config.learning_rate, betas=(BETA_1, BETA_2)),
+        None,
+    ),
     options: TrainingOptions = TrainingOptions(),
-    progress=range,
-    sampling=temperature_sampling
+    progress=lambda x: x,
+    sampling=temperature_sampling,
+    checkpoint=False,
 ):
     config = create_config(
         dataset.vocab_size,
@@ -122,24 +123,23 @@ def train(
     model = create_model(config).to(DEVICE)
     optimizer, scheduler = create_optimizer(model, config)
 
-    state_saver = ModelStateSaver("loading-test")
+    state_saver = (
+        ModelStateSaver(config.model_name) if config.model_name is not None else None
+    )
     loader = dataset.iter(batch_size=options.batch_size)
 
     epochs = []
     epochs_loss = []
     epochs_accuracy = []
-    for i in progress(options.epochs):
-        timer = TrainingTimer(
-            minutes=10
-        )
+    for epoch in range(options.epochs):
+        timer = TrainingTimer(minutes=30)
         sum_loss = 0
         accuracy = 0
         rows = 0
         with Timer("epoch"):
             with Timer("creating_iterator"):
-                tqdm_loader = tqdm(loader)
+                tqdm_loader = progress(loader)
                 iterator = timer_iterator(tqdm_loader)
-           # print(scheduler.get_last_lr())
             for index, (X, y) in enumerate(iterator):
                 with Timer("move_to_device"):
                     X, y = X.to(DEVICE), y.to(DEVICE)
@@ -155,37 +155,50 @@ def train(
                     optimizer.zero_grad()
                     loss.backward()
                     if config.max_grad_norm != None:
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
+                        torch.nn.utils.clip_grad_norm_(
+                            model.parameters(), config.max_grad_norm
+                        )
                     optimizer.step()
                     if scheduler is not None:
                         scheduler.step()
 
-                if index % 10 == 0 and VALIDATION_DEBUG:
-                    with Timer("metrics"):
-                        sum_loss += loss.item()
-                        # Accuracy metrics
-                        y_sample_next = sampling(y_predicted[:, -1, :])
-                        y_next = y[:, -1]
-                        assert y_sample_next.shape == y_next.shape
-                        accuracy += (y_sample_next == y_next).sum()
-                        rows += y_next.shape.numel()
-                        if timer.done():
-                            break
-                if index % 10 == 0 and VALIDATION_DEBUG:
-                    with Timer("update stats"):
-                        tqdm_loader.set_description("Accuracy {acc}, Loss {loss}".format(
-                            acc=(accuracy / rows * 100), 
-                            loss=sum_loss
-                        ))
+                    sum_loss += loss.item()
+                    # Accuracy metrics
+                    y_sample_next = sampling(y_predicted[:, -1, :])
+                    y_next = y[:, -1]
+                    assert y_sample_next.shape == y_next.shape
+                    accuracy += (y_sample_next == y_next).sum()
+                    rows += y_next.shape.numel()
 
-        state_saver.save(model, optimizer, i, sum_loss)
+                if (
+                    VALIDATION_DEBUG
+                    and index % 10 == 0
+                    and isinstance(tqdm_loader, tqdm)
+                ):
+                    with Timer("update stats"):
+                        tqdm_loader.set_description(
+                            "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
+                                epoch=epoch, acc=(accuracy / rows * 100), loss=sum_loss
+                            )
+                        )
+
+                if checkpoint and timer.done() and state_saver is not None:
+                    with Timer("checkpoints"):
+                        state_saver.save(model, optimizer, epoch, sum_loss)
+                        timer.reset()
+
+        if checkpoint and state_saver is not None:
+            state_saver.save(model, optimizer, epoch, sum_loss)
+            timer.reset()
+
+        acc = accuracy / rows * 100
+        epochs_accuracy.append(acc.item())
+        epochs_loss.append(loss.item())
+        epochs.append(epoch)
+
         if VALIDATION_DEBUG:
-            acc = accuracy / rows * 100
-            epochs_accuracy.append(acc.item())
-            epochs_loss.append(loss.item())
-            epochs.append(i)
             assert acc <= 100, acc
-            debug_print(f"epoch: {i}, loss: {sum_loss}, accuracy {acc}")
+            debug_print(f"epoch: {epoch}, loss: {sum_loss}, accuracy {acc}")
 
             with torch.no_grad():
                 rows = dataset.sample(n=2)
@@ -207,15 +220,15 @@ def train(
                     debug_print(f"\tnext token: '{word}'")
                     debug_print(f"\texpected token: '{expected}'")
                     debug_print("")
-        # Check that the model converges to something.
-        with torch.no_grad():
-            accuracy = 0
-            for index, (X, y) in enumerate(dataset.sample(128)):
-                X = X.to(DEVICE)
-                predicted = model(X.reshape((1, -1)))
-                y_sample_next = sampling(predicted[:, -1, :])
-                accuracy += (y_sample_next.item() == y[-1].item())
-            print((accuracy / index) * 100)
+            # Check that the model converges to something.
+            with torch.no_grad():
+                accuracy = 0
+                for index, (X, y) in enumerate(dataset.sample(128)):
+                    X = X.to(DEVICE)
+                    predicted = model(X.reshape((1, -1)))
+                    y_sample_next = sampling(predicted[:, -1, :])
+                    accuracy += y_sample_next.item() == y[-1].item()
+                debug_print((accuracy / index) * 100)
 
     return (epochs, epochs_accuracy, epochs_loss, model)
 
@@ -224,17 +237,15 @@ if __name__ == "__main__":
     tokenizer, cached = SimpleTextEncoder("example").load_cache()
     if not cached:
         print("Not cached building tokenizer.")
-        tokenizer = tokenizer.build_from_files([
-            "example.text"
-        ])
+        tokenizer = tokenizer.build_from_files(["example.text"])
         tokenizer.save_cache()
     else:
         print("Tokenizer is cached.")
-    text_dataset = TransformerTextDataset.from_file(tokenizer, "example.text", sequence_length=4)
+    text_dataset = TransformerTextDataset.from_file(
+        tokenizer, "example.text", sequence_length=4
+    )
     train(
         text_dataset,
-        options=TrainingOptions(
-            batch_size=256
-        ),
-        progress=lambda x: tqdm(range(x))
+        options=TrainingOptions(batch_size=256),
+        progress=lambda x: tqdm(range(x)),
     )

@@ -35,3 +35,15 @@
 
 ## [Do generative video models learn physical principles from watching videos?](https://arxiv.org/pdf/2501.09038)
 - New dataset for testing physics understanding of a model.
+
+## [Learning to Drive from a World Model](https://blog.comma.ai/mlsim)
+[Arxiv paper](https://arxiv.org/pdf/2504.19077)
+(There is also this [paper](https://arxiv.org/pdf/1608.01230) from the past)
+
+- End to end world model. Simulation is key for solving self driving and training the policy models (vision only). They experienced that models need to train on-policy for it to learn from its mistakes.
+- Model
+  - Video encoder from stable diffusion (vae-ft-mse-840000-ema-pruned)
+  - Diffusion transformer
+  - Various tricks are used during training to make the model stable (Sequential Sampling,  Noise Level Augmentation, etc)
+- 
+
