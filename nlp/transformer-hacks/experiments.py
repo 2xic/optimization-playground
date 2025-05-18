@@ -1,32 +1,51 @@
-from model import (
+from training.model import (
     Config,
     PositionalEmbeddingType,
     TransformerLayerType,
     NormalizationLayerType,
     Model,
 )
-from layers_mixture_of_experts import MoE
-from plot import plot_accuracy_loss, Results, MinMaxAvgArray
-from transformer_dataset import XorDataset
-from typing import Callable
-from train import train
+from training.layers_mixture_of_experts import MoE
+from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
+from utils.transformer_dataset import XorDataset
+from training.trainer import Trainer
 from tqdm import tqdm
 import requests
-from dataset_tokenizer import HuggingFaceTokenizerWrapper
-from transformer_dataset import TransformerTextDataset
+from utils.dataset_tokenizer import HuggingFaceTokenizerWrapper
+from utils.transformer_dataset import (
+    TransformerTextDataset,
+    TransformerDataset,
+    BertTextDataset,
+)
 from optimization_playground_shared.nlp.SimpleVocab import splitter
-from typing import List
 import os
+from training.objectives import NextTokenPrediction
+from training.optimizer import AdamOptimizerWrapper
+from training.trainer import TrainingOptions
+from optimization_playground_shared.nlp.utils.sampling import (
+    temperature_sampling,
+)
+import time
+import torch.multiprocessing as mp
+import torch
 
-SAMPLE_SIZE = 1_00
+assert torch.cuda.is_available()
+
+EPOCHS = 100
+SAMPLE_SIZE = 1_0
 LEARNING_RATE = 3e-4
 SEQUENCE_LENGTH = 32
 
 
-def get_text_dataset():
-    content = requests.get(
+def get_text_content():
+    return requests.get(
         "https://raw.githubusercontent.com/ibz/bitcoin-whitepaper-markdown/refs/heads/master/bitcoin-whitepaper.md"
     ).text
+
+
+def get_text_dataset(content, percentage=0.25):
+    content = content.split("\n")
+    content = "\n".join(content[: int(len(content) * percentage)])
     tokenizer = HuggingFaceTokenizerWrapper(
         "example",
         vocab_size=len(list(set(splitter(content)))) * 32,
@@ -35,19 +54,79 @@ def get_text_dataset():
     dataset = TransformerTextDataset.from_documents(
         tokenizer, [content], SEQUENCE_LENGTH
     )
+    # Just some upper bound for speedup
+    dataset._len = int(1_000 * percentage)
+    return dataset
+
+
+def get_masked_tokens_dataset(content, percentage=0.25):
+    content = content.split("\n")
+    content = "\n".join(content[: int(len(content) * percentage)])
+    tokenizer = HuggingFaceTokenizerWrapper(
+        "example",
+        vocab_size=len(list(set(splitter(content)))) * 32,
+    )
+    tokenizer.train_tokenizer([content])
+    dataset = BertTextDataset.from_documents(tokenizer, [content], SEQUENCE_LENGTH)
+    # Just some upper bound for speedup
+    dataset._len = int(1_000 * percentage)
     return dataset
 
 
 class NamedDataset:
-    def __init__(self, name, dataset):
+    def __init__(self, name, dataset: TransformerDataset):
         self.name = name
         self.dataset = dataset
 
+    @property
+    def vocab_size(self):
+        return self.dataset.vocab_size
 
-DATASETS: List["NamedDataset"] = [
-    NamedDataset("xor", XorDataset()),
-    NamedDataset("satoshi_whitepaper", get_text_dataset())
-]
+    @property
+    def padding_index(self):
+        return self.dataset.padding_index
+
+    @property
+    def sequence_size(self):
+        return self.dataset.sequence_size
+
+    def iter(self, **args):
+        return self.dataset.iter(**args, workers=0)
+
+
+class Datasets:
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            print("Creating singleton instance")
+            cls._instance = super().__new__(cls)
+            # Expensive initialization happens here
+            cls._instance._initialized = False
+        return cls._instance
+
+    def __init__(self):
+        # Ensure initialization happens only once
+        if not self._initialized:
+            print("Initializing singleton")
+            self._initialized = True
+
+            text_content = get_text_content()
+            self.datasets = [
+                # NamedDataset("xor", XorDataset(sequence_size=3)),
+                NamedDataset(
+                    "satoshi_whitepaper_tiny",
+                    get_text_dataset(text_content, percentage=0.05),
+                ),
+                NamedDataset(
+                    "satoshi_whitepaper",
+                    get_text_dataset(text_content, percentage=0.25),
+                ),
+            ]
+
+    @property
+    def value(self):
+        return self.datasets
 
 
 def get_output_path(dataset: NamedDataset, filename):
@@ -60,56 +139,119 @@ def get_output_path(dataset: NamedDataset, filename):
     return os.path.join(dir, filename)
 
 
-def config_override(
-    positional_embedding: PositionalEmbeddingType = None,
-    transformer_layer: TransformerLayerType = None,
-    normalization_layer: NormalizationLayerType = None,
-) -> Callable[[Config], Config]:
-    def override(config: Config):
-        config.learning_rate = LEARNING_RATE
-        # Conditionals
-        if positional_embedding is not None:
-            config.positional_embedding = positional_embedding
-        if transformer_layer is not None:
-            config.transformer_layer = transformer_layer
-        if normalization_layer is not None:
-            config.normalization_layer = normalization_layer
-        return config
+def create_default_config(dataset: TransformerDataset):
+    assert dataset.vocab_size is not None
+    assert dataset.padding_index is not None
+    return Config(
+        dropout=0 if isinstance(dataset, XorDataset) else 0,
+        dim_embeddings=4 if isinstance(dataset, XorDataset) else 256,
+        num_attention_heads=2 if isinstance(dataset, XorDataset) else 8,
+        num_transformer_layers=8 if isinstance(dataset, XorDataset) else 4,
+        vocab_size=dataset.vocab_size,
+        sequence_length=dataset.sequence_size,
+        padding_index=dataset.padding_index,
+        transformer_layer=TransformerLayerType.GPT2,
+        positional_embedding=PositionalEmbeddingType.NN_EMBEDDING,
+    )
 
-    return override
+
+def create_next_token_prediction_objective(
+    config: Config, dataset: TransformerDataset, model=Model
+):
+    model = model(config)
+    trainer = Trainer(
+        model,
+        NextTokenPrediction(
+            padding_index=dataset.padding_index,
+            vocab_size=dataset.vocab_size,
+            sampler=temperature_sampling,
+        ),
+        (AdamOptimizerWrapper(model.parameters(), lr=LEARNING_RATE, max_grad_norm=0))
+        if isinstance(dataset, XorDataset)
+        else (
+            AdamOptimizerWrapper(model.parameters(), lr=LEARNING_RATE, max_grad_norm=1)
+        ),
+    )
+    return trainer
+
+
+def execute(
+    dataset: TransformerDataset, config: Config, experiment_variant, model=Model
+):
+    epochs_accuracy = MinMaxAvgArray()
+    epochs_loss = MinMaxAvgArray()
+    for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
+        trainer = create_next_token_prediction_objective(config, dataset, model)
+        (accuracy, loss) = trainer.train(
+            dataset,
+            TrainingOptions(
+                epochs=EPOCHS,
+                batch_size=64,
+            ),
+            progress=lambda x: x,
+        )
+        assert len(accuracy) == EPOCHS
+        assert len(loss) == EPOCHS
+        epochs_accuracy.add(accuracy)
+        epochs_loss.add(loss)
+        assert len(epochs_accuracy.min_max_avg) == len(accuracy)
+    return experiment_variant, Results(
+        accuracy=epochs_accuracy,
+        loss=epochs_loss,
+    )
+
+
+class Experiment:
+    def __init__(self, dataset: TransformerDataset):
+        self.experiments = {}
+        self.dataset = dataset
+        self.queue_runs = []
+
+    def queue(self, config: Config, experiment_variant, model=Model):
+        self.queue_runs.append((config, experiment_variant, model))
+
+    def plot(self, name: str):
+        ctx = mp.get_context("spawn")
+        with ctx.Pool(processes=4) as pool:
+            results = []
+            for config, experiment_variant, model in self.queue_runs:
+                results.append(
+                    pool.apply_async(
+                        execute, args=(self.dataset, config, experiment_variant, model)
+                    )
+                )
+            print("How much is running in parallel? Idk")
+            for i in results:
+                if isinstance(i, tuple):
+                    experiment_variant, results = i
+                else:
+                    experiment_variant, results = i.get()
+                self.experiments[experiment_variant] = results
+            plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
 
 
 def positional_embeddings():
-    for dataset in DATASETS:
-        data = {}
+    for dataset in Datasets().value:
+        experiment = Experiment(dataset)
         for positional_embedding in [
             PositionalEmbeddingType.NONE,
             PositionalEmbeddingType.NN_EMBEDDING,
             PositionalEmbeddingType.SINUSOIDAL,
             PositionalEmbeddingType.ROTARY_POSITION_ENCODING,
         ]:
-            epochs_accuracy = MinMaxAvgArray()
-            epochs_loss = MinMaxAvgArray()
-            for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {positional_embedding}"):
-                (_, accuracy, loss, _model) = train(
-                    dataset.dataset,
-                    config_override(
-                        positional_embedding=positional_embedding,
-                    ),
-                )
-                epochs_accuracy.add(accuracy)
-                epochs_loss.add(loss)
-                assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-            data[positional_embedding] = Results(
-                accuracy=epochs_accuracy,
-                loss=epochs_loss,
+            config = create_default_config(
+                dataset,
+            ).with_positional_embedding(positional_embedding)
+            experiment.queue(
+                config,
+                positional_embedding,
             )
-        plot_accuracy_loss(data, get_output_path(dataset, "positional_embeddings.png"))
+        experiment.plot("positional_embeddings.png")
 
 
 def transformer_layer():
-    for dataset in DATASETS:
-        data = {}
+    for dataset in Datasets().value:
+        experiment = Experiment(dataset)
         for transformer_layer in [
             TransformerLayerType.DEEPSEEK,
             TransformerLayerType.LLAMA2,
@@ -118,92 +260,83 @@ def transformer_layer():
             TransformerLayerType.SIMPLE,
             TransformerLayerType.SIMPLE_NO_ATTENTION,
         ]:
-            print(f"Testing {transformer_layer}")
-            epochs_accuracy = MinMaxAvgArray()
-            epochs_loss = MinMaxAvgArray()
-            for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {transformer_layer}"):
-                (_, accuracy, loss, _model) = train(
-                    XorDataset(),
-                    config_override(
-                        transformer_layer=transformer_layer,
-                    ),
-                )
-                epochs_accuracy.add(accuracy)
-                epochs_loss.add(loss)
-                assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-            data[transformer_layer] = Results(
-                accuracy=epochs_accuracy,
-                loss=epochs_loss,
+            config = create_default_config(
+                dataset,
+            ).with_transformer_layer(transformer_layer)
+            experiment.queue(
+                config,
+                transformer_layer,
             )
-        plot_accuracy_loss(data, get_output_path(dataset, "transformer_layer.png"))
+        experiment.plot("transformer_layer.png")
 
 
 def normalization_layer():
-    for dataset in DATASETS:
-        data = {}
-        for normalization_layer in [
+    for dataset in Datasets().value:
+        experiment = Experiment(dataset)
+        for transformer_layer in [
             NormalizationLayerType.LAYER_NORM,
             NormalizationLayerType.DyT,
         ]:
-            epochs_accuracy = MinMaxAvgArray()
-            epochs_loss = MinMaxAvgArray()
-            for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {normalization_layer}"):
-                (_, accuracy, loss, _model) = train(
-                    XorDataset(),
-                    config_override(
-                        normalization_layer=normalization_layer,
-                    ),
-                )
-                assert accuracy != 0
-                epochs_accuracy.add(accuracy)
-                epochs_loss.add(loss)
-                assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-            data[normalization_layer] = Results(
-                accuracy=epochs_accuracy,
-                loss=epochs_loss,
+            config = create_default_config(
+                dataset,
+            ).with_normalization_layer(transformer_layer)
+            experiment.queue(
+                config,
+                transformer_layer,
             )
-        plot_accuracy_loss(data, get_output_path(dataset, "normalization_layer.png"))
+        experiment.plot("normalization_layer.png")
 
 
 def mixture_of_expert_model_vs_standard():
-    for dataset in DATASETS:
-        data = {}
-        for create_model, name in [
-            ((lambda x: Model(x), "normal")),
-            ((lambda x: MoE(x), "moe")),
+    for dataset in Datasets().value:
+        experiment = Experiment(dataset)
+        for name, model in [
+            ("normal", Model),
+            ("mixture of experts", MoE),
         ]:
-            epochs_accuracy = MinMaxAvgArray()
-            epochs_loss = MinMaxAvgArray()
-            for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {name}"):
-                (_, accuracy, loss, _model) = train(
-                    XorDataset(),
-                    create_model=create_model,
-                )
-                epochs_accuracy.add(accuracy)
-                epochs_loss.add(loss)
-                assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-            data[name] = Results(
-                accuracy=epochs_accuracy,
-                loss=epochs_loss,
+            config = create_default_config(
+                dataset,
             )
-        plot_accuracy_loss(data, get_output_path(dataset, "model_vs_moe.png"))
+            experiment.queue(config, name, model=model)
+        experiment.plot("model_vs_moe.png")
+
+
+def embedding_training():
+    dataset = NamedDataset(
+        "masked_tokens",
+        get_masked_tokens_dataset(get_text_content()),
+    )
+    experiment = Experiment(dataset)
+    config = create_default_config(
+        dataset,
+    ).with_transformer_layer(TransformerLayerType.BERT)
+    experiment.queue(
+        config,
+        "bert",
+    )
+    experiment.plot("masked_tokens.png")
 
 
 def test_pass():
-    (_epochs, _epochs_accuracy, _epochs_loss, _model) = train(
-        XorDataset(),
-        config_override(
-            transformer_layer=TransformerLayerType.DEEPSEEK,
-        ),
+    dataset = XorDataset()
+    config = create_default_config(
+        dataset,
     )
+    trainer = create_next_token_prediction_objective(
+        config,
+        dataset,
+    )
+    (_epochs_accuracy, _epochs_loss) = trainer.train(dataset, TrainingOptions(epochs=1))
     assert len(_epochs_loss) > 0
     assert len(_epochs_accuracy) > 0
-    assert len(_epochs) > 0
 
 
 if __name__ == "__main__":
- #   test_pass()
-#    mixture_of_expert_model_vs_standard()
-    positional_embeddings()
-    transformer_layer()
-    normalization_layer()
+    # test_pass()
+    mp.set_start_method("spawn")
+    #    mixture_of_expert_model_vs_standard()
+    #    positional_embeddings()
+    #    transformer_layer()
+    #    normalization_layer()
+    embedding_training()
+    time.sleep(3)

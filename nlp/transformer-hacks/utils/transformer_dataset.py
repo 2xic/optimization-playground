@@ -5,7 +5,7 @@ import glob
 from torch.utils.data import DataLoader, Dataset
 from optimization_playground_shared.nlp.SimpleVocab import splitter
 from abc import ABC, abstractmethod
-from dataset_tokenizer import SimpleTextEncoder
+from .dataset_tokenizer import SimpleTextEncoder
 import pickle
 import aiofiles
 import asyncio
@@ -13,6 +13,7 @@ from tqdm import tqdm
 from itertools import chain
 from typing import List
 from functools import lru_cache
+from copy import deepcopy
 
 MAX_WORKERS = 16
 BATCH_SIZE = 2 << 12
@@ -54,7 +55,10 @@ class TransformerDatasetBase(ABC):
 
     def iter(self, batch_size=4, workers=4):
         return DataLoader(
-            self, batch_size=batch_size, num_workers=workers, persistent_workers=True
+            self,
+            batch_size=batch_size,
+            num_workers=workers,
+            persistent_workers=(workers > 0),
         )
 
     def sample(self, n):
@@ -87,17 +91,34 @@ class TransformerDataset(TransformerDatasetBase):
 
 
 class XorDataset(TransformerDataset):
-    def __init__(self):
-        self._X = torch.tensor([[0, 0, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]])
-        self._y = torch.tensor(
-            [
-                [self.padding_index, self.padding_index, 0],
-                [self.padding_index, self.padding_index, 1],
-                [self.padding_index, self.padding_index, 1],
-                [self.padding_index, self.padding_index, 0],
-            ]
-        )
+    def __init__(self, sequence_size=3):
+        self._sequence_size = sequence_size
         self._vocab_size = 3
+        self._padding_idx = 2
+        self._X = self._create_padded_vector(
+            torch.tensor([[0, 0, 1], [0, 1, 1], [1, 0, 1], [1, 1, 1]])
+        )
+        self._y = self._create_padded_vector(
+            torch.tensor(
+                [
+                    [self.padding_index, self.padding_index, 0],
+                    [self.padding_index, self.padding_index, 1],
+                    [self.padding_index, self.padding_index, 1],
+                    [self.padding_index, self.padding_index, 0],
+                ]
+            )
+        )
+        assert self._X.shape[-1] == sequence_size
+        assert self._y.shape[-1] == sequence_size
+
+    def _create_padded_vector(self, input):
+        tensor = (
+            torch.zeros((input.shape[0], self.sequence_size))
+            .fill_(self.padding_index)
+            .long()
+        )
+        tensor[:, -input.shape[1] :] = input
+        return tensor
 
     @property
     def X(self):
@@ -113,11 +134,11 @@ class XorDataset(TransformerDataset):
 
     @property
     def sequence_size(self):
-        return 3
+        return self._sequence_size
 
     @property
     def padding_index(self):
-        return 2
+        return self._padding_idx
 
     def decode_tokens(self, X: List[int]):
         if isinstance(X, torch.Tensor):
@@ -260,8 +281,14 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         size = min(self.rows, self.max_size)
         return size
 
-    def iter(self, batch_size=4):
-        return DataLoader(self, batch_size=batch_size, num_workers=2, shuffle=False, persistent_workers=True)
+    def iter(self, batch_size=4, workers=2):
+        return DataLoader(
+            self,
+            batch_size=batch_size,
+            num_workers=workers,
+            shuffle=False,
+            persistent_workers=(workers > 0),
+        )
 
 
 class TransformerTextDataset(TransformerDataset, Dataset):
@@ -411,13 +438,54 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         for doc in documents:
             tokens = tokenizer.encode_document(doc)
             for index, _ in enumerate(tokens):
-                next_tokens_index = index + sequence_length
+                next_tokens_index = index + 1
                 current_tokens = read_sequence(tokens, index)
                 next_tokens = read_sequence(tokens, next_tokens_index)
                 if len(next_tokens) != sequence_length:
                     continue
                 X.append(current_tokens)
                 y.append(next_tokens)
+        return TransformerTextDataset(X, y, tokenizer, sequence_length)
+
+    def decode_tokens(self, tokens: List[int]):
+        return self.encoder.decode(tokens)
+
+    @property
+    def padding_index(self):
+        return self.encoder.padding_index
+
+
+class BertTextDataset(TransformerDataset):
+    def __init__(self, X, y, encoder, sequence_size):
+        super().__init__()
+
+    def from_iterator_single(self):
+        raise Exception("?")
+
+    @classmethod
+    def from_documents(self, tokenizer: SimpleTextEncoder, documents, sequence_length):
+        X, y = [], []
+        tokenizer.is_locked = True
+
+        def read_sequence(arr, index):
+            return arr[index : index + sequence_length]
+
+        for doc in documents:
+            tokens = tokenizer.encode_document(doc)
+            for index, _ in enumerate(tokens):
+                current_tokens = read_sequence(tokens, index)
+                copy_next_tokens = deepcopy(current_tokens)
+                if len(current_tokens) != sequence_length:
+                    continue
+                n = random.sample(
+                    list(range(len(current_tokens))), k=int(sequence_length * 0.15)
+                )
+                for i in n:
+                    current_tokens[i] = tokenizer.masked_index
+                assert None not in current_tokens
+                assert None not in copy_next_tokens
+                X.append(current_tokens)
+                y.append(copy_next_tokens)
         return TransformerTextDataset(X, y, tokenizer, sequence_length)
 
     def decode_tokens(self, tokens: List[int]):

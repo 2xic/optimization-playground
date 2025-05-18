@@ -80,6 +80,7 @@ class SimpleTextEncoder(Tokenizer):
         self.is_locked = False
         self.padding_index = self.encode_idx("<PADDING>")
         self.unknown_index = self.encode_idx("<UNKNOWN>")
+        self.masked_index = self.encode_idx("<MASK>")
 
     def get_cache_fields(self):
         return {
@@ -158,15 +159,14 @@ class HuggingFaceTokenizerWrapper(Tokenizer):
         # self.tokenizer = HfTokenizer(self.bpe)
         self.tokenizer = ByteLevelBPETokenizer()
         # self.tokenizer = SentencePieceBPETokenizer()
-        self.tokenizer.add_special_tokens(["<PADDING>"])
-        self.padding_index = self.tokenizer.encode("<PADDING>").ids[0]
-        assert self.decode_idx(self.padding_index) == "<PADDING>"
+        self.padding_index = None  # self.tokenizer.encode("<pad>").ids[0]
+        self.masked_index = None  # self.tokenizer.encode("<mask>").ids[0]
         self.is_locked = False
         self.name = name
         self._preferred_vocab_size = vocab_size
 
     def train_tokenizer(self, documents):
-        assert type(documents) != str
+        assert not isinstance(documents, str)
         # self.tokenizer.train_from_iterator(documents)#, trainer=BpeTrainer())
         self.tokenizer.train_from_iterator(
             documents,
@@ -180,6 +180,11 @@ class HuggingFaceTokenizerWrapper(Tokenizer):
                 "<mask>",
             ],
         )
+        self.padding_index = self.tokenizer.encode("<pad>").ids[0]
+        self.masked_index = self.tokenizer.encode("<mask>").ids[0]
+        #      print(self.decode_idx(self.padding_index))
+        assert self.decode_idx(self.padding_index) == "<pad>"
+        assert self.decode_idx(self.masked_index) == "<mask>"
 
     def encode(self, doc):
         return self.tokenizer.encode(doc).ids

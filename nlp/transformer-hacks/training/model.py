@@ -7,7 +7,14 @@ from optimization_playground_shared.nlp.PositionalEncoding import (
 )
 from enum import Enum
 import torch.nn.functional as F
-from layers import SimpleGQA, MultiheadAttention, DyT, MultiHeadLatentAttention, DEVICE
+from .layers import (
+    SimpleGQA,
+    MultiheadAttention,
+    DyT,
+    MultiHeadLatentAttention,
+    DEVICE,
+    BidirectionalAttention,
+)
 from typing import Optional
 
 
@@ -27,6 +34,8 @@ class TransformerLayerType(Enum):
     DEEPSEEK = 5
     # Useful for debugging, use the built in nn.TransformerDecoderLayer
     TORCH_TRANSFORMER_DECODE_LAYER = 6
+    # cont.
+    BERT = 7
 
 
 class NormalizationLayerType(Enum):
@@ -41,6 +50,7 @@ class Config:
     dim_embeddings: int
     num_attention_heads: int
     num_transformer_layers: int
+    # Used by the embeddings layer.
     padding_index: int
     positional_embedding: PositionalEmbeddingType = PositionalEmbeddingType.SINUSOIDAL
     transformer_layer: TransformerLayerType = TransformerLayerType.SIMPLE
@@ -49,11 +59,24 @@ class Config:
     feed_forward_layer: int = 2048
     bias: bool = False
     # Optimizer
+    # TODO: this can be removed.
     weight_decay = 1e-1
     learning_rate = 3e-4
     max_grad_norm: Optional[float] = 1
-    # Debug
+    # TODO: this can be removed.
     model_name: Optional[str] = None
+
+    def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
+        self.positional_embedding = positional_embedding
+        return self
+
+    def with_transformer_layer(self, transformer_layer: TransformerLayerType):
+        self.transformer_layer = transformer_layer
+        return self
+
+    def with_normalization_layer(self, normalization_layer: NormalizationLayerType):
+        self.normalization_layer = normalization_layer
+        return self
 
 
 class NormalizationLayer(nn.Module):
@@ -176,6 +199,25 @@ class DeepSeekLikeTransformerLayer(nn.Module):
         return self.norm_2(second_half + X)
 
 
+class BertLikeTransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.attention = BidirectionalAttention(
+            config.dim_embeddings,
+            config.num_attention_heads,
+        )
+        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.linear = LlamaFeedForward(config)
+
+    def forward(self, X, mask):
+        X_norm = self.norm_1(X)
+        first_half = self.attention(X_norm, X_norm, X_norm, mask)
+        first_half += X
+        second_half = self.linear(first_half)
+        return self.norm_2(second_half + X)
+
+
 class GptTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
@@ -260,6 +302,8 @@ def get_transformer_layer(config: Config):
         return Llama3TransformerLayer(config)
     elif config.transformer_layer == TransformerLayerType.DEEPSEEK:
         return DeepSeekLikeTransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.BERT:
+        return BertLikeTransformerLayer(config)
     elif (
         config.transformer_layer == TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER
     ):
@@ -296,7 +340,7 @@ class PositionalEmbeddings(nn.Module):
     ):
         super().__init__()
         if positional_embedding == PositionalEmbeddingType.NONE:
-            self.positional_embeddings = lambda x: x
+            self.positional_embeddings = self._none
         elif positional_embedding == PositionalEmbeddingType.NN_EMBEDDING:
             self.positional_embeddings = NnPositionalEmbedding(
                 sequence_length, dim_embeddings
@@ -313,6 +357,9 @@ class PositionalEmbeddings(nn.Module):
             )
         else:
             raise Exception(f"Unknown {positional_embedding}")
+
+    def _none(self, x):
+        return x
 
     def forward(self, x: torch.Tensor):
         return self.positional_embeddings(x)
@@ -388,8 +435,7 @@ class Model(nn.Module):
     def generate(self, input_tokens: torch.Tensor, num_tokens_generate, sampler):
         output = input_tokens
         output = output.unsqueeze(0)
-        print(output.shape)
-        
+
         for _ in range(num_tokens_generate):
             logits = self.forward(output[:, -self.config.sequence_length :])
             last_token = logits[:, -1, :]

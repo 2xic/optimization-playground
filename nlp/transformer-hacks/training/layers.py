@@ -4,15 +4,22 @@ import torch.nn.functional as F
 
 DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+"""
+Read more 
+- https://benjaminwarner.dev/2023/07/01/attention-mechanism
+- https://pytorch.org/blog/flexattention/
+"""
+
 
 class MultiheadAttention(nn.Module):
-    def __init__(self, embed_dim, num_query_heads, num_groups=None):
+    def __init__(self, embed_dim, num_query_heads, num_groups=None, dropout_p=0.0):
         super().__init__()
 
         self.embed_dim = embed_dim
         self.num_query_heads = num_query_heads
         self.num_groups = num_query_heads if num_groups is None else num_groups
         self.head_dim = embed_dim // num_query_heads
+        self.dropout_p = dropout_p
 
         # Linear projections
         self.q_proj = nn.Linear(embed_dim, embed_dim)
@@ -44,9 +51,9 @@ class MultiheadAttention(nn.Module):
             q,
             k,
             v,
-            attn_mask=attn_mask,
-            dropout_p=0.0,
             is_causal=is_causal,
+            attn_mask=attn_mask,
+            dropout_p=self.dropout_p,
             enable_gqa=self.enable_gqa,
         )
 
@@ -161,6 +168,16 @@ class MultiHeadLatentAttention(nn.Module):
         # Reshape and apply output projection
         out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.embed_dim)
         return self.out_proj(out)
+
+
+class BidirectionalAttention(MultiheadAttention):
+    def __init__(self, embed_dim, num_query_heads, num_groups=None):
+        super().__init__(embed_dim, num_query_heads, num_groups)
+
+    def forward(self, query, key, value, mask):
+        mask = torch.ones_like(mask)
+        results, _ = super().forward(query, key, value, mask)
+        return results
 
 
 # https://arxiv.org/pdf/2503.10622

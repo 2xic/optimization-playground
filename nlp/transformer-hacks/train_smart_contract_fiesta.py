@@ -1,4 +1,4 @@
-from train import (
+from training.trainer import (
     train,
     ModelStateSaver,
     create_config,
@@ -6,6 +6,9 @@ from train import (
     DEVICE,
     Config,
     TrainingOptions,
+    TransformerLayerType,
+    BETA_1,
+    BETA_2,
 )
 import torch
 from optimization_playground_shared.nlp.utils.sampling import (
@@ -13,17 +16,10 @@ from optimization_playground_shared.nlp.utils.sampling import (
     simple_sampling,
 )
 import argparse
-from train import (
-    TransformerLayerType,
-)
-from model import PositionalEmbeddingType
+from training.model import PositionalEmbeddingType
 from smart_contract_fiesta_dataset_creator import get_dataset
-from transformer_dataset import TransformerTextDatasetLazy
-from train import (
-    BETA_1,
-    BETA_2,
-)
-from scheduler import NoamScheduler
+from utils.transformer_dataset import TransformerTextDatasetLazy
+from training.scheduler import NoamScheduler
 from tqdm import tqdm
 
 # GB_8 = 8 * 1000 * 1000 * 1000
@@ -126,10 +122,12 @@ def sample_model():
         model.eval()
         state_saver = ModelStateSaver("loading-test")
         state_saver.load_model_state(model)
-        
-        X = torch.zeros(SEQUENCE_LENGTH, dtype=torch.long).fill_(text_dataset.padding_index)
+
+        X = torch.zeros(SEQUENCE_LENGTH, dtype=torch.long).fill_(
+            text_dataset.padding_index
+        )
         y = torch.LongTensor(tokenizer.encode(input("model context: ")))
-        X[-(y.shape[0]):] = y
+        X[-(y.shape[0]) :] = y
         print(X.shape)
         sample_from_model(X, text_dataset, model)
 

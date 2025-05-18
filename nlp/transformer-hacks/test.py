@@ -1,9 +1,9 @@
 import torch
 import glob
-from model import Model, Config
-from dataset_tokenizer import SimpleTextEncoder, WordPieceBuilder, WordPiece
-from transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
-from plot import MinMaxAvgArray
+from training.model import Model, Config
+from utils.dataset_tokenizer import SimpleTextEncoder, WordPieceBuilder, WordPiece
+from utils.transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
+from utils.plot import MinMaxAvgArray
 
 
 def test_basic_model():

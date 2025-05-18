@@ -1,7 +1,7 @@
-from dataset_tokenizer import (
+from utils.dataset_tokenizer import (
     HuggingFaceTokenizerWrapper,
 )
-from transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
+from utils.transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
 import glob
 
 
@@ -48,7 +48,7 @@ def get_dataset(name, sequence_length):
     # We now have the dataset and can try to train the model on it.
     text_dataset = TransformerTextDatasetLazy.load(name, new_tokenizer)
     # text_dataset = None
-    if text_dataset is None or cached == False:
+    if text_dataset is None or not cached:
         print("Starting dataset generation .. ", text_dataset)
         text_dataset = TransformerTextDataset.from_iterator_single(
             name,

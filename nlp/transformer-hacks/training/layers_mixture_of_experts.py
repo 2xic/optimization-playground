@@ -6,9 +6,9 @@ https://dataturbo.medium.com/key-techniques-behind-deepseek-models-10x-efficienc
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from model import Config, Model
-from train import train
-from transformer_dataset import XorDataset
+from .model import Config, Model
+from .trainer import train
+from utils.transformer_dataset import XorDataset
 
 
 class Router(nn.Module):
@@ -37,8 +37,8 @@ class MoE(nn.Module):
 
         outputs = torch.zeros(
             batch_size,
-            self.config.vocab_size,
             self.config.sequence_length,
+            self.config.vocab_size,
             device=x.device,
         )
 

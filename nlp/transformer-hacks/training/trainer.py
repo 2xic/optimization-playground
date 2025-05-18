@@ -1,18 +1,19 @@
-from model import Model, Config, DEVICE, TransformerLayerType
-from transformer_dataset import TransformerDatasetBase, TransformerTextDataset
+from .model import Model, Config, DEVICE, TransformerLayerType
+from utils.transformer_dataset import TransformerDatasetBase, TransformerTextDataset
 import torch
 import torch.optim as optim
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
 from typing import Callable, Tuple, Optional
-from dataset_tokenizer import SimpleTextEncoder
+from utils.dataset_tokenizer import SimpleTextEncoder
 from tqdm import tqdm
 from dataclasses import dataclass
 import os
 import time
-from performance_benchmarker import Timer
+from utils.performance_benchmarker import Timer
 from torch.optim.lr_scheduler import LambdaLR
+from .objectives import BaseObjective
 
 DEBUG = False
 # This slows down the training a lot ...
@@ -97,6 +98,80 @@ def timer_iterator(dataset):
         with Timer("timer_iterator"):
             X, y = next(iterator)
         yield X, y
+
+
+class Trainer:
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        objective: BaseObjective,
+        optimizer: torch.optim.Optimizer,
+        name=None,
+    ):
+        self.name = name
+        self.model = model.to(DEVICE)
+        self.objective = objective
+        self.optimizer = optimizer
+        self.state_saver = ModelStateSaver(name) if name is not None else None
+
+    def train(
+        self,
+        dataset: TransformerDatasetBase,
+        options: TrainingOptions,
+        progress=tqdm,
+    ):
+        timer = TrainingTimer(minutes=30)
+        loader = dataset.iter(batch_size=options.batch_size)
+        epochs_accuracy = []
+        epochs_loss = []
+        for epoch in range(options.epochs):
+            tqdm_loader = progress(loader)
+            iterator = timer_iterator(tqdm_loader)
+            # Per batch
+            count_rows = 0
+            sum_accuracy = 0
+            sum_loss = torch.tensor(0.0)
+            for index, (X, y) in enumerate(iterator):
+                X, y = X.to(DEVICE), y.to(DEVICE)
+                y_predicted = self.model(X)
+                loss: torch.Tensor = self.objective(
+                    y_predicted,
+                    y,
+                )
+                assert loss.requires_grad
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                sum_loss += loss.item()
+                # Accuracy metrics
+                if self.objective.has_evaluator:
+                    (accuracy, rows) = self.objective.evaluator(y_predicted, y)
+                    sum_accuracy += accuracy
+                    count_rows += rows
+
+                if index % 10 == 0 and isinstance(tqdm_loader, tqdm):
+                    if self.objective.has_evaluator:
+                        tqdm_loader.set_description(
+                            "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
+                                epoch=epoch, acc=(accuracy / rows * 100), loss=sum_loss
+                            )
+                        )
+                    else:
+                        tqdm_loader.set_description(
+                            "Epoch {epoch}, Loss {loss}".format(
+                                epoch=epoch, loss=sum_loss
+                            )
+                        )
+                if self.state_saver is not None and timer.done():
+                    self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
+                    timer.reset()
+
+            acc = sum_accuracy / count_rows * 100
+            epochs_accuracy.append(acc.item())
+            epochs_loss.append(sum_loss.item())
+        return epochs_accuracy, epochs_loss
 
 
 def train(
