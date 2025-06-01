@@ -1,5 +1,8 @@
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
+from dataclasses import dataclass
+
+import torch.optim.rmsprop
 
 
 class NoamScheduler(_LRScheduler):
@@ -29,21 +32,54 @@ BETA_1 = 0.90
 BETA_2 = 0.95
 
 
+@dataclass
+class AdamConfig:
+    lr: float = 3e-4
+    max_grad_norm: float = 0
+    betas: tuple = (BETA_1, BETA_2)
+    eps: float = 1e-8
+    weight_decay: float = 0
+
+    def create_optimizer(self, params):
+        return AdamOptimizerWrapper(
+            params,
+            max_grad_norm=self.max_grad_norm,
+            lr=self.lr,
+            betas=self.betas,
+            weight_decay=self.weight_decay,
+            eps=self.eps,
+        )
+
+
+@dataclass
+class RMSpropConfig:
+    lr: float = 3e-4
+    alpha: float = 0.99
+    eps: float = 1e-8
+    weight_decay: float = 0
+    momentum: float = 0
+
+    def create_optimizer(self, params):
+        return torch.optim.RMSprop(
+            params,
+            lr=self.lr,
+            alpha=self.alpha,
+            eps=self.eps,
+            weight_decay=self.weight_decay,
+            momentum=self.momentum,
+        )
+
+
 class AdamOptimizerWrapper(torch.optim.Adam):
     def __init__(
         self,
         params,
-        lr=3e-4,
-        max_grad_norm=None,
+        max_grad_norm,
+        **kwargs,
     ):
         super().__init__(
             params,
-            lr,
-            betas=(
-                BETA_1,
-                BETA_2,
-            ),
-            weight_decay=1e-1,
+            **kwargs,
         )
         self.params = params
         self.defaults["max_grad_norm"] = max_grad_norm

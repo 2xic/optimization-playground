@@ -322,9 +322,9 @@ def get_transformer_layer(config: Config):
 
 
 class NnPositionalEmbedding(nn.Module):
-    def __init__(self, sequence_length: int, dim_embeddings: int):
+    def __init__(self, max_len: int, d_model: int):
         super().__init__()
-        self.positional_embeddings = nn.Embedding(sequence_length, dim_embeddings)
+        self.positional_embeddings = nn.Embedding(max_len, d_model)
 
     def forward(self, x: torch.Tensor):
         positions = torch.arange(x.shape[1], device=x.device).unsqueeze(0)

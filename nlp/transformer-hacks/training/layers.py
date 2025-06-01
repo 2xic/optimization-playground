@@ -182,7 +182,9 @@ class BidirectionalAttention(MultiheadAttention):
 
 # https://arxiv.org/pdf/2503.10622
 class DyT(nn.Module):
-    def __init__(self, C, init_α=0.5):
+    # 0.5 is good for non lmm
+    # For LLM -> https://arxiv.org/pdf/2503.10622#page=11
+    def __init__(self, C, init_α=0.8):
         super().__init__()
         self.α = nn.Parameter(torch.ones(1, device=DEVICE) * init_α)
         self.γ = nn.Parameter(torch.ones(C, device=DEVICE))

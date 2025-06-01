@@ -20,19 +20,21 @@ from utils.transformer_dataset import (
 from optimization_playground_shared.nlp.SimpleVocab import splitter
 import os
 from training.objectives import NextTokenPrediction
-from training.optimizer import AdamOptimizerWrapper
+from training.optimizer import AdamConfig, RMSpropConfig
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
+from datasets.web.web_dataset import WebDatasetSmall
+from datasets.bytecode.bytecode_dataset import BytecodeDatasetTiny
 import time
 import torch.multiprocessing as mp
 import torch
 
 assert torch.cuda.is_available()
 
-EPOCHS = 100
-SAMPLE_SIZE = 1_0
+EPOCHS = 10
+SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
 SEQUENCE_LENGTH = 32
 
@@ -155,8 +157,17 @@ def create_default_config(dataset: TransformerDataset):
     )
 
 
+class ModelConfig:
+    model: torch.nn.Module
+    config: Config
+    optimizer: AdamConfig = AdamConfig()
+
+
 def create_next_token_prediction_objective(
-    config: Config, dataset: TransformerDataset, model=Model
+    config: Config,
+    dataset: TransformerDataset,
+    model=Model,
+    optimizer_config=AdamConfig(),
 ):
     model = model(config)
     trainer = Trainer(
@@ -166,29 +177,31 @@ def create_next_token_prediction_objective(
             vocab_size=dataset.vocab_size,
             sampler=temperature_sampling,
         ),
-        (AdamOptimizerWrapper(model.parameters(), lr=LEARNING_RATE, max_grad_norm=0))
-        if isinstance(dataset, XorDataset)
-        else (
-            AdamOptimizerWrapper(model.parameters(), lr=LEARNING_RATE, max_grad_norm=1)
-        ),
+        optimizer_config.create_optimizer(model.parameters()),
     )
     return trainer
 
 
 def execute(
-    dataset: TransformerDataset, config: Config, experiment_variant, model=Model
+    dataset: TransformerDataset,
+    config: Config,
+    experiment_variant,
+    model=Model,
+    optimizer=AdamConfig,
 ):
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
-        trainer = create_next_token_prediction_objective(config, dataset, model)
+        trainer = create_next_token_prediction_objective(
+            config, dataset, model, optimizer
+        )
         (accuracy, loss) = trainer.train(
             dataset,
             TrainingOptions(
                 epochs=EPOCHS,
-                batch_size=64,
+                batch_size=32,
             ),
-            progress=lambda x: x,
+            # progress=lambda x: x,
         )
         assert len(accuracy) == EPOCHS
         assert len(loss) == EPOCHS
@@ -207,17 +220,26 @@ class Experiment:
         self.dataset = dataset
         self.queue_runs = []
 
-    def queue(self, config: Config, experiment_variant, model=Model):
-        self.queue_runs.append((config, experiment_variant, model))
+    def queue(
+        self, config: Config, experiment_variant, model=Model, optimizer=AdamConfig()
+    ):
+        self.queue_runs.append((config, experiment_variant, model, optimizer))
 
     def plot(self, name: str):
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=4) as pool:
             results = []
-            for config, experiment_variant, model in self.queue_runs:
+            for config, experiment_variant, model, optimizer in self.queue_runs:
                 results.append(
                     pool.apply_async(
-                        execute, args=(self.dataset, config, experiment_variant, model)
+                        execute,
+                        args=(
+                            self.dataset,
+                            config,
+                            experiment_variant,
+                            model,
+                            optimizer,
+                        ),
                     )
                 )
             print("How much is running in parallel? Idk")
@@ -302,19 +324,36 @@ def mixture_of_expert_model_vs_standard():
 
 
 def embedding_training():
-    dataset = NamedDataset(
-        "masked_tokens",
-        get_masked_tokens_dataset(get_text_content()),
-    )
-    experiment = Experiment(dataset)
-    config = create_default_config(
-        dataset,
-    ).with_transformer_layer(TransformerLayerType.BERT)
-    experiment.queue(
-        config,
-        "bert",
-    )
-    experiment.plot("masked_tokens.png")
+    datasets = [
+        NamedDataset(
+            "satoshi_whitepaper",
+            get_masked_tokens_dataset(get_text_content()),
+        ),
+        NamedDataset(
+            "bytecode_dataset_small",
+            BytecodeDatasetTiny(kind="masked").create_dataset(sequence_size=256)[-1],
+        ),
+        NamedDataset(
+            "web_dataset_small",
+            WebDatasetSmall(kind="masked").create_dataset(
+                sequence_size=256, recreate=True
+            )[-1],
+        ),
+    ]
+    for dataset in datasets:
+        print(dataset.sequence_size)
+        experiment = Experiment(dataset)
+        for optimizer in [AdamConfig(), RMSpropConfig()]:
+            config = create_default_config(
+                dataset,
+            ).with_transformer_layer(TransformerLayerType.BERT)
+            experiment.queue(
+                config,
+                "bert_" + optimizer.__class__.__name__ + f"_{dataset.name}",
+                optimizer=optimizer,
+            )
+
+        experiment.plot("masked_tokens.png")
 
 
 def test_pass():
@@ -335,8 +374,8 @@ if __name__ == "__main__":
     # test_pass()
     mp.set_start_method("spawn")
     #    mixture_of_expert_model_vs_standard()
-    #    positional_embeddings()
+    # positional_embeddings()
     #    transformer_layer()
-    #    normalization_layer()
+    #  normalization_layer()
     embedding_training()
     time.sleep(3)

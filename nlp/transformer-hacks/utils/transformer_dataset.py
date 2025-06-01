@@ -10,7 +10,6 @@ import pickle
 import aiofiles
 import asyncio
 from tqdm import tqdm
-from itertools import chain
 from typing import List
 from functools import lru_cache
 from copy import deepcopy
@@ -21,8 +20,7 @@ BATCH_SIZE = 2 << 12
 
 async def read_file(filename):
     async with aiofiles.open(filename, mode="r") as file:
-        contents = await file.read()
-        return contents
+        return await file.read()
 
 
 async def gather_tasks(tasks):
@@ -201,7 +199,7 @@ class PartialMemoryTensor:
         dir_path = self.get_dir_path(self.name)
         os.makedirs(dir_path, exist_ok=True)
         if batch_id is None:
-            return os.path.join(dir_path, "metadata.pkl")
+            return self.metadata_path(self.name)
         return os.path.join(dir_path, f"{batch_id}.pkl")
 
     @classmethod
@@ -213,8 +211,15 @@ class PartialMemoryTensor:
         )
 
     @classmethod
+    def metadata_path(cls, name):
+        dir_path = cls.get_dir_path(name)
+        return os.path.join(dir_path, "metadata.pkl")
+
+    @classmethod
     def does_exists(self, name):
-        return os.path.isdir(PartialMemoryTensor.get_dir_path(name))
+        return os.path.isdir(PartialMemoryTensor.get_dir_path(name)) and os.path.isfile(
+            PartialMemoryTensor.metadata_path(name)
+        )
 
 
 class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
@@ -273,8 +278,8 @@ class TransformerTextDatasetLazy(Dataset, TransformerDatasetBase):
         X, y = self.load_file(self.lookup[index])
         X, y = X[self.row_index[index]], y[self.row_index[index]]
         X, y = torch.tensor(X), torch.tensor(y)
-        assert X.size().numel() == self.sequence_size, y.size()
-        assert y.size().numel() == self.sequence_size, y.size()
+        assert X.size().numel() == self.sequence_size, (self.sequence_size, X.shape[-1])
+        assert y.size().numel() == self.sequence_size, (self.sequence_size, y.shape[-1])
         return X, y
 
     def __len__(self):
@@ -342,54 +347,63 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         )
 
     @classmethod
-    def from_iterator_single(
+    async def from_iterator_single(
         cls, name, tokenizer, iterator, sequence_length
     ) -> TransformerTextDatasetLazy:
         tokenizer.is_locked = True
         batch_sizer = PartialMemoryTensor(name)
 
-        def add_batch(doc):
-            encoded = list(chain.from_iterable(tokenizer.encode(v) for v in doc))
-            chunked_encoded = [
-                encoded[i : i + sequence_length + 1]
-                for i in range(0, len(encoded), sequence_length)
-            ]
-            for encoded in chunked_encoded:
-                # TODO, maybe this is the issue?
-                if not sequence_length < len(encoded):
-                    encoded += [
-                        1,
-                    ] * (sequence_length - len(encoded) + 1)
-                X = encoded[:-1]
-                y = encoded[1:]
-
-                assert len(X) == sequence_length, len(X)
-                assert len(y) == sequence_length
-
-                batch_sizer.add(
-                    X,
-                    y,
-                )
-
         promises = []
         for path in tqdm(iterator):
             if len(promises) > 64:
-                items = asyncio.run(gather_tasks(promises))
-                for doc in items:
-                    add_batch(doc)
+                await cls.empty_queue(promises, batch_sizer, tokenizer, sequence_length)
                 promises = []
             else:
-                promises.append(read_file(path))
-        items = asyncio.run(gather_tasks(promises))
-
-        for doc in items:
-            add_batch(doc)
-
+                promises.append(asyncio.create_task(read_file(path)))
+        # In case we were't able to empty it earlier.
+        await cls.empty_queue(promises, batch_sizer, tokenizer, sequence_length)
         batch_sizer.flush()
+
         return TransformerTextDatasetLazy(
             name,
             tokenizer,
         )
+
+    @classmethod
+    async def empty_queue(cls, promises, batch_sizer, tokenizer, sequence_length):
+        items = await asyncio.gather(*promises)
+        for doc in items:
+            async for X, y in cls.add_batch(doc, tokenizer, sequence_length):
+                batch_sizer.add(X, y)
+
+    @classmethod
+    async def add_batch(cls, doc, tokenizer, sequence_length):
+        encoded: List[int] = tokenizer.encode(doc)
+        delta = len(encoded) % sequence_length
+        if delta != 0:
+            # This should be padding index
+            encoded.extend(
+                [
+                    tokenizer.padding_index,
+                ]
+                * (sequence_length - delta)
+            )
+        assert len(encoded) % sequence_length == 0, len(encoded) % sequence_length
+        chunked_encoded = [
+            encoded[i : i + sequence_length + 1]
+            for i in range(0, len(encoded) - sequence_length, sequence_length)
+        ]
+        for encoded in chunked_encoded:
+            X = encoded[:-1]
+            y = encoded[1:]
+
+            assert len(X) == sequence_length, len(X)
+            assert len(y) == sequence_length
+
+            yield (
+                X,
+                y,
+            )
 
     @classmethod
     def get_path(self, name):
@@ -455,9 +469,22 @@ class TransformerTextDataset(TransformerDataset, Dataset):
         return self.encoder.padding_index
 
 
+class MaskedTransformerTextDataset(TransformerTextDataset):
+    def __init__(self, X, y, encoder, sequence_size):
+        super().__init__(X, y, encoder, sequence_size)
+
+    @classmethod
+    async def add_batch(cls, doc, tokenizer, sequence_length):
+        async for X, y in super().add_batch(doc, tokenizer, sequence_length):
+            n = random.sample(list(range(len(X))), k=int(sequence_length * 0.15))
+            for i in n:
+                y[i] = tokenizer.masked_index
+            yield X, y
+
+
 class BertTextDataset(TransformerDataset):
     def __init__(self, X, y, encoder, sequence_size):
-        super().__init__()
+        super().__init__(X, y, encoder, sequence_size)
 
     def from_iterator_single(self):
         raise Exception("?")
@@ -486,6 +513,7 @@ class BertTextDataset(TransformerDataset):
                 assert None not in copy_next_tokens
                 X.append(current_tokens)
                 y.append(copy_next_tokens)
+
         return TransformerTextDataset(X, y, tokenizer, sequence_length)
 
     def decode_tokens(self, tokens: List[int]):

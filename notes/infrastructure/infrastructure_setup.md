@@ -50,3 +50,7 @@ There is also a good blogpost by [Lilian Weng](https://lilianweng.github.io/post
   - Uses RDMA and SSds for storage. Uses foundationdb as it's distributed storage layer.
   - [Blogpost on Fire-Flyer](https://www-high--flyer-cn.translate.goog/blog/3fs/?_x_tr_sl=auto&_x_tr_tl=en&_x_tr_hl=en&_x_tr_pto=wapp) 
 - [An Intro to DeepSeek's Distributed File System](https://maknee.github.io/blog/2025/3FS-Performance-Journal-1/)
+- [Insights into DeepSeek-V3: Scaling Challenges and Reflections on Hardware for AI Architectures](https://arxiv.org/pdf/2505.09343v1)
+  - [Paper breakdown](https://x.com/Jukanlosreve/status/1923248967787348083)
+  - [DeepSeek-V3/R1 Inference System Overview](https://github.com/deepseek-ai/open-infra-index/blob/56d86855fcf6e08fdfd45ce6280bd24322c93351/202502OpenSourceWeek/day_6_one_more_thing_deepseekV3R1_inference_system_overview.md)
+

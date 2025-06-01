@@ -223,5 +223,8 @@ class HuggingFaceTokenizerWrapper(Tokenizer):
         if os.path.isfile(tokenizer_path):
             #            hf.tokenizer = HfTokenizer()
             hf.tokenizer = HfTokenizer.from_file(tokenizer_path)
+            hf.padding_index = hf.tokenizer.encode("<pad>").ids[0]
+            hf.masked_index = hf.tokenizer.encode("<mask>").ids[0]
+
             return hf, True
         return hf, False

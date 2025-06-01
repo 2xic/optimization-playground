@@ -78,3 +78,5 @@ There are some examples from driving scene which the model is also able to corre
 [Actually isn't pixel -> planning, more like a lot of tool calling](https://x.com/giffmana/status/1916117387562057867). I was under the impression it was closer to pixel -> planning, so interesting tweet. There is also this post on [Lesswrong](https://www.lesswrong.com/posts/7mqp8uRnnPdbBzJZE/is-gemini-now-better-than-claude-at-pokemon) which does a deeper dive.
 
 [Gemini](https://x.com/sundarpichai/status/1918455766542930004) did complete Pokemon blue.
+
+[Misleading metric](https://x.com/sirbayes/status/1928599954139865374)

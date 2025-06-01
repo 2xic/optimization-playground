@@ -18,3 +18,8 @@
 Learns Hamming distance metrics which learns from a discrete input space into binary codes. 
 - Asymmetric Hamming distance
 - Probably won't learn any meaningful embedding though given the embedding space would be binary codes, but it allows faster KNN classification times.
+
+## Momentum Contrast
+Paper from Meta using an encoder to do contrastive loss.
+- [Momentum Contrast for Unsupervised Visual Representation Learning](https://openaccess.thecvf.com/content_CVPR_2020/papers/He_Momentum_Contrast_for_Unsupervised_Visual_Representation_Learning_CVPR_2020_paper.pdf)
+- [MoCo v2](https://leeyngdo.github.io/blog/representation-learning/2023-01-13-momentum-contrast/)
