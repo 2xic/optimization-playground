@@ -33,8 +33,8 @@ import torch
 
 assert torch.cuda.is_available()
 
-EPOCHS = 10
-SAMPLE_SIZE = 1
+EPOCHS = 1_00
+SAMPLE_SIZE = 10
 LEARNING_RATE = 3e-4
 SEQUENCE_LENGTH = 32
 
@@ -331,12 +331,14 @@ def embedding_training():
         ),
         NamedDataset(
             "bytecode_dataset_small",
-            BytecodeDatasetTiny(kind="masked").create_dataset(sequence_size=256)[-1],
+            BytecodeDatasetTiny(kind="masked").create_dataset(
+                sequence_size=SEQUENCE_LENGTH
+            )[-1],
         ),
         NamedDataset(
             "web_dataset_small",
             WebDatasetSmall(kind="masked").create_dataset(
-                sequence_size=256, recreate=True
+                sequence_size=SEQUENCE_LENGTH
             )[-1],
         ),
     ]
