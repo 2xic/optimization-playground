@@ -114,5 +114,6 @@ def plot_accuracy_loss(results: Dict[str, Results], file_path: str):
     ax2.set_title("Loss")
 
     file_path = file_path.split(".")[0]
+    print(f"Output: {file_path}.png")
     plt.savefig(f"{file_path}.png")
     plt.close("all")

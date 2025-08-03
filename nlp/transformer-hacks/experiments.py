@@ -25,11 +25,12 @@ from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
-from datasets.web.web_dataset import WebDatasetSmall
+from datasets.web.web_dataset import WebDatasetSmall, WebDataset
 from datasets.bytecode.bytecode_dataset import BytecodeDatasetTiny
 import time
 import torch.multiprocessing as mp
 import torch
+import hashlib
 
 assert torch.cuda.is_available()
 
@@ -64,11 +65,17 @@ def get_text_dataset(content, percentage=0.25):
 def get_masked_tokens_dataset(content, percentage=0.25):
     content = content.split("\n")
     content = "\n".join(content[: int(len(content) * percentage)])
+    content_id = hashlib.sha256(content.encode()).hexdigest()
+
     tokenizer = HuggingFaceTokenizerWrapper(
         "example",
         vocab_size=len(list(set(splitter(content)))) * 32,
     )
-    tokenizer.train_tokenizer([content])
+    dataset, cached = tokenizer.load_cache(content_id)
+    if not cached:
+        tokenizer.train_tokenizer([content])
+        tokenizer.save_cache(content_id)
+
     dataset = BertTextDataset.from_documents(tokenizer, [content], SEQUENCE_LENGTH)
     # Just some upper bound for speedup
     dataset._len = int(1_000 * percentage)
@@ -105,6 +112,7 @@ class Datasets:
             cls._instance = super().__new__(cls)
             # Expensive initialization happens here
             cls._instance._initialized = False
+            cls.datasets = {}
         return cls._instance
 
     def __init__(self):
@@ -114,21 +122,49 @@ class Datasets:
             self._initialized = True
 
             text_content = get_text_content()
-            self.datasets = [
+            self.datasets = {
                 # NamedDataset("xor", XorDataset(sequence_size=3)),
-                NamedDataset(
+                "satoshi_whitepaper_tiny": NamedDataset(
                     "satoshi_whitepaper_tiny",
                     get_text_dataset(text_content, percentage=0.05),
                 ),
-                NamedDataset(
+                "satoshi_whitepaper": NamedDataset(
                     "satoshi_whitepaper",
                     get_text_dataset(text_content, percentage=0.25),
                 ),
-            ]
+            }
+
+    @staticmethod
+    def tiny_webdataset():
+        return NamedDataset(
+            "web_dataset_small",
+            WebDatasetSmall(kind="masked").create_dataset(
+                sequence_size=SEQUENCE_LENGTH
+            )[-1],
+        )
+
+    @staticmethod
+    def evm_bytecode():
+        return NamedDataset(
+            "bytecode_dataset_small",
+            BytecodeDatasetTiny(kind="masked").create_dataset(
+                sequence_size=SEQUENCE_LENGTH
+            )[-1],
+        )
+
+    @staticmethod
+    def big_webdataset():
+        return NamedDataset(
+            "web_dataset_big",
+            WebDataset(kind="masked").create_dataset(sequence_size=SEQUENCE_LENGTH)[-1],
+        )
 
     @property
     def value(self):
-        return self.datasets
+        return self.datasets.values()
+
+    def get_tiny_dataset(self):
+        return self.datasets["satoshi_whitepaper_tiny"]
 
 
 def get_output_path(dataset: NamedDataset, filename):
@@ -188,6 +224,10 @@ def execute(
     experiment_variant,
     model=Model,
     optimizer=AdamConfig,
+    options: TrainingOptions = TrainingOptions(
+        epochs=EPOCHS,
+        batch_size=32,
+    ),
 ):
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
@@ -197,14 +237,11 @@ def execute(
         )
         (accuracy, loss) = trainer.train(
             dataset,
-            TrainingOptions(
-                epochs=EPOCHS,
-                batch_size=32,
-            ),
+            options,
             # progress=lambda x: x,
         )
-        assert len(accuracy) == EPOCHS
-        assert len(loss) == EPOCHS
+        assert len(accuracy) == options.epochs
+        assert len(loss) == options.epochs
         epochs_accuracy.add(accuracy)
         epochs_loss.add(loss)
         assert len(epochs_accuracy.min_max_avg) == len(accuracy)
@@ -219,30 +256,51 @@ class Experiment:
         self.experiments = {}
         self.dataset = dataset
         self.queue_runs = []
+        self.skip_thread = False
 
     def queue(
-        self, config: Config, experiment_variant, model=Model, optimizer=AdamConfig()
+        self,
+        config: Config,
+        experiment_variant,
+        model=Model,
+        optimizer=AdamConfig(),
+        training_options=TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=32,
+        ),
     ):
-        self.queue_runs.append((config, experiment_variant, model, optimizer))
+        self.queue_runs.append(
+            (config, experiment_variant, model, optimizer, training_options)
+        )
 
     def plot(self, name: str):
         ctx = mp.get_context("spawn")
         with ctx.Pool(processes=4) as pool:
             results = []
-            for config, experiment_variant, model, optimizer in self.queue_runs:
-                results.append(
-                    pool.apply_async(
-                        execute,
-                        args=(
-                            self.dataset,
-                            config,
-                            experiment_variant,
-                            model,
-                            optimizer,
-                        ),
-                    )
+            for (
+                config,
+                experiment_variant,
+                model,
+                optimizer,
+                training_options,
+            ) in self.queue_runs:
+                args = (
+                    self.dataset,
+                    config,
+                    experiment_variant,
+                    model,
+                    optimizer,
+                    training_options,
                 )
-            print("How much is running in parallel? Idk")
+                if self.skip_thread:
+                    results.append(execute(*args))
+                else:
+                    results.append(
+                        pool.apply_async(
+                            execute,
+                            args=args,
+                        )
+                    )
             for i in results:
                 if isinstance(i, tuple):
                     experiment_variant, results = i
@@ -325,22 +383,18 @@ def mixture_of_expert_model_vs_standard():
 
 def embedding_training():
     datasets = [
+        Datasets.evm_bytecode(),
         NamedDataset(
             "satoshi_whitepaper",
             get_masked_tokens_dataset(get_text_content()),
         ),
-        NamedDataset(
-            "bytecode_dataset_small",
-            BytecodeDatasetTiny(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            )[-1],
-        ),
-        NamedDataset(
-            "web_dataset_small",
-            WebDatasetSmall(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            )[-1],
-        ),
+        Datasets.tiny_webdataset(),
+        #        NamedDataset(
+        #           "web_dataset_small",
+        #          WebDatasetSmall(kind="masked").create_dataset(
+        #             sequence_size=SEQUENCE_LENGTH
+        #        )[-1],
+        #   ),
     ]
     for dataset in datasets:
         print(dataset.sequence_size)

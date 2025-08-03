@@ -12,7 +12,7 @@ from .layers import (
     MultiheadAttention,
     DyT,
     MultiHeadLatentAttention,
-    DEVICE,
+    #    DEVICE,
     BidirectionalAttention,
 )
 from typing import Optional
@@ -269,12 +269,12 @@ class SimpleTransformerLayer(nn.Module):
         attn_output = self.get_attention_output(X, mask)
         return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
 
-    def get_attention_output(self, X, mask):
+    def get_attention_output(self, X: torch.Tensor, mask):
         if self.configs.transformer_layer == TransformerLayerType.SIMPLE:
             attn_output, _ = self.self_attention(X, X, X, attn_mask=mask)
             return attn_output
         elif self.configs.transformer_layer == TransformerLayerType.SIMPLE_NO_ATTENTION:
-            return torch.zeros_like(X, device=DEVICE)
+            return torch.zeros_like(X, device=X.device)
         else:
             raise Exception(f"Unknown attention type {self.configs.attention_type}")
 
@@ -421,7 +421,9 @@ class Model(nn.Module):
         # Attention mask
         mask = torch.triu(
             torch.ones(
-                self.config.sequence_length, self.config.sequence_length, device=DEVICE
+                self.config.sequence_length,
+                self.config.sequence_length,
+                device=x.device,
             ),
             diagonal=1,
         ).bool()

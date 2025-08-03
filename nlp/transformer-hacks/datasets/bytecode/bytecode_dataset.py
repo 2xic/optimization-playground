@@ -4,6 +4,7 @@ from utils.dataset_tokenizer import (
 )
 from utils.transformer_dataset import TransformerTextDataset, TransformerTextDatasetLazy
 import asyncio
+import torch
 
 
 class BytecodeDataset:
@@ -25,7 +26,7 @@ class BytecodeDataset:
     def create_dataset(self, sequence_size=512, recreate=False):
         name = self.get_dataset_name(sequence_size)
         # We now have the dataset and can try to train the model on it.
-        (new_tokenizer, cached) = self.create_tokenizer("bytecode")
+        (new_tokenizer, cached) = self.create_tokenizer(self._name)
         text_dataset = TransformerTextDatasetLazy.load(name, new_tokenizer)
         # text_dataset = None
         if text_dataset is None or not cached or recreate:
@@ -58,6 +59,19 @@ class BytecodeDataset:
                 with open(i, "r") as file:
                     dataset.append(file.read())
             yield dataset
+
+    def get_file_content_tokenized(self, sequence_size):
+        (tokenizer, cached) = self.create_tokenizer(self._name)
+        assert cached
+        files = self.get_files()
+        for path in files:
+            with open(path, "r") as file:
+                tokens = tokenizer.encode(file.read())
+                for i in range(0, len(tokens), sequence_size):
+                    t = torch.tensor(tokens[i : i + sequence_size])
+                    if t.shape[-1] != sequence_size:
+                        continue
+                    yield t
 
     def get_file_path(self):
         for path in self.get_files():

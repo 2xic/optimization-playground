@@ -1,4 +1,4 @@
-from .model import Model, Config, DEVICE, TransformerLayerType
+from .model import Model, Config, TransformerLayerType
 from utils.transformer_dataset import TransformerDatasetBase, TransformerTextDataset
 import torch
 import torch.optim as optim
@@ -69,9 +69,18 @@ class TrainingTimer:
 
 
 @dataclass
+class EpochData:
+    model: torch.nn.Module
+
+
+@dataclass
 class TrainingOptions:
-    batch_size: int = 32 if DEVICE.type != "cuda" else 256
+    batch_size: Optional[int] = None
     epochs: int = 100
+    device: torch.device = (
+        torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    )
+    epoch_callback: Optional[Callable[[EpochData], None]] = None
 
 
 def debug_print(*args):
@@ -109,7 +118,7 @@ class Trainer:
         name=None,
     ):
         self.name = name
-        self.model = model.to(DEVICE)
+        self.model = model
         self.objective = objective
         self.optimizer = optimizer
         self.state_saver = ModelStateSaver(name) if name is not None else None
@@ -120,6 +129,9 @@ class Trainer:
         options: TrainingOptions,
         progress=tqdm,
     ):
+        self.model.to(options.device)
+        if options.batch_size is None:
+            options.batch_size = 32 if options.device.type != "cuda" else 256
         timer = TrainingTimer(minutes=30)
         loader = dataset.iter(batch_size=options.batch_size)
         epochs_accuracy = []
@@ -132,7 +144,7 @@ class Trainer:
             sum_accuracy = 0
             sum_loss = torch.tensor(0.0)
             for index, (X, y) in enumerate(iterator):
-                X, y = X.to(DEVICE), y.to(DEVICE)
+                X, y = X.to(options.device), y.to(options.device)
                 y_predicted = self.model(X)
                 loss: torch.Tensor = self.objective(
                     y_predicted,
@@ -167,7 +179,12 @@ class Trainer:
                 if self.state_saver is not None and timer.done():
                     self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
                     timer.reset()
-
+            if options.epoch_callback is not None:
+                options.epoch_callback(
+                    EpochData(
+                        model=self.model,
+                    )
+                )
             acc = sum_accuracy / count_rows * 100
             epochs_accuracy.append(acc.item())
             epochs_loss.append(sum_loss.item())
@@ -195,7 +212,7 @@ def train(
         dataset.sequence_size,
     )
     config = override(config)
-    model = create_model(config).to(DEVICE)
+    model = create_model(config).to(options.device)
     optimizer, scheduler = create_optimizer(model, config)
 
     state_saver = (
@@ -217,7 +234,7 @@ def train(
                 iterator = timer_iterator(tqdm_loader)
             for index, (X, y) in enumerate(iterator):
                 with Timer("move_to_device"):
-                    X, y = X.to(DEVICE), y.to(DEVICE)
+                    X, y = X.to(options.device), y.to(options.device)
                 with Timer("predictions"):
                     y_predicted = model(X)
 
@@ -278,7 +295,7 @@ def train(
             with torch.no_grad():
                 rows = dataset.sample(n=2)
                 for i, j in rows:
-                    i, j = i.to(DEVICE), j.to(DEVICE)
+                    i, j = i.to(options.device), j.to(options.device)
                     i = i.reshape((1, -1))
                     predicted = model(i)[0]
                     word_idx = sampling(predicted)
@@ -299,7 +316,7 @@ def train(
             with torch.no_grad():
                 accuracy = 0
                 for index, (X, y) in enumerate(dataset.sample(128)):
-                    X = X.to(DEVICE)
+                    X = X.to(options.device)
                     predicted = model(X.reshape((1, -1)))
                     y_sample_next = sampling(predicted[:, -1, :])
                     accuracy += y_sample_next.item() == y[-1].item()
