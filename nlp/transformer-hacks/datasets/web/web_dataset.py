@@ -8,13 +8,15 @@ from utils.transformer_dataset import (
     MaskedTransformerTextDataset,
 )
 import asyncio
+from datasets.dataset import BaseDataset
 
 
-class WebDataset:
+class WebDataset(BaseDataset):
     def __init__(self, name="web_dataset_big", kind="next_token"):
         self.name = name
         self.base = "/home/brage/bigdrive/text_dataset_rss/*.txt"
         self.kind = kind
+        self._dataset = None
 
     def create_tokenizer(self):
         (new_tokenizer, cached) = HuggingFaceTokenizerWrapper.load_cache(self.name)
@@ -52,7 +54,14 @@ class WebDataset:
         text_dataset._sequence_size = sequence_size
         # Just decrease the max size of the model, to force it to train
         # text_dataset.max_size = 1
-        return new_tokenizer, text_dataset
+        self._dataset = text_dataset
+        return self
+
+    @property
+    def dataset(self):
+        if self._dataset is None:
+            raise Exception("Dataset is not yet created")
+        return self._dataset
 
     def get_dataset_name(self):
         if self.kind != "next_token":

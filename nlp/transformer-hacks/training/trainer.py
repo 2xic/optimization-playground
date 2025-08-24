@@ -81,6 +81,7 @@ class TrainingOptions:
         torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     )
     epoch_callback: Optional[Callable[[EpochData], None]] = None
+    batch_callback: Optional[Callable[[EpochData], None]] = None
 
 
 def debug_print(*args):
@@ -179,6 +180,8 @@ class Trainer:
                 if self.state_saver is not None and timer.done():
                     self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
                     timer.reset()
+                if options.batch_callback is not None:
+                    options.batch_callback(EpochData(model=self.model))
             if options.epoch_callback is not None:
                 options.epoch_callback(
                     EpochData(

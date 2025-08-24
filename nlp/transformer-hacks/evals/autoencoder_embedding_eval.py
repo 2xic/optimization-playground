@@ -6,21 +6,12 @@ model(document) -> embedding
 embedding -> decoder -> ~document word distribution
 """
 
-from abc import ABC, abstractmethod
-from typing import Generator, List
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from optimization_playground_shared.nlp.utils.sampling import (
-    temperature_sampling,
-    simple_temperature_sampling,
-)
-
-
-class AbstractDataset(ABC):
-    @abstractmethod
-    def get_file_content_tokenized(self) -> List[int]:
-        pass
+from datasets.dataset import BaseDataset
+import matplotlib.pyplot as plt
+from training.trainer import TrainingTimer
 
 
 class Decoder:
@@ -39,13 +30,12 @@ class Decoder:
         self.optimizer = torch.optim.Adam(self.model.parameters())
         self.vocab_size = vocab_size
 
-    def loss(self, X, y, raw_tokens):
+    def loss(self, X, _, raw_tokens):
+        #   print(X.shape)
+        #   print(self.model)
         y_prediction = self.model(X)
 
-        # Aggregate model predictions across the batch
         model_distribution = y_prediction.log_softmax(dim=-1)
-
-        # Target word frequency distribution
         word_counts = torch.bincount(raw_tokens, minlength=self.vocab_size)
         target_distribution = word_counts.float() / word_counts.sum()
 
@@ -54,9 +44,6 @@ class Decoder:
             target_distribution,
             reduction="sum",
         )
-        #      print(target_distribution)
-        #       print(model_distribution)
-        #        print(loss)
         return loss
 
     def sample(self, embedding, raw_tokens):
@@ -76,27 +63,50 @@ class Decoder:
             print("")
 
 
-def train(dataset: AbstractDataset, embedding_model):
-    output_dimension = embedding_model.output_layer
-    vocab_size = output_dimension.out_features
+def plot_loss_over_time(batches, losses):
+    plt.figure(figsize=(10, 6))
+    plt.plot(batches, losses)
+    plt.title("Training Loss Over Time")
+    plt.xlabel("Batch")
+    plt.ylabel("Loss")
+    plt.grid(True)
+    plt.savefig("plots/bytecode_dataset_small/autoencoder_test_loss.png")
 
-    # currently just training on the output, but this should change.
+
+def train(dataset: BaseDataset, embedding_model):
+    embedding_size = embedding_model.embedding_size
+    vocab_size = embedding_model.config.vocab_size
+
     model = Decoder(
-        vocab_size,
+        embedding_size,
         vocab_size,
     )
     sum_loss = 0
+    batches = []
+    loss_history = []
+
+    timer = TrainingTimer(10)
+
     for index, i in enumerate(dataset.get_file_content_tokenized(32)):
         raw_tokens = i.reshape((1, -1))
         with torch.no_grad():
-            embedding = embedding_model(raw_tokens).mean(dim=1)
+            embedding = embedding_model(raw_tokens)
+            # Flatten the sequence embeddings into single dimension
+            embedding = embedding.mean(dim=1)
         assert len(embedding.shape) == 2
         loss = model.loss(embedding, raw_tokens, i)
         loss.backward()
         sum_loss += loss.item()
         if index % 100 == 0 and index > 0:
+            batches.append(index)
+            loss_history.append(sum_loss)
+
             print(f"Index: {index}, loss: {sum_loss}")
             model.sample(embedding, i)
             model.optimizer.step()
             model.model.zero_grad()
             sum_loss = 0
+
+        if timer.done():
+            break
+    plot_loss_over_time(batches, loss_history)

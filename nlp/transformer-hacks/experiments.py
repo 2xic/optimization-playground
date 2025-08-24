@@ -26,11 +26,12 @@ from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
 from datasets.web.web_dataset import WebDatasetSmall, WebDataset
-from datasets.bytecode.bytecode_dataset import BytecodeDatasetTiny
+from datasets.bytecode.bytecode_dataset import BytecodeDatasetTiny, BytecodeDatasetBig
 import time
 import torch.multiprocessing as mp
 import torch
 import hashlib
+from datasets.dataset import BaseDataset
 
 assert torch.cuda.is_available()
 
@@ -83,24 +84,24 @@ def get_masked_tokens_dataset(content, percentage=0.25):
 
 
 class NamedDataset:
-    def __init__(self, name, dataset: TransformerDataset):
+    def __init__(self, name, dataset: BaseDataset):
         self.name = name
         self.dataset = dataset
 
     @property
     def vocab_size(self):
-        return self.dataset.vocab_size
+        return self.dataset.dataset.vocab_size
 
     @property
     def padding_index(self):
-        return self.dataset.padding_index
+        return self.dataset.dataset.padding_index
 
     @property
     def sequence_size(self):
-        return self.dataset.sequence_size
+        return self.dataset.dataset.sequence_size
 
     def iter(self, **args):
-        return self.dataset.iter(**args, workers=0)
+        return self.dataset.dataset.iter(**args, workers=0)
 
 
 class Datasets:
@@ -140,23 +141,32 @@ class Datasets:
             "web_dataset_small",
             WebDatasetSmall(kind="masked").create_dataset(
                 sequence_size=SEQUENCE_LENGTH
-            )[-1],
-        )
-
-    @staticmethod
-    def evm_bytecode():
-        return NamedDataset(
-            "bytecode_dataset_small",
-            BytecodeDatasetTiny(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            )[-1],
+            ),
         )
 
     @staticmethod
     def big_webdataset():
         return NamedDataset(
             "web_dataset_big",
-            WebDataset(kind="masked").create_dataset(sequence_size=SEQUENCE_LENGTH)[-1],
+            WebDataset(kind="masked").create_dataset(sequence_size=SEQUENCE_LENGTH),
+        )
+
+    @staticmethod
+    def tiny_evm_bytecode():
+        return NamedDataset(
+            "bytecode_dataset_small",
+            BytecodeDatasetTiny(kind="masked").create_dataset(
+                sequence_size=SEQUENCE_LENGTH
+            ),
+        )
+
+    @staticmethod
+    def big_evm_bytecode():
+        return NamedDataset(
+            "bytecode_dataset_big",
+            BytecodeDatasetBig(kind="masked").create_dataset(
+                sequence_size=SEQUENCE_LENGTH
+            ),
         )
 
     @property
@@ -180,6 +190,7 @@ def get_output_path(dataset: NamedDataset, filename):
 def create_default_config(dataset: TransformerDataset):
     assert dataset.vocab_size is not None
     assert dataset.padding_index is not None
+    assert dataset.sequence_size is not None
     return Config(
         dropout=0 if isinstance(dataset, XorDataset) else 0,
         dim_embeddings=4 if isinstance(dataset, XorDataset) else 256,
@@ -383,7 +394,7 @@ def mixture_of_expert_model_vs_standard():
 
 def embedding_training():
     datasets = [
-        Datasets.evm_bytecode(),
+        Datasets.tiny_evm_bytecode(),
         NamedDataset(
             "satoshi_whitepaper",
             get_masked_tokens_dataset(get_text_content()),

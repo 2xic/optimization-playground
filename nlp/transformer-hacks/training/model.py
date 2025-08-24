@@ -365,6 +365,31 @@ class PositionalEmbeddings(nn.Module):
         return self.positional_embeddings(x)
 
 
+class EmbeddingModel(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.config = config
+        self.embeddings: nn.Embedding = None
+        self.positional_embeddings: PositionalEmbeddings = None
+
+    def forward(self, x: torch.Tensor):
+        assert len(x.shape) == 2
+        x = self.embeddings(x)
+        x = self.positional_embeddings(x)
+        return x
+
+    @classmethod
+    def from_model(cls, model: "Model"):
+        new_embeddings = EmbeddingModel(model.config)
+        new_embeddings.embeddings = model.embeddings
+        new_embeddings.positional_embeddings = model.positional_embeddings
+        return new_embeddings
+
+    @property
+    def embedding_size(self):
+        return self.config.dim_embeddings
+
+
 class Model(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
@@ -404,6 +429,9 @@ class Model(nn.Module):
         # Found using minigpt
         self.embeddings.weight = self.output_layer.weight
         self.apply(self._init_weights)
+
+    def create_embedding_model(self):
+        return EmbeddingModel.from_model(self)
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
