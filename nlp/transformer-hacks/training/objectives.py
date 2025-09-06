@@ -43,8 +43,8 @@ class NextTokenPrediction(BaseObjective):
         return self.sampler is not None
 
     def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
-        y_sample_next = self.sampler(y_predicted[:, -1, :])
-        y_next = y[:, -1]
+        y_sample_next = self.sampler(y_predicted[:, 0, :])
+        y_next = y[:, 0]
 
         assert y_sample_next.shape == y_next.shape
         accuracy = (y_sample_next == y_next).sum()

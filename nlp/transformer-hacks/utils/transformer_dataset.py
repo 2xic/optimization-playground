@@ -99,13 +99,17 @@ class XorDataset(TransformerDataset):
         self._y = self._create_padded_vector(
             torch.tensor(
                 [
-                    [self.padding_index, self.padding_index, 0],
-                    [self.padding_index, self.padding_index, 1],
-                    [self.padding_index, self.padding_index, 1],
-                    [self.padding_index, self.padding_index, 0],
+                    [0, self.padding_index, self.padding_index],
+                    [1, self.padding_index, self.padding_index],
+                    [1, self.padding_index, self.padding_index],
+                    [0, self.padding_index, self.padding_index],
                 ]
             )
         )
+        repeated = 32
+        self._X = torch.repeat_interleave(self._X, repeats=repeated, dim=0)
+        self._y = torch.repeat_interleave(self._y, repeats=repeated, dim=0)
+
         assert self._X.shape[-1] == sequence_size
         assert self._y.shape[-1] == sequence_size
 
@@ -142,6 +146,10 @@ class XorDataset(TransformerDataset):
         if isinstance(X, torch.Tensor):
             return str(X.item())
         return str(X)
+
+    @property
+    def name(self):
+        return "xor_dataset"
 
 
 class PartialMemoryTensor:

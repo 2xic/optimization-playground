@@ -18,6 +18,8 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 ## Interference
 - [Mastering LLM Techniques: Inference Optimization](https://developer.nvidia.com/blog/mastering-llm-techniques-inference-optimization/)
 - [KV cache](https://medium.com/@joaolages/kv-caching-explained-276520203249)
+  - https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms
+  - 
 
 ## TODO
 - Benchmark [DeepSeek v3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py) layers also

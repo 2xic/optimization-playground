@@ -8,7 +8,6 @@ from experiments import (
     Datasets,
 )
 from training.model import Model
-from evals.autoencoder_embedding_eval import train
 import random
 
 
@@ -79,8 +78,6 @@ def prepare_batch(batch_triplets):
         pos_ids.append(pos_tokens)
         neg_ids.append(neg_tokens)
 
-    #    print(anchor_ids)
-
     return {
         "anchor_ids": torch.stack(anchor_ids),
         "pos_ids": torch.stack(pos_ids),
@@ -136,7 +133,7 @@ def train_loop_test():
 
         # Calculate loss
         loss = contrastive_loss(anchor_emb, pos_emb, neg_emb)
-        # print(loss)
+
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

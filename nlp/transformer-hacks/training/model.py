@@ -12,8 +12,12 @@ from .layers import (
     MultiheadAttention,
     DyT,
     MultiHeadLatentAttention,
-    #    DEVICE,
     BidirectionalAttention,
+    SimpleMultiHeadAttention,
+)
+from optimization_playground_shared.nlp.utils.sampling import (
+    temperature_sampling,
+    argmax_sampling,
 )
 from typing import Optional
 
@@ -36,11 +40,23 @@ class TransformerLayerType(Enum):
     TORCH_TRANSFORMER_DECODE_LAYER = 6
     # cont.
     BERT = 7
+    SIMPLE_ATTENTION_AT_HOME = 8
 
 
 class NormalizationLayerType(Enum):
     LAYER_NORM = 0
     DyT = 1
+
+
+class MaskOrder(Enum):
+    TRIU = 0
+    TRIL = 1
+
+
+# TODO: this should likely live somewhere else
+class SamplingMethod(Enum):
+    ARGMAX = 0
+    TEMPERATURE = 1
 
 
 @dataclass
@@ -55,6 +71,8 @@ class Config:
     positional_embedding: PositionalEmbeddingType = PositionalEmbeddingType.SINUSOIDAL
     transformer_layer: TransformerLayerType = TransformerLayerType.SIMPLE
     normalization_layer: NormalizationLayerType = NormalizationLayerType.LAYER_NORM
+    masked_order: MaskOrder = MaskOrder.TRIL
+    sampling_method: SamplingMethod = SamplingMethod.TEMPERATURE
     dropout: float = 0.01
     feed_forward_layer: int = 2048
     bias: bool = False
@@ -279,6 +297,28 @@ class SimpleTransformerLayer(nn.Module):
             raise Exception(f"Unknown attention type {self.configs.attention_type}")
 
 
+class SimpleAttentionAtHomeTransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.configs = config
+        self.self_attention = SimpleMultiHeadAttention(
+            embed_dim=config.dim_embeddings,
+            num_query_heads=config.num_attention_heads,
+        )
+        self.module = nn.Sequential(
+            *[
+                nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings),
+                nn.ReLU(),
+            ]
+        )
+        self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
+        self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
+
+    def forward(self, X, mask):
+        attn_output = self.self_attention(X, X, X, mask)
+        return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
+
+
 class TransformerDecoderWrapper(nn.Module):
     def __init__(self, layer: nn.TransformerDecoderLayer) -> None:
         super(TransformerDecoderWrapper, self).__init__()
@@ -304,6 +344,8 @@ def get_transformer_layer(config: Config):
         return DeepSeekLikeTransformerLayer(config)
     elif config.transformer_layer == TransformerLayerType.BERT:
         return BertLikeTransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.SIMPLE_ATTENTION_AT_HOME:
+        return SimpleAttentionAtHomeTransformerLayer(config)
     elif (
         config.transformer_layer == TransformerLayerType.TORCH_TRANSFORMER_DECODE_LAYER
     ):
@@ -447,14 +489,25 @@ class Model(nn.Module):
         x = self.positional_embeddings(x)
         x = self.dropout(x)
         # Attention mask
-        mask = torch.triu(
-            torch.ones(
-                self.config.sequence_length,
-                self.config.sequence_length,
-                device=x.device,
-            ),
-            diagonal=1,
-        ).bool()
+        mask = None
+        if self.config.masked_order == MaskOrder.TRIU:
+            mask = torch.triu(
+                torch.ones(
+                    self.config.sequence_length,
+                    self.config.sequence_length,
+                    device=x.device,
+                ),
+                diagonal=1,
+            ).bool()
+        else:
+            mask = torch.tril(
+                torch.ones(
+                    self.config.sequence_length,
+                    self.config.sequence_length,
+                    device=x.device,
+                ),
+                diagonal=0,
+            ).bool()
         for layer in self.transformer_layers:
             x = layer(x, mask)
         # Output

@@ -4,6 +4,8 @@ from training.model import (
     TransformerLayerType,
     NormalizationLayerType,
     Model,
+    MaskOrder,
+    SamplingMethod,
 )
 from training.layers_mixture_of_experts import MoE
 from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
@@ -24,19 +26,24 @@ from training.optimizer import AdamConfig, RMSpropConfig
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
+    argmax_sampling,
 )
 from datasets.web.web_dataset import WebDatasetSmall, WebDataset
-from datasets.bytecode.bytecode_dataset import BytecodeDatasetTiny, BytecodeDatasetBig
+from datasets.bytecode.bytecode_dataset import (
+    BytecodeDatasetTiny,
+    BytecodeDatasetBig,
+    BytecodeDatasetMedium,
+)
 import time
 import torch.multiprocessing as mp
 import torch
 import hashlib
 from datasets.dataset import BaseDataset
 
-assert torch.cuda.is_available()
+# assert torch.cuda.is_available()
 
 EPOCHS = 1_00
-SAMPLE_SIZE = 10
+SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
 SEQUENCE_LENGTH = 32
 
@@ -161,6 +168,15 @@ class Datasets:
         )
 
     @staticmethod
+    def tiny_evm_medium():
+        return NamedDataset(
+            "bytecode_dataset_medium",
+            BytecodeDatasetMedium(kind="masked").create_dataset(
+                sequence_size=SEQUENCE_LENGTH
+            ),
+        )
+
+    @staticmethod
     def big_evm_bytecode():
         return NamedDataset(
             "bytecode_dataset_big",
@@ -211,18 +227,22 @@ class ModelConfig:
 
 
 def create_next_token_prediction_objective(
-    config: Config,
     dataset: TransformerDataset,
-    model=Model,
+    model: Model,
     optimizer_config=AdamConfig(),
 ):
-    model = model(config)
+    # TODO: move this.
+    sampler = (
+        temperature_sampling
+        if model.config.sampling_method == SamplingMethod.TEMPERATURE
+        else argmax_sampling
+    )
     trainer = Trainer(
         model,
         NextTokenPrediction(
             padding_index=dataset.padding_index,
             vocab_size=dataset.vocab_size,
-            sampler=temperature_sampling,
+            sampler=sampler,
         ),
         optimizer_config.create_optimizer(model.parameters()),
     )
@@ -231,10 +251,9 @@ def create_next_token_prediction_objective(
 
 def execute(
     dataset: TransformerDataset,
-    config: Config,
     experiment_variant,
-    model=Model,
-    optimizer=AdamConfig,
+    model: Model,
+    optimizer=AdamConfig(),
     options: TrainingOptions = TrainingOptions(
         epochs=EPOCHS,
         batch_size=32,
@@ -243,14 +262,12 @@ def execute(
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
-        trainer = create_next_token_prediction_objective(
-            config, dataset, model, optimizer
-        )
+        trainer = create_next_token_prediction_objective(dataset, model, optimizer)
         (accuracy, loss) = trainer.train(
             dataset,
             options,
-            # progress=lambda x: x,
         )
+        #     print((accuracy, loss))
         assert len(accuracy) == options.epochs
         assert len(loss) == options.epochs
         epochs_accuracy.add(accuracy)
@@ -295,9 +312,9 @@ class Experiment:
                 optimizer,
                 training_options,
             ) in self.queue_runs:
+                model = model(config)
                 args = (
                     self.dataset,
-                    config,
                     experiment_variant,
                     model,
                     optimizer,
@@ -428,21 +445,52 @@ def test_pass():
     config = create_default_config(
         dataset,
     )
-    trainer = create_next_token_prediction_objective(
-        config,
-        dataset,
+    config.dropout = 0.2
+    config.dim_embeddings = 8
+    config.num_transformer_layers = 2
+    config.feed_forward_layer = 32
+    config.num_attention_heads = 2
+    config.sampling_method = SamplingMethod.ARGMAX
+    adam_config = AdamConfig(lr=1e-3)
+    #    adam_config.max_grad_norm = None
+    #    config.max_grad_norm = None
+    #    print(config)
+    #    exit(0)
+    #    config.positional_embedding = PositionalEmbeddingType.NONE
+    #    config.transformer_layer = TransformerLayerType.DEEPSEEK
+
+    #    config.transformer_layer = TransformerLayerType.SIMPLE_ATTENTION_AT_HOME
+    # model = Model(config)
+    # trainer = create_next_token_prediction_objective(
+    #    dataset,
+    #    model,
+    # )
+    #    (_epochs_accuracy, _epochs_loss) = trainer.train(
+    #        dataset, TrainingOptions(epochs=epochs)
+    #    )
+    #    assert len(_epochs_loss) > 0
+    #    assert len(_epochs_accuracy) > 0
+    options = TrainingOptions(batch_size=32, epochs=300)
+    experiment = Experiment(dataset)
+    experiment.skip_thread = True
+    config.masked_order = MaskOrder.TRIU
+    experiment.queue(
+        config, "Fixed mask", training_options=options, optimizer=adam_config
     )
-    (_epochs_accuracy, _epochs_loss) = trainer.train(dataset, TrainingOptions(epochs=1))
-    assert len(_epochs_loss) > 0
-    assert len(_epochs_accuracy) > 0
+    config.masked_order = MaskOrder.TRIL
+    experiment.queue(
+        config, "Bad mask", training_options=options, optimizer=adam_config
+    )
+    experiment.plot("training_mask_fix.png")
 
 
 if __name__ == "__main__":
-    # test_pass()
     mp.set_start_method("spawn")
+    test_pass()
     #    mixture_of_expert_model_vs_standard()
     # positional_embeddings()
     #    transformer_layer()
     #  normalization_layer()
-    embedding_training()
+    #    embedding_training()
+
     time.sleep(3)

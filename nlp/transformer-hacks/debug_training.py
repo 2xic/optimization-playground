@@ -1,7 +1,6 @@
 import torch
 from experiments import (
     create_default_config,
-    PositionalEmbeddingType,
     TransformerLayerType,
     Experiment,
     Datasets,

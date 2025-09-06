@@ -137,6 +137,19 @@ class BytecodeDatasetTiny(BytecodeDataset):
         )[:1_000]
 
 
+class BytecodeDatasetMedium(BytecodeDataset):
+    def __init__(self, name="bytecode_medium", kind="next_token"):
+        super().__init__(name, kind)
+
+    def get_files(self):
+        return sorted(
+            glob.glob(
+                self.base,
+                recursive=True,
+            )
+        )[:25_000]
+
+
 class BytecodeDatasetBig(BytecodeDataset):
     def __init__(self, name="bytecode_big", kind="next_token"):
         super().__init__(name, kind)

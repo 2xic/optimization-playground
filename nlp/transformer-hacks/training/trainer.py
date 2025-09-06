@@ -164,11 +164,13 @@ class Trainer:
                     sum_accuracy += accuracy
                     count_rows += rows
 
-                if index % 10 == 0 and isinstance(tqdm_loader, tqdm):
+                if index % 10 == 0 and isinstance(tqdm_loader, tqdm) and index > 0:
                     if self.objective.has_evaluator:
                         tqdm_loader.set_description(
                             "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
-                                epoch=epoch, acc=(accuracy / rows * 100), loss=sum_loss
+                                epoch=epoch,
+                                acc=(sum_accuracy / count_rows * 100),
+                                loss=sum_loss,
                             )
                         )
                     else:
@@ -188,8 +190,9 @@ class Trainer:
                         model=self.model,
                     )
                 )
-            acc = sum_accuracy / count_rows * 100
-            epochs_accuracy.append(acc.item())
+            # End of epoch
+            avg_epoch_accuracy = sum_accuracy / count_rows * 100
+            epochs_accuracy.append(avg_epoch_accuracy.item())
             epochs_loss.append(sum_loss.item())
         return epochs_accuracy, epochs_loss
 
@@ -249,7 +252,7 @@ def train(
                     )
                     optimizer.zero_grad()
                     loss.backward()
-                    if config.max_grad_norm != None:
+                    if config.max_grad_norm is not None:
                         torch.nn.utils.clip_grad_norm_(
                             model.parameters(), config.max_grad_norm
                         )

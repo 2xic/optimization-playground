@@ -4,6 +4,35 @@ import torch.nn.functional as F
 
 # DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+
+# https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html
+# https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms
+# TODO: this should implement kv-cache
+class SimpleMultiHeadAttention(nn.Module):
+    def __init__(self, embed_dim, num_query_heads):
+        super().__init__()
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+
+    def forward(self, query, key, value, attn_mask=None):
+        # eq: 1 https://arxiv.org/pdf/1706.03762
+        query = self.q_proj(query)
+        key = self.k_proj(key)
+        value = self.v_proj(value)
+
+        attn = query @ key.transpose(-1, -2)
+        attn = attn / torch.sqrt(torch.tensor(key.shape[-1]))
+        L, S = query.size(-2), key.size(-2)
+        attn_mask_tensor = torch.zeros(L, S, dtype=query.dtype, device=query.device)
+        if attn_mask is not None:
+            attn_mask_tensor.masked_fill_(attn_mask.logical_not(), float("-inf"))
+        attn = attn + attn_mask_tensor
+        attn = torch.softmax(attn, dim=-1)
+        context = attn @ value
+        return context
+
+
 """
 Read more 
 - https://benjaminwarner.dev/2023/07/01/attention-mechanism
@@ -106,10 +135,9 @@ class SimpleGQA(MultiheadAttention):
 # https://arxiv.org/abs/2405.04434
 # https://medium.com/@zaiinn440/coding-deepseek-v2-from-scratch-in-pytorch-06dd89917067
 
+
 # The idea is to use a latent dimension to compress the keys and values.
 # TODO: Add ROPE
-
-
 class MultiHeadLatentAttention(nn.Module):
     def __init__(self, embed_dim, num_query_heads, latent_dim=64, num_groups=None):
         super().__init__()
