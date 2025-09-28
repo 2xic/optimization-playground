@@ -51,6 +51,7 @@ class NormalizationLayerType(Enum):
 class MaskOrder(Enum):
     TRIU = 0
     TRIL = 1
+    NONE = 2
 
 
 # TODO: this should likely live somewhere else
@@ -499,7 +500,7 @@ class Model(nn.Module):
                 ),
                 diagonal=1,
             ).bool()
-        else:
+        elif self.config.masked_order == MaskOrder.TRIL:
             mask = torch.tril(
                 torch.ones(
                     self.config.sequence_length,

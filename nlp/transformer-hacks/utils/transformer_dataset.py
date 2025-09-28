@@ -86,6 +86,10 @@ class TransformerDataset(TransformerDatasetBase):
 
     def __len__(self):
         return len(self.X)
+    
+    @property
+    def dataset(self):
+        return self
 
 
 class XorDataset(TransformerDataset):
@@ -99,14 +103,14 @@ class XorDataset(TransformerDataset):
         self._y = self._create_padded_vector(
             torch.tensor(
                 [
-                    [0, self.padding_index, self.padding_index],
-                    [1, self.padding_index, self.padding_index],
-                    [1, self.padding_index, self.padding_index],
-                    [0, self.padding_index, self.padding_index],
+                    [self.padding_index, self.padding_index, 0],
+                    [self.padding_index, self.padding_index, 1],
+                    [self.padding_index, self.padding_index, 1],
+                    [self.padding_index, self.padding_index, 0],
                 ]
             )
         )
-        repeated = 32
+        repeated = 128
         self._X = torch.repeat_interleave(self._X, repeats=repeated, dim=0)
         self._y = torch.repeat_interleave(self._y, repeats=repeated, dim=0)
 

@@ -90,6 +90,7 @@ class MultiheadAttention(nn.Module):
         return self.out_proj(out), None
 
 
+# GroupedQueryAttention
 class SimpleGQA(MultiheadAttention):
     def __init__(self, embed_dim, num_query_heads, num_groups):
         super().__init__(
@@ -105,6 +106,26 @@ class SimpleGQA(MultiheadAttention):
         batch_size, seq_len, _ = query.size()
 
         # Project to Q, K, V
+        q, k, v = self._project(query, key, value)
+
+        # Use PyTorch's scaled_dot_product_attention with GQA
+        out = F.scaled_dot_product_attention(
+            q,
+            k,
+            v,
+            attn_mask=attn_mask,
+            dropout_p=0.0,
+            is_causal=is_causal,
+            enable_gqa=True,  # Enable Grouped Query Attention
+        )
+
+        # Reshape and project back
+        out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.embed_dim)
+        return self.out_proj(out), None
+
+    def _project(self, query, key, value):
+        batch_size, seq_len, _ = query.size()
+        # Project to Q, K, V
         q = self.q_proj(query).view(
             batch_size, seq_len, self.num_query_heads, self.head_dim
         )
@@ -115,6 +136,26 @@ class SimpleGQA(MultiheadAttention):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
+        return q, k, v
+
+
+# QK- NORM https://magazine.sebastianraschka.com/i/168650848/qk-norm
+class SimpleGQKV(SimpleGQA):
+    def __init__(self, embed_dim, num_query_heads, num_groups):
+        super().__init__(
+            embed_dim,
+            num_query_heads,
+            num_groups,
+        )
+        self.q_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
+        self.k_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
+
+    def forward(self, query, key, value, attn_mask=None, is_causal=False):
+        batch_size, seq_len, _ = query.size()
+
+        q, k, v = self._project(query, key, value)
+        q = self.q_norm(q)
+        k = self.k_norm(k)
 
         # Use PyTorch's scaled_dot_product_attention with GQA
         out = F.scaled_dot_product_attention(

@@ -13,3 +13,5 @@ aiofiles
 aiohttp
 tiktoken
 pydub
+tokenizers
+msgpack

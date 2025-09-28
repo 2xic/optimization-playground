@@ -74,6 +74,11 @@ class EpochData:
 
 
 @dataclass
+class BatchData:
+    model: torch.nn.Module
+
+
+@dataclass
 class TrainingOptions:
     batch_size: Optional[int] = None
     epochs: int = 100
@@ -81,7 +86,14 @@ class TrainingOptions:
         torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     )
     epoch_callback: Optional[Callable[[EpochData], None]] = None
-    batch_callback: Optional[Callable[[EpochData], None]] = None
+    batch_callback: Optional[Callable[[BatchData], None]] = None
+    training_timeout_minutes: Optional[int] = None
+
+    @property
+    def sampling_timeout_minutes(self):
+        if self.training_timeout_minutes is None:
+            return None
+        return self.training_timeout_minutes * 3
 
 
 def debug_print(*args):
@@ -129,6 +141,7 @@ class Trainer:
         dataset: TransformerDatasetBase,
         options: TrainingOptions,
         progress=tqdm,
+        start=time.time(),
     ):
         self.model.to(options.device)
         if options.batch_size is None:
@@ -183,7 +196,7 @@ class Trainer:
                     self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
                     timer.reset()
                 if options.batch_callback is not None:
-                    options.batch_callback(EpochData(model=self.model))
+                    options.batch_callback(BatchData(model=self.model))
             if options.epoch_callback is not None:
                 options.epoch_callback(
                     EpochData(
@@ -194,6 +207,12 @@ class Trainer:
             avg_epoch_accuracy = sum_accuracy / count_rows * 100
             epochs_accuracy.append(avg_epoch_accuracy.item())
             epochs_loss.append(sum_loss.item())
+            if (
+                options.sampling_timeout_minutes is not None
+                and (time.time() - start) // 60 > options.sampling_timeout_minutes
+            ):
+                print("Hit timeout")
+                break
         return epochs_accuracy, epochs_loss
 
 

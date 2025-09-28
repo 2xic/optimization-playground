@@ -39,11 +39,15 @@ import torch.multiprocessing as mp
 import torch
 import hashlib
 from datasets.dataset import BaseDataset
+from utils.web_dataloader import WebDataloader
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # assert torch.cuda.is_available()
 
 EPOCHS = 1_00
-SAMPLE_SIZE = 1
+SAMPLE_SIZE = 3
 LEARNING_RATE = 3e-4
 SEQUENCE_LENGTH = 32
 
@@ -82,7 +86,7 @@ def get_masked_tokens_dataset(content, percentage=0.25):
     dataset, cached = tokenizer.load_cache(content_id)
     if not cached:
         tokenizer.train_tokenizer([content])
-        tokenizer.save_cache(content_id)
+        tokenizer.save_cache()
 
     dataset = BertTextDataset.from_documents(tokenizer, [content], SEQUENCE_LENGTH)
     # Just some upper bound for speedup
@@ -192,6 +196,9 @@ class Datasets:
     def get_tiny_dataset(self):
         return self.datasets["satoshi_whitepaper_tiny"]
 
+    def get_whitepaper_dataset(self):
+        return self.datasets["satoshi_whitepaper"]
+
 
 def get_output_path(dataset: NamedDataset, filename):
     dir = os.path.join(
@@ -261,17 +268,25 @@ def execute(
 ):
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
+    start = time.time()
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
         trainer = create_next_token_prediction_objective(dataset, model, optimizer)
         (accuracy, loss) = trainer.train(
             dataset,
             options,
+            start=start,
         )
         #     print((accuracy, loss))
-        assert len(accuracy) == options.epochs
-        assert len(loss) == options.epochs
+        # assert len(accuracy) == options.epochs
+        # assert len(loss) == options.epochs
         epochs_accuracy.add(accuracy)
         epochs_loss.add(loss)
+        if (
+            options.training_timeout_minutes is not None
+            and (time.time() - start) // 60 > options.training_timeout_minutes
+        ):
+            print("Hit timeout")
+            break
         assert len(epochs_accuracy.min_max_avg) == len(accuracy)
     return experiment_variant, Results(
         accuracy=epochs_accuracy,
@@ -295,6 +310,7 @@ class Experiment:
         training_options=TrainingOptions(
             epochs=EPOCHS,
             batch_size=32,
+            training_timeout_minutes=120,
         ),
     ):
         self.queue_runs.append(
@@ -339,7 +355,12 @@ class Experiment:
 
 
 def positional_embeddings():
-    for dataset in Datasets().value:
+    #    for dataset in Datasets().value:
+    datasets = [
+        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
+    ]
+    for dataset in datasets:
         experiment = Experiment(dataset)
         for positional_embedding in [
             PositionalEmbeddingType.NONE,
@@ -358,7 +379,12 @@ def positional_embeddings():
 
 
 def transformer_layer():
-    for dataset in Datasets().value:
+    #    for dataset in Datasets().value:
+    datasets = [
+        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
+    ]
+    for dataset in datasets:
         experiment = Experiment(dataset)
         for transformer_layer in [
             TransformerLayerType.DEEPSEEK,
@@ -379,7 +405,12 @@ def transformer_layer():
 
 
 def normalization_layer():
-    for dataset in Datasets().value:
+    #    for dataset in Datasets().value:
+    datasets = [
+        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
+    ]
+    for dataset in datasets:
         experiment = Experiment(dataset)
         for transformer_layer in [
             NormalizationLayerType.LAYER_NORM,
@@ -396,7 +427,12 @@ def normalization_layer():
 
 
 def mixture_of_expert_model_vs_standard():
-    for dataset in Datasets().value:
+    #    for dataset in Datasets().value:
+    datasets = [
+        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
+    ]
+    for dataset in datasets:
         experiment = Experiment(dataset)
         for name, model in [
             ("normal", Model),
@@ -410,22 +446,12 @@ def mixture_of_expert_model_vs_standard():
 
 
 def embedding_training():
+    #    for dataset in Datasets().value:
     datasets = [
-        Datasets.tiny_evm_bytecode(),
-        NamedDataset(
-            "satoshi_whitepaper",
-            get_masked_tokens_dataset(get_text_content()),
-        ),
-        Datasets.tiny_webdataset(),
-        #        NamedDataset(
-        #           "web_dataset_small",
-        #          WebDatasetSmall(kind="masked").create_dataset(
-        #             sequence_size=SEQUENCE_LENGTH
-        #        )[-1],
-        #   ),
+        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
     ]
     for dataset in datasets:
-        print(dataset.sequence_size)
         experiment = Experiment(dataset)
         for optimizer in [AdamConfig(), RMSpropConfig()]:
             config = create_default_config(
@@ -441,36 +467,21 @@ def embedding_training():
 
 
 def test_pass():
-    dataset = XorDataset()
+    #    dataset = XorDataset()
+    #    dataset = Datasets().get_tiny_dataset()
+    dataset = WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128)
     config = create_default_config(
         dataset,
     )
     config.dropout = 0.2
-    config.dim_embeddings = 8
+    config.dim_embeddings = 4
     config.num_transformer_layers = 2
     config.feed_forward_layer = 32
     config.num_attention_heads = 2
-    config.sampling_method = SamplingMethod.ARGMAX
+    config.sampling_method = SamplingMethod.TEMPERATURE
     adam_config = AdamConfig(lr=1e-3)
-    #    adam_config.max_grad_norm = None
-    #    config.max_grad_norm = None
-    #    print(config)
-    #    exit(0)
-    #    config.positional_embedding = PositionalEmbeddingType.NONE
-    #    config.transformer_layer = TransformerLayerType.DEEPSEEK
 
-    #    config.transformer_layer = TransformerLayerType.SIMPLE_ATTENTION_AT_HOME
-    # model = Model(config)
-    # trainer = create_next_token_prediction_objective(
-    #    dataset,
-    #    model,
-    # )
-    #    (_epochs_accuracy, _epochs_loss) = trainer.train(
-    #        dataset, TrainingOptions(epochs=epochs)
-    #    )
-    #    assert len(_epochs_loss) > 0
-    #    assert len(_epochs_accuracy) > 0
-    options = TrainingOptions(batch_size=32, epochs=300)
+    options = TrainingOptions(batch_size=128, epochs=1_00, training_timeout_minutes=20)
     experiment = Experiment(dataset)
     experiment.skip_thread = True
     config.masked_order = MaskOrder.TRIU
@@ -481,16 +492,18 @@ def test_pass():
     experiment.queue(
         config, "Bad mask", training_options=options, optimizer=adam_config
     )
+    config.masked_order = MaskOrder.NONE
+    experiment.queue(config, "NO mask", training_options=options, optimizer=adam_config)
     experiment.plot("training_mask_fix.png")
 
 
 if __name__ == "__main__":
     mp.set_start_method("spawn")
-    test_pass()
-    #    mixture_of_expert_model_vs_standard()
-    # positional_embeddings()
-    #    transformer_layer()
-    #  normalization_layer()
-    #    embedding_training()
+    #    test_pass()
+    mixture_of_expert_model_vs_standard()
+    positional_embeddings()
+    transformer_layer()
+    normalization_layer()
+    embedding_training()
 
     time.sleep(3)

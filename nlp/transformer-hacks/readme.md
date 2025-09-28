@@ -17,9 +17,15 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 
 ## Interference
 - [Mastering LLM Techniques: Inference Optimization](https://developer.nvidia.com/blog/mastering-llm-techniques-inference-optimization/)
-- [KV cache](https://medium.com/@joaolages/kv-caching-explained-276520203249)
-  - https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms
-  - 
 
 ## TODO
 - Benchmark [DeepSeek v3](https://github.com/deepseek-ai/DeepSeek-V3/blob/main/inference/model.py) layers also
+- Implement more transformer layer variants
+  - [The Big LLM Architecture Comparison](https://magazine.sebastianraschka.com/p/the-big-llm-architecture-comparison)
+  - [Build a Large Language Model ](https://github.com/rasbt/LLMs-from-scratch) has a lot of good resources also.
+- [Sliding window attention implementation](https://amaarora.github.io/posts/2024-07-04%20SWA.html#sliding-window-attention-in-pytorch)
+
+## Generation
+[KV cache](https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms)
+- Just a trick to optimize the generation speed.
+- [ Transformers Optimization: Part 1 - KV Cache ](https://r4j4n.github.io/blogs/posts/kv/)

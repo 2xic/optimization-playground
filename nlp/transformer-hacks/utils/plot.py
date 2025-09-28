@@ -45,7 +45,7 @@ class MinMaxAvgArray:
 
     def add(self, entries):
         is_new = len(self.min_max_avg) == 0
-        assert is_new or len(self.min_max_avg) == len(entries)
+        # assert is_new or len(self.min_max_avg) == len(entries)
         for index, i in enumerate(entries):
             if is_new:
                 self.min_max_avg.append(ConfidenceInterval.create(i))

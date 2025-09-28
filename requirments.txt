@@ -1,10 +1,11 @@
 pytorch-lightning
 torchvision
 graphviz
-
+httpx[http2]
 sentencepiece
 transformer
 dataset
 tiktoken
 # TODO deprecate this
 git+https://github.com/2xic-speedrun/optimization-utils.git
+msgpack

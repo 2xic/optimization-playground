@@ -43,11 +43,23 @@ class NextTokenPrediction(BaseObjective):
         return self.sampler is not None
 
     def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
-        y_sample_next = self.sampler(y_predicted[:, 0, :])
-        y_next = y[:, 0]
+        """
+        y_sample_next = self.sampler(y_predicted[:, -1, :])
+        y_next = y[:, -1]
 
         assert y_sample_next.shape == y_next.shape
         accuracy = (y_sample_next == y_next).sum()
         rows = y_next.shape.numel()
 
         return (accuracy, rows)
+        """
+        y_pred_flat = y_predicted.view(-1, self.vocab_size)
+        y_flat = y.view(-1)
+        
+        y_sample = self.sampler(y_pred_flat)
+        valid_mask = y_flat != self.padding_index
+        
+        correct_predictions = (y_sample == y_flat) & valid_mask
+        accuracy = correct_predictions.sum()
+        total_valid_tokens = valid_mask.sum()
+        return accuracy, total_valid_tokens
