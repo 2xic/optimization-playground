@@ -41,57 +41,26 @@ import hashlib
 from datasets.dataset import BaseDataset
 from utils.web_dataloader import WebDataloader
 from dotenv import load_dotenv
+from torch.distributed.pipelining import pipeline
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+import torch.distributed as dist
 
 load_dotenv()
 
 # assert torch.cuda.is_available()
 
+IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
+
 EPOCHS = 1_00
-SAMPLE_SIZE = 3
+SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
 SEQUENCE_LENGTH = 32
 
-
-def get_text_content():
-    return requests.get(
-        "https://raw.githubusercontent.com/ibz/bitcoin-whitepaper-markdown/refs/heads/master/bitcoin-whitepaper.md"
-    ).text
-
-
-def get_text_dataset(content, percentage=0.25):
-    content = content.split("\n")
-    content = "\n".join(content[: int(len(content) * percentage)])
-    tokenizer = HuggingFaceTokenizerWrapper(
-        "example",
-        vocab_size=len(list(set(splitter(content)))) * 32,
-    )
-    tokenizer.train_tokenizer([content])
-    dataset = TransformerTextDataset.from_documents(
-        tokenizer, [content], SEQUENCE_LENGTH
-    )
-    # Just some upper bound for speedup
-    dataset._len = int(1_000 * percentage)
-    return dataset
-
-
-def get_masked_tokens_dataset(content, percentage=0.25):
-    content = content.split("\n")
-    content = "\n".join(content[: int(len(content) * percentage)])
-    content_id = hashlib.sha256(content.encode()).hexdigest()
-
-    tokenizer = HuggingFaceTokenizerWrapper(
-        "example",
-        vocab_size=len(list(set(splitter(content)))) * 32,
-    )
-    dataset, cached = tokenizer.load_cache(content_id)
-    if not cached:
-        tokenizer.train_tokenizer([content])
-        tokenizer.save_cache()
-
-    dataset = BertTextDataset.from_documents(tokenizer, [content], SEQUENCE_LENGTH)
-    # Just some upper bound for speedup
-    dataset._len = int(1_000 * percentage)
-    return dataset
+DATASETS = [
+    # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
+    WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=1024)
+    # WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=512),
+]
 
 
 class NamedDataset:
@@ -115,91 +84,6 @@ class NamedDataset:
         return self.dataset.dataset.iter(**args, workers=0)
 
 
-class Datasets:
-    _instance = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls._instance is None:
-            print("Creating singleton instance")
-            cls._instance = super().__new__(cls)
-            # Expensive initialization happens here
-            cls._instance._initialized = False
-            cls.datasets = {}
-        return cls._instance
-
-    def __init__(self):
-        # Ensure initialization happens only once
-        if not self._initialized:
-            print("Initializing singleton")
-            self._initialized = True
-
-            text_content = get_text_content()
-            self.datasets = {
-                # NamedDataset("xor", XorDataset(sequence_size=3)),
-                "satoshi_whitepaper_tiny": NamedDataset(
-                    "satoshi_whitepaper_tiny",
-                    get_text_dataset(text_content, percentage=0.05),
-                ),
-                "satoshi_whitepaper": NamedDataset(
-                    "satoshi_whitepaper",
-                    get_text_dataset(text_content, percentage=0.25),
-                ),
-            }
-
-    @staticmethod
-    def tiny_webdataset():
-        return NamedDataset(
-            "web_dataset_small",
-            WebDatasetSmall(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            ),
-        )
-
-    @staticmethod
-    def big_webdataset():
-        return NamedDataset(
-            "web_dataset_big",
-            WebDataset(kind="masked").create_dataset(sequence_size=SEQUENCE_LENGTH),
-        )
-
-    @staticmethod
-    def tiny_evm_bytecode():
-        return NamedDataset(
-            "bytecode_dataset_small",
-            BytecodeDatasetTiny(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            ),
-        )
-
-    @staticmethod
-    def tiny_evm_medium():
-        return NamedDataset(
-            "bytecode_dataset_medium",
-            BytecodeDatasetMedium(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            ),
-        )
-
-    @staticmethod
-    def big_evm_bytecode():
-        return NamedDataset(
-            "bytecode_dataset_big",
-            BytecodeDatasetBig(kind="masked").create_dataset(
-                sequence_size=SEQUENCE_LENGTH
-            ),
-        )
-
-    @property
-    def value(self):
-        return self.datasets.values()
-
-    def get_tiny_dataset(self):
-        return self.datasets["satoshi_whitepaper_tiny"]
-
-    def get_whitepaper_dataset(self):
-        return self.datasets["satoshi_whitepaper"]
-
-
 def get_output_path(dataset: NamedDataset, filename):
     dir = os.path.join(
         os.path.dirname(__file__),
@@ -216,9 +100,9 @@ def create_default_config(dataset: TransformerDataset):
     assert dataset.sequence_size is not None
     return Config(
         dropout=0 if isinstance(dataset, XorDataset) else 0,
-        dim_embeddings=4 if isinstance(dataset, XorDataset) else 256,
+        dim_embeddings=4 if isinstance(dataset, XorDataset) else 728,
         num_attention_heads=2 if isinstance(dataset, XorDataset) else 8,
-        num_transformer_layers=8 if isinstance(dataset, XorDataset) else 4,
+        num_transformer_layers=8 if isinstance(dataset, XorDataset) else 6,
         vocab_size=dataset.vocab_size,
         sequence_length=dataset.sequence_size,
         padding_index=dataset.padding_index,
@@ -269,6 +153,7 @@ def execute(
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
     start = time.time()
+
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
         trainer = create_next_token_prediction_objective(dataset, model, optimizer)
         (accuracy, loss) = trainer.train(
@@ -276,22 +161,61 @@ def execute(
             options,
             start=start,
         )
-        #     print((accuracy, loss))
         # assert len(accuracy) == options.epochs
         # assert len(loss) == options.epochs
         epochs_accuracy.add(accuracy)
         epochs_loss.add(loss)
         if (
-            options.training_timeout_minutes is not None
-            and (time.time() - start) // 60 > options.training_timeout_minutes
+            options.sampling_timeout_minutes is not None
+            and (time.time() - start) // 60 > options.sampling_timeout_minutes
         ):
             print("Hit timeout")
             break
         assert len(epochs_accuracy.min_max_avg) == len(accuracy)
+    # dist.barrier()
     return experiment_variant, Results(
         accuracy=epochs_accuracy,
         loss=epochs_loss,
     )
+
+
+class ExperimentDistributed:
+    def __init__(self, dataset: TransformerDataset):
+        self.experiments = {}
+        self.dataset = dataset
+
+    def queue(
+        self,
+        config: Config,
+        experiment_variant,
+        model=Model,
+        optimizer=AdamConfig(),
+        training_options=TrainingOptions(
+            epochs=EPOCHS, batch_size=32, training_timeout_minutes=120
+        ),
+    ):
+        model = model(config)
+        device = torch.device(f"cuda:{dist.get_rank()}")
+        model = model.to(device)
+        training_options.device = device
+
+        model = FSDP(model)
+        experiment_variant, results = execute(
+            self.dataset, experiment_variant, model, optimizer, training_options
+        )
+        self.experiments[experiment_variant] = results
+        return self
+
+    def plot(self, name):
+        if dist.get_rank() == 0:
+            plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
+
+
+def get_experiment_instance(dataset):
+    if IS_RUNNING_DISTRIBUTED:
+        return ExperimentDistributed(dataset)
+    else:
+        return Experiment(dataset)
 
 
 class Experiment:
@@ -355,13 +279,8 @@ class Experiment:
 
 
 def positional_embeddings():
-    #    for dataset in Datasets().value:
-    datasets = [
-        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
-    ]
-    for dataset in datasets:
-        experiment = Experiment(dataset)
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
         for positional_embedding in [
             PositionalEmbeddingType.NONE,
             PositionalEmbeddingType.NN_EMBEDDING,
@@ -379,13 +298,8 @@ def positional_embeddings():
 
 
 def transformer_layer():
-    #    for dataset in Datasets().value:
-    datasets = [
-        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
-    ]
-    for dataset in datasets:
-        experiment = Experiment(dataset)
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
         for transformer_layer in [
             TransformerLayerType.DEEPSEEK,
             TransformerLayerType.LLAMA2,
@@ -405,13 +319,8 @@ def transformer_layer():
 
 
 def normalization_layer():
-    #    for dataset in Datasets().value:
-    datasets = [
-        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
-    ]
-    for dataset in datasets:
-        experiment = Experiment(dataset)
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
         for transformer_layer in [
             NormalizationLayerType.LAYER_NORM,
             NormalizationLayerType.DyT,
@@ -427,13 +336,8 @@ def normalization_layer():
 
 
 def mixture_of_expert_model_vs_standard():
-    #    for dataset in Datasets().value:
-    datasets = [
-        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
-    ]
-    for dataset in datasets:
-        experiment = Experiment(dataset)
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
         for name, model in [
             ("normal", Model),
             ("mixture of experts", MoE),
@@ -446,13 +350,8 @@ def mixture_of_expert_model_vs_standard():
 
 
 def embedding_training():
-    #    for dataset in Datasets().value:
-    datasets = [
-        # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
-    ]
-    for dataset in datasets:
-        experiment = Experiment(dataset)
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
         for optimizer in [AdamConfig(), RMSpropConfig()]:
             config = create_default_config(
                 dataset,
@@ -497,13 +396,20 @@ def test_pass():
     experiment.plot("training_mask_fix.png")
 
 
-if __name__ == "__main__":
-    mp.set_start_method("spawn")
-    #    test_pass()
+def train():
     mixture_of_expert_model_vs_standard()
     positional_embeddings()
     transformer_layer()
     normalization_layer()
     embedding_training()
+    print("Closing down ...")
 
-    time.sleep(3)
+
+if __name__ == "__main__":
+    if IS_RUNNING_DISTRIBUTED:
+        dist.init_process_group("nccl")
+    else:
+        mp.set_start_method("spawn")
+    train()
+    if IS_RUNNING_DISTRIBUTED:
+        dist.destroy_process_group()

@@ -14,6 +14,7 @@ import torch
 import msgpack
 import requests
 import time
+import torch.distributed as dist
 
 
 class WebDataloader:
@@ -45,7 +46,7 @@ class WebDataloader:
 
     def iter(self, batch_size=4, workers=8):
         self.batch_size = batch_size
-        return ThreadedDataLoader(dataset=self, prefetch_factor=4, max_workers=workers)
+        return ThreadedDataLoader(dataset=self, prefetch_factor=8, max_workers=workers)
 
 
 class ThreadedDataLoader:
@@ -219,8 +220,8 @@ class ThreadedIterator:
                     time.sleep(0.1)
 
             except Exception as e:
-                if not self.shutdown:
-                    print(f"Manager thread error: {e}")
+                # if not self.shutdown:
+                #    print(f"Manager thread error: {e}")
                 time.sleep(0.1)
 
     def __iter__(self):

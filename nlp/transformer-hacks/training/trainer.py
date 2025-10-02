@@ -14,6 +14,7 @@ import time
 from utils.performance_benchmarker import Timer
 from torch.optim.lr_scheduler import LambdaLR
 from .objectives import BaseObjective
+import torch.distributed as dist
 
 DEBUG = False
 # This slows down the training a lot ...
@@ -146,6 +147,8 @@ class Trainer:
         self.model.to(options.device)
         if options.batch_size is None:
             options.batch_size = 32 if options.device.type != "cuda" else 256
+        if dist.is_initialized() and dist.get_rank() != 0:
+            progress = lambda x: x  # noqa: E731
         timer = TrainingTimer(minutes=30)
         loader = dataset.iter(batch_size=options.batch_size)
         epochs_accuracy = []
@@ -197,6 +200,12 @@ class Trainer:
                     timer.reset()
                 if options.batch_callback is not None:
                     options.batch_callback(BatchData(model=self.model))
+                if (
+                    options.training_timeout_minutes is not None
+                    and (time.time() - start) // 60 >= options.training_timeout_minutes
+                ):
+                    break
+
             if options.epoch_callback is not None:
                 options.epoch_callback(
                     EpochData(
@@ -208,8 +217,8 @@ class Trainer:
             epochs_accuracy.append(avg_epoch_accuracy.item())
             epochs_loss.append(sum_loss.item())
             if (
-                options.sampling_timeout_minutes is not None
-                and (time.time() - start) // 60 > options.sampling_timeout_minutes
+                options.training_timeout_minutes is not None
+                and (time.time() - start) // 60 >= options.training_timeout_minutes
             ):
                 print("Hit timeout")
                 break
