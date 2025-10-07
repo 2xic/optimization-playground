@@ -24,6 +24,7 @@ class Config:
     # vocab config
     padding_index: int
 
+
 class TransformerDecoderWrapper(nn.Module):
     def __init__(self, layers) -> None:
         super(TransformerDecoderWrapper, self).__init__()
@@ -33,7 +34,8 @@ class TransformerDecoderWrapper(nn.Module):
         for layer in self.layers:
             x = layer(x, torch.zeros_like(x))
         return x
-    
+
+
 class GptTransformerModel(nn.Module):
     def __init__(self, config: Config) -> None:
         super(GptTransformerModel, self).__init__()
@@ -42,26 +44,28 @@ class GptTransformerModel(nn.Module):
         self._dummy_linear = nn.Linear(1, 1)
 
         self.embedding = nn.Embedding(
-            config.vocab_size, 
-            config.embedding_dim,
-            padding_idx=config.padding_index
+            config.vocab_size, config.embedding_dim, padding_idx=config.padding_index
         )
         layers = []
         for _ in range(config.transformer_layers):
-            layers.append(nn.TransformerDecoderLayer(
-                d_model=config.embedding_dim, 
-                nhead=config.attention_heads, 
-                dim_feedforward=config.feed_forward, 
-                dropout=config.dropout,
-                batch_first=True,
-                activation=nn.functional.gelu,
-            ))
+            layers.append(
+                nn.TransformerDecoderLayer(
+                    d_model=config.embedding_dim,
+                    nhead=config.attention_heads,
+                    dim_feedforward=config.feed_forward,
+                    dropout=config.dropout,
+                    batch_first=True,
+                    activation=nn.functional.gelu,
+                )
+            )
 
         self.transformer_decoder = TransformerDecoderWrapper(layers)
-        self.layer_norm = nn.LayerNorm(self.config.embedding_dim) 
-        self.output = nn.Sequential(*[
-            nn.Linear(config.embedding_dim, config.vocab_size, bias=False),
-        ])
+        self.layer_norm = nn.LayerNorm(self.config.embedding_dim)
+        self.output = nn.Sequential(
+            *[
+                nn.Linear(config.embedding_dim, config.vocab_size, bias=False),
+            ]
+        )
         self.pos_encoder = SinusoidalPositionalEncoding(
             config.embedding_dim,
             max_len=config.sequence_length,
@@ -86,7 +90,7 @@ class GptTransformerModel(nn.Module):
         source = self.dropout(source)
         # forward
         # (batch size, sequence size, embedding_size)
-        source = self.transformer_decoder(source)#, torch.zeros_like(source))
+        source = self.transformer_decoder(source)  # , torch.zeros_like(source))
         # (batch size, sequence size, embedding)
         source = self.layer_norm(source)
         source = self.output(source)
@@ -103,7 +107,7 @@ class GptTransformerModel(nn.Module):
 
     def embeddings(self, X):
         with torch.no_grad():
-            values = (self.embedding(X) + self.pos_encoder(X))
+            values = self.embedding(X) + self.pos_encoder(X)
             return values
 
     def forward_argmax(self, x):
@@ -124,19 +128,26 @@ class GptTransformerModel(nn.Module):
             output = seed
             output = list(filter(lambda x: x != self.config.padding_index, output))
             for _ in range(steps):
-                X = torch.full((1, self.sequence_size), self.config.padding_index).reshape(1, -1).to(self.device).long()                                    
-                context_tensor = torch.tensor(output[-self.sequence_size:]).long()
-                X[0, :context_tensor.shape[0]] = context_tensor
+                X = (
+                    torch.full((1, self.sequence_size), self.config.padding_index)
+                    .reshape(1, -1)
+                    .to(self.device)
+                    .long()
+                )
+                context_tensor = torch.tensor(output[-self.sequence_size :]).long()
+                X[0, : context_tensor.shape[0]] = context_tensor
                 next_predicted_token = self.raw_forward(X)
-                next_predicted_token = next_predicted_token[:, ::self.config.sequence_length ,:][0]
-                next_predicted_token = torch.nn.functional.softmax(next_predicted_token, dim=1)
+                next_predicted_token = next_predicted_token[
+                    :, :: self.config.sequence_length, :
+                ][0]
+                next_predicted_token = torch.nn.functional.softmax(
+                    next_predicted_token, dim=1
+                )
                 samplings = {
                     "argmax": argmax_sampling,
-                    "temperature": temperature_sampling
-                }   
-                next_predicted_token = samplings[sampling](
-                    next_predicted_token
-                ).item()
+                    "temperature": temperature_sampling,
+                }
+                next_predicted_token = samplings[sampling](next_predicted_token).item()
                 assert type(next_predicted_token) == int, next_predicted_token
                 output.append(next_predicted_token)
                 X_tensors.append(X)

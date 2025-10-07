@@ -12,14 +12,9 @@ from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
 from utils.transformer_dataset import XorDataset
 from training.trainer import Trainer
 from tqdm import tqdm
-import requests
-from utils.dataset_tokenizer import HuggingFaceTokenizerWrapper
 from utils.transformer_dataset import (
-    TransformerTextDataset,
     TransformerDataset,
-    BertTextDataset,
 )
-from optimization_playground_shared.nlp.SimpleVocab import splitter
 import os
 from training.objectives import NextTokenPrediction
 from training.optimizer import AdamConfig, RMSpropConfig
@@ -28,39 +23,50 @@ from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
     argmax_sampling,
 )
-from datasets.web.web_dataset import WebDatasetSmall, WebDataset
-from datasets.bytecode.bytecode_dataset import (
-    BytecodeDatasetTiny,
-    BytecodeDatasetBig,
-    BytecodeDatasetMedium,
-)
 import time
 import torch.multiprocessing as mp
 import torch
-import hashlib
 from datasets.dataset import BaseDataset
 from utils.web_dataloader import WebDataloader
 from dotenv import load_dotenv
-from torch.distributed.pipelining import pipeline
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
+import torch
+import os
+
+
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
+
+torch.autograd.set_detect_anomaly(True)
+torch.set_float32_matmul_precision("high")
+torch.backends.cuda.matmul.allow_tf32 = True
+torch.backends.cudnn.allow_tf32 = True
 
 load_dotenv()
 
 # assert torch.cuda.is_available()
 
 IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
+DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "ddp").lower()
+NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 1))
 
-EPOCHS = 1_00
+EPOCHS = 10_000
 SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
-SEQUENCE_LENGTH = 32
 
-DATASETS = [
-    # WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=128),
-    WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=1024)
-    # WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=512),
-]
+TARGET_DATASET = os.environ.get("TARGET_DATASET", "small-web").lower()
+NAMED_DATASETS = {
+    i.name: i
+    for i in [
+        WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=256),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=1024),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=512),
+    ]
+}
+
+DATASETS = [NAMED_DATASETS[TARGET_DATASET]]
 
 
 class NamedDataset:
@@ -100,9 +106,9 @@ def create_default_config(dataset: TransformerDataset):
     assert dataset.sequence_size is not None
     return Config(
         dropout=0 if isinstance(dataset, XorDataset) else 0,
-        dim_embeddings=4 if isinstance(dataset, XorDataset) else 728,
+        dim_embeddings=4 if isinstance(dataset, XorDataset) else 256,
         num_attention_heads=2 if isinstance(dataset, XorDataset) else 8,
-        num_transformer_layers=8 if isinstance(dataset, XorDataset) else 6,
+        num_transformer_layers=8 if isinstance(dataset, XorDataset) else 4,
         vocab_size=dataset.vocab_size,
         sequence_length=dataset.sequence_size,
         padding_index=dataset.padding_index,
@@ -199,7 +205,10 @@ class ExperimentDistributed:
         model = model.to(device)
         training_options.device = device
 
-        model = FSDP(model)
+        if DISTRIBUTED_STRATEGY == "DDP":
+            model = DDP(model)
+        else:
+            model = FSDP(model)
         experiment_variant, results = execute(
             self.dataset, experiment_variant, model, optimizer, training_options
         )
@@ -243,7 +252,7 @@ class Experiment:
 
     def plot(self, name: str):
         ctx = mp.get_context("spawn")
-        with ctx.Pool(processes=4) as pool:
+        with ctx.Pool(processes=NUM_PROCESSES) as pool:
             results = []
             for (
                 config,
@@ -270,6 +279,7 @@ class Experiment:
                         )
                     )
             for i in results:
+                print(i)
                 if isinstance(i, tuple):
                     experiment_variant, results = i
                 else:
@@ -397,15 +407,16 @@ def test_pass():
 
 
 def train():
-    mixture_of_expert_model_vs_standard()
-    positional_embeddings()
     transformer_layer()
-    normalization_layer()
-    embedding_training()
+    # mixture_of_expert_model_vs_standard()
+    # positional_embeddings()
+    # normalization_layer()
+    # embedding_training()
     print("Closing down ...")
 
 
 if __name__ == "__main__":
+    print(f"Running distributed {IS_RUNNING_DISTRIBUTED}")
     if IS_RUNNING_DISTRIBUTED:
         dist.init_process_group("nccl")
     else:

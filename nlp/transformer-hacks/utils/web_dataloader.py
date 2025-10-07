@@ -15,6 +15,7 @@ import msgpack
 import requests
 import time
 import torch.distributed as dist
+import numpy as np
 
 
 class WebDataloader:
@@ -46,7 +47,7 @@ class WebDataloader:
 
     def iter(self, batch_size=4, workers=8):
         self.batch_size = batch_size
-        return ThreadedDataLoader(dataset=self, prefetch_factor=8, max_workers=workers)
+        return ThreadedDataLoader(dataset=self, prefetch_factor=16, max_workers=workers)
 
 
 class ThreadedDataLoader:
@@ -157,12 +158,13 @@ class ThreadedIterator:
 
             batch = msgpack.unpackb(response.content, raw=False)
 
-            x_tokens = torch.stack(
-                [torch.tensor(tokens["x_tokens"], dtype=torch.long) for tokens in batch]
-            )
-            y_tokens = torch.stack(
-                [torch.tensor(tokens["y_tokens"], dtype=torch.long) for tokens in batch]
-            )
+            # Stack as numpy first (faster), then convert to torch
+            x_array = np.array([item["x_tokens"] for item in batch], dtype=np.int64)
+            y_array = np.array([item["y_tokens"] for item in batch], dtype=np.int64)
+
+            # Convert to pinned torch tensors
+            x_tokens = torch.from_numpy(x_array).pin_memory()
+            y_tokens = torch.from_numpy(y_array).pin_memory()
             return batch_idx, (x_tokens, y_tokens)
 
         except Exception as e:

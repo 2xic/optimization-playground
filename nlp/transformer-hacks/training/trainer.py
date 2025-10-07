@@ -15,6 +15,9 @@ from utils.performance_benchmarker import Timer
 from torch.optim.lr_scheduler import LambdaLR
 from .objectives import BaseObjective
 import torch.distributed as dist
+from torch.amp import autocast, GradScaler
+
+torch.backends.cudnn.benchmark = True
 
 DEBUG = False
 # This slows down the training a lot ...
@@ -141,7 +144,7 @@ class Trainer:
         self,
         dataset: TransformerDatasetBase,
         options: TrainingOptions,
-        progress=tqdm,
+        progress=lambda x: tqdm(x, mininterval=1),
         start=time.time(),
     ):
         self.model.to(options.device)
@@ -153,6 +156,8 @@ class Trainer:
         loader = dataset.iter(batch_size=options.batch_size)
         epochs_accuracy = []
         epochs_loss = []
+        # TODO: the scaler option should be an option and not enforced.
+        scaler = GradScaler("cuda")
         for epoch in range(options.epochs):
             tqdm_loader = progress(loader)
             iterator = timer_iterator(tqdm_loader)
@@ -161,17 +166,30 @@ class Trainer:
             sum_accuracy = 0
             sum_loss = torch.tensor(0.0)
             for index, (X, y) in enumerate(iterator):
-                X, y = X.to(options.device), y.to(options.device)
-                y_predicted = self.model(X)
-                loss: torch.Tensor = self.objective(
-                    y_predicted,
-                    y,
-                )
+                with autocast("cuda"):
+                    X, y = (
+                        X.to(options.device, non_blocking=True),
+                        y.to(
+                            options.device,
+                            non_blocking=True,
+                        ),
+                    )
+                    y_predicted = self.model(X)
+                    loss: torch.Tensor = self.objective(
+                        y_predicted,
+                        y,
+                    )
                 assert loss.requires_grad
+                # self.optimizer.zero_grad(set_to_none=True)
+                #                self.optimizer.zero_grad()
+                # loss.backward()
+                # self.optimizer.step()
+                scaler.scale(loss).backward()
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                self.optimizer.step()
+                if index % 32 == 0:
+                    scaler.step(self.optimizer)
+                    scaler.update()
+                    self.optimizer.zero_grad(set_to_none=True)
 
                 sum_loss += loss.item()
                 # Accuracy metrics
@@ -278,6 +296,9 @@ def train(
                         y.view(-1),
                         ignore_index=config.padding_index,
                     )
+                    assert not torch.isnan(loss), "NaN in loss"
+                    assert not torch.isinf(loss), "Inf in loss"
+
                     optimizer.zero_grad()
                     loss.backward()
                     if config.max_grad_norm is not None:

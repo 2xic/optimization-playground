@@ -48,6 +48,7 @@ class AdamConfig:
             betas=self.betas,
             weight_decay=self.weight_decay,
             eps=self.eps,
+            fused=True,
         )
 
 

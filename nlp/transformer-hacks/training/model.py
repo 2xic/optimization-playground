@@ -15,10 +15,6 @@ from .layers import (
     BidirectionalAttention,
     SimpleMultiHeadAttention,
 )
-from optimization_playground_shared.nlp.utils.sampling import (
-    temperature_sampling,
-    argmax_sampling,
-)
 from typing import Optional
 
 
@@ -106,7 +102,7 @@ class NormalizationLayer(nn.Module):
         if self.config.normalization_layer == NormalizationLayerType.DyT:
             self.norm = DyT(size)
         elif self.config.normalization_layer == NormalizationLayerType.LAYER_NORM:
-            self.norm = nn.LayerNorm(size)
+            self.norm = nn.LayerNorm(size, bias=config.bias)
         else:
             raise Exception(f"Unknown {self.config.normalization_layer}")
 
@@ -117,14 +113,27 @@ class NormalizationLayer(nn.Module):
 class LlamaFeedForward(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.l1 = nn.Linear(config.dim_embeddings, 256)
-        self.l2 = nn.Linear(256, config.dim_embeddings)
-        self.gate = nn.Linear(config.dim_embeddings, 256)
+        self.l1 = nn.Linear(
+            config.dim_embeddings,
+            config.feed_forward_layer,
+            bias=config.bias,
+        )
+        self.l2 = nn.Linear(
+            config.feed_forward_layer,
+            config.dim_embeddings,
+            bias=config.bias,
+        )
+        self.gate = nn.Linear(
+            config.dim_embeddings,
+            config.feed_forward_layer,
+            bias=config.bias,
+        )
 
     def forward(self, X):
         return self.l2(F.silu(self.l1(X) * self.gate(X)))
 
 
+# https://github.com/meta-llama/llama/blob/v2/llama/model.py#L132-L304
 class RoPEMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, max_len, gqa):
         super().__init__()
@@ -141,9 +150,9 @@ class RoPEMultiheadAttention(nn.Module):
             )
         self.rope = RotaryPositionalEncoding(d_model=embed_dim, max_len=max_len)
 
-        self.q_proj = nn.Linear(embed_dim, embed_dim)
-        self.k_proj = nn.Linear(embed_dim, embed_dim)
-        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
     def forward(self, x, mask):
         q = self.q_proj(x)
@@ -157,6 +166,7 @@ class RoPEMultiheadAttention(nn.Module):
         return attn_output
 
 
+# https://github.com/meta-llama/llama/blob/v2/llama/model.py#L351-L410
 class Llama2TransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
