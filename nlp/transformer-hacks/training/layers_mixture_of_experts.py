@@ -8,7 +8,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .model import Config, Model
 from .trainer import train
-from utils.transformer_dataset import XorDataset
 
 
 class Router(nn.Module):
@@ -61,8 +60,3 @@ class MoE(nn.Module):
                 )
                 outputs += weighted_expert_outputs
         return outputs
-
-
-if __name__ == "__main__":
-    (_, accuracy, loss) = train(XorDataset(), create_model=lambda x: MoE(x))
-    print(loss)

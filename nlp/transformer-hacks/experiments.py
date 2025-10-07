@@ -9,12 +9,8 @@ from training.model import (
 )
 from training.layers_mixture_of_experts import MoE
 from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
-from utils.transformer_dataset import XorDataset
 from training.trainer import Trainer
 from tqdm import tqdm
-from utils.transformer_dataset import (
-    TransformerDataset,
-)
 import os
 from training.objectives import NextTokenPrediction
 from training.optimizer import AdamConfig, RMSpropConfig
@@ -26,7 +22,6 @@ from optimization_playground_shared.nlp.utils.sampling import (
 import time
 import torch.multiprocessing as mp
 import torch
-from datasets.dataset import BaseDataset
 from utils.web_dataloader import WebDataloader
 from dotenv import load_dotenv
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
@@ -70,7 +65,7 @@ DATASETS = [NAMED_DATASETS[TARGET_DATASET]]
 
 
 class NamedDataset:
-    def __init__(self, name, dataset: BaseDataset):
+    def __init__(self, name, dataset):
         self.name = name
         self.dataset = dataset
 
@@ -100,15 +95,15 @@ def get_output_path(dataset: NamedDataset, filename):
     return os.path.join(dir, filename)
 
 
-def create_default_config(dataset: TransformerDataset):
+def create_default_config(dataset):
     assert dataset.vocab_size is not None
     assert dataset.padding_index is not None
     assert dataset.sequence_size is not None
     return Config(
-        dropout=0 if isinstance(dataset, XorDataset) else 0,
-        dim_embeddings=4 if isinstance(dataset, XorDataset) else 256,
-        num_attention_heads=2 if isinstance(dataset, XorDataset) else 8,
-        num_transformer_layers=8 if isinstance(dataset, XorDataset) else 4,
+        dropout=0,
+        dim_embeddings=256,
+        num_attention_heads=8,
+        num_transformer_layers=4,
         vocab_size=dataset.vocab_size,
         sequence_length=dataset.sequence_size,
         padding_index=dataset.padding_index,
@@ -124,7 +119,7 @@ class ModelConfig:
 
 
 def create_next_token_prediction_objective(
-    dataset: TransformerDataset,
+    dataset,
     model: Model,
     optimizer_config=AdamConfig(),
 ):
@@ -147,7 +142,7 @@ def create_next_token_prediction_objective(
 
 
 def execute(
-    dataset: TransformerDataset,
+    dataset,
     experiment_variant,
     model: Model,
     optimizer=AdamConfig(),
@@ -186,7 +181,7 @@ def execute(
 
 
 class ExperimentDistributed:
-    def __init__(self, dataset: TransformerDataset):
+    def __init__(self, dataset):
         self.experiments = {}
         self.dataset = dataset
 
@@ -228,7 +223,7 @@ def get_experiment_instance(dataset):
 
 
 class Experiment:
-    def __init__(self, dataset: TransformerDataset):
+    def __init__(self, dataset):
         self.experiments = {}
         self.dataset = dataset
         self.queue_runs = []

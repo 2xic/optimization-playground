@@ -9,7 +9,6 @@ embedding -> decoder -> ~document word distribution
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from datasets.dataset import BaseDataset
 import matplotlib.pyplot as plt
 from training.trainer import TrainingTimer
 
@@ -73,7 +72,7 @@ def plot_loss_over_time(batches, losses):
     plt.savefig("plots/bytecode_dataset_small/autoencoder_test_loss.png")
 
 
-def train(dataset: BaseDataset, embedding_model):
+def train(dataset, embedding_model):
     embedding_size = embedding_model.embedding_size
     vocab_size = embedding_model.config.vocab_size
 

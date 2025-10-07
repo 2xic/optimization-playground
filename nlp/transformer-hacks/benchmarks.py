@@ -7,6 +7,12 @@ import torch.utils.benchmark as benchmark
 import time
 import numpy as np
 import torch
+from utils.web_dataloader import WebDataloader
+import os
+from dotenv import load_dotenv
+import time
+
+load_dotenv()
 
 
 def test_sampling():
@@ -48,6 +54,18 @@ def test_memory_creation():
     print(f"torch.stack: {(t1 - t0) * 1000:.1f}ms")
     print(f"numpy→torch: {(t3 - t2) * 1000:.1f}ms")
     print(f"Speedup: {(t1 - t0) / (t3 - t2):.1f}x")
+
+
+def dataloader():
+    dataloader = WebDataloader(
+        os.environ["WEB_DATALOADER"], "small-web", batch_size=1024
+    )
+
+    start = time.time()
+    for index, (X, y) in enumerate(dataloader.iter()):
+        if index > 100:
+            break
+    print(time.time() - start)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,4 @@
-from datasets.dataset import BaseDataset
 import torch
-
 import numpy as np
 from scipy.spatial.distance import pdist, cdist
 
@@ -41,7 +39,7 @@ class WordEmbedding:
         return output
 
 
-def test_model(dataset: BaseDataset, model):
+def test_model(dataset, model):
     top_100, lower_100 = dataset.get_token_distribution(100)
     word_embedding = WordEmbedding(dataset)
 

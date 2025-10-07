@@ -1,12 +1,10 @@
 from .model import Model, Config, TransformerLayerType
-from utils.transformer_dataset import TransformerDatasetBase, TransformerTextDataset
 import torch
 import torch.optim as optim
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
 from typing import Callable, Tuple, Optional
-from utils.dataset_tokenizer import SimpleTextEncoder
 from tqdm import tqdm
 from dataclasses import dataclass
 import os
@@ -142,7 +140,7 @@ class Trainer:
 
     def train(
         self,
-        dataset: TransformerDatasetBase,
+        dataset,
         options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
         start=time.time(),
@@ -244,7 +242,7 @@ class Trainer:
 
 
 def train(
-    dataset: TransformerDatasetBase,
+    dataset,
     override: Callable[[Config], Config] = (lambda x: x),
     create_model: Callable[[Config], Model] = (lambda x: Model(x)),
     create_optimizer: Callable[
@@ -378,21 +376,3 @@ def train(
                 debug_print((accuracy / index) * 100)
 
     return (epochs, epochs_accuracy, epochs_loss, model)
-
-
-if __name__ == "__main__":
-    tokenizer, cached = SimpleTextEncoder("example").load_cache()
-    if not cached:
-        print("Not cached building tokenizer.")
-        tokenizer = tokenizer.build_from_files(["example.text"])
-        tokenizer.save_cache()
-    else:
-        print("Tokenizer is cached.")
-    text_dataset = TransformerTextDataset.from_file(
-        tokenizer, "example.text", sequence_length=4
-    )
-    train(
-        text_dataset,
-        options=TrainingOptions(batch_size=256),
-        progress=lambda x: tqdm(range(x)),
-    )

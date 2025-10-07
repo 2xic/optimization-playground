@@ -255,9 +255,6 @@ class DyT(nn.Module):
     # For LLM -> https://arxiv.org/pdf/2503.10622#page=11
     def __init__(self, C, init_α=0.8):
         super().__init__()
-        #      self.α = nn.Parameter(torch.ones(1, device=DEVICE) * init_α)
-        #       self.γ = nn.Parameter(torch.ones(C, device=DEVICE))
-        #        self.β = nn.Parameter(torch.zeros(C, device=DEVICE))
         self.α = nn.Parameter(torch.ones(1) * init_α)
         self.γ = nn.Parameter(torch.ones(C))
         self.β = nn.Parameter(torch.zeros(C))

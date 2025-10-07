@@ -55,10 +55,10 @@ class NextTokenPrediction(BaseObjective):
         """
         y_pred_flat = y_predicted.view(-1, self.vocab_size)
         y_flat = y.view(-1)
-        
+
         y_sample = self.sampler(y_pred_flat)
         valid_mask = y_flat != self.padding_index
-        
+
         correct_predictions = (y_sample == y_flat) & valid_mask
         accuracy = correct_predictions.sum()
         total_valid_tokens = valid_mask.sum()

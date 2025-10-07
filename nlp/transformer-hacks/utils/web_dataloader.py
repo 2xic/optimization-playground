@@ -14,7 +14,6 @@ import torch
 import msgpack
 import requests
 import time
-import torch.distributed as dist
 import numpy as np
 
 
