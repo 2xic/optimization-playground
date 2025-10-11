@@ -243,7 +243,10 @@ class ThreadedIterator:
                 self.epoch_finished = True
                 raise StopIteration
             else:
-                raise TimeoutError("Timeout waiting for batch")
+                print("Timeout waiting for batch")
+                self.epoch_finished = True
+                raise StopIteration
+    #                raise TimeoutError("Timeout waiting for batch")
 
     def cleanup(self):
         self.shutdown = True

@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# DEVICE = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
 
 # https://docs.pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html
 # https://magazine.sebastianraschka.com/p/coding-the-kv-cache-in-llms
@@ -33,13 +31,9 @@ class SimpleMultiHeadAttention(nn.Module):
         return context
 
 
-"""
-Read more 
-- https://benjaminwarner.dev/2023/07/01/attention-mechanism
-- https://pytorch.org/blog/flexattention/
-"""
-
-
+# Read more
+# - https://benjaminwarner.dev/2023/07/01/attention-mechanism
+# - https://pytorch.org/blog/flexattention/
 class MultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_query_heads, num_groups=None, dropout_p=0.0):
         super().__init__()

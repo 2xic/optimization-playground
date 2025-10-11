@@ -29,7 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import torch
 import os
-
+from utis import get_best_gpu, estimate_cuda_size
 
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
@@ -44,8 +44,8 @@ load_dotenv()
 # assert torch.cuda.is_available()
 
 IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
-DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "ddp").lower()
-NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 1))
+DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP").lower()
+NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 8))
 
 EPOCHS = 10_000
 SAMPLE_SIZE = 1
@@ -153,23 +153,18 @@ def execute(
 ):
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
-    start = time.time()
 
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
         trainer = create_next_token_prediction_objective(dataset, model, optimizer)
         (accuracy, loss) = trainer.train(
             dataset,
             options,
-            start=start,
         )
         # assert len(accuracy) == options.epochs
         # assert len(loss) == options.epochs
         epochs_accuracy.add(accuracy)
         epochs_loss.add(loss)
-        if (
-            options.sampling_timeout_minutes is not None
-            and (time.time() - start) // 60 > options.sampling_timeout_minutes
-        ):
+        if trainer.has_timeout(options):
             print("Hit timeout")
             break
         assert len(epochs_accuracy.min_max_avg) == len(accuracy)
@@ -192,7 +187,7 @@ class ExperimentDistributed:
         model=Model,
         optimizer=AdamConfig(),
         training_options=TrainingOptions(
-            epochs=EPOCHS, batch_size=32, training_timeout_minutes=120
+            epochs=EPOCHS, batch_size=32, training_timeout_minutes=0
         ),
     ):
         model = model(config)
@@ -219,15 +214,17 @@ def get_experiment_instance(dataset):
     if IS_RUNNING_DISTRIBUTED:
         return ExperimentDistributed(dataset)
     else:
-        return Experiment(dataset)
+        return ExperimentMultiProcess(dataset)
 
 
-class Experiment:
+class ExperimentMultiProcess:
     def __init__(self, dataset):
         self.experiments = {}
         self.dataset = dataset
         self.queue_runs = []
         self.skip_thread = False
+        ctx = mp.get_context("spawn")
+        self.pool = ctx.Pool(processes=NUM_PROCESSES) if not self.skip_thread else None
 
     def queue(
         self,
@@ -238,49 +235,53 @@ class Experiment:
         training_options=TrainingOptions(
             epochs=EPOCHS,
             batch_size=32,
-            training_timeout_minutes=120,
+            training_timeout_minutes=360,
         ),
     ):
         self.queue_runs.append(
             (config, experiment_variant, model, optimizer, training_options)
         )
 
+    def _execute(self, *args):
+        if self.skip_thread:
+            return execute(*args)
+        else:
+            return self.pool.apply_async(execute, args=args)
+
     def plot(self, name: str):
-        ctx = mp.get_context("spawn")
-        with ctx.Pool(processes=NUM_PROCESSES) as pool:
-            results = []
-            for (
-                config,
+        results = []
+        for (
+            config,
+            experiment_variant,
+            model,
+            optimizer,
+            training_options,
+        ) in self.queue_runs:
+            model = model(config)
+            device_id = None
+            while device_id is None:
+                device_id = get_best_gpu(estimate_cuda_size(model))
+            # Once we have a device, just set it.
+            training_options.device = torch.device(f"cuda:{device_id}")
+            args = (
+                self.dataset,
                 experiment_variant,
                 model,
                 optimizer,
                 training_options,
-            ) in self.queue_runs:
-                model = model(config)
-                args = (
-                    self.dataset,
-                    experiment_variant,
-                    model,
-                    optimizer,
-                    training_options,
-                )
-                if self.skip_thread:
-                    results.append(execute(*args))
-                else:
-                    results.append(
-                        pool.apply_async(
-                            execute,
-                            args=args,
-                        )
-                    )
-            for i in results:
-                print(i)
-                if isinstance(i, tuple):
-                    experiment_variant, results = i
-                else:
-                    experiment_variant, results = i.get()
-                self.experiments[experiment_variant] = results
-            plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
+            )
+            results.append(self._execute(*args))
+            if not self.skip_thread:
+                time.sleep(5)
+
+        for i in results:
+            print(i)
+            if isinstance(i, tuple):
+                experiment_variant, results = i
+            else:
+                experiment_variant, results = i.get()
+            self.experiments[experiment_variant] = results
+        plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
 
 
 def positional_embeddings():
@@ -386,7 +387,7 @@ def test_pass():
     adam_config = AdamConfig(lr=1e-3)
 
     options = TrainingOptions(batch_size=128, epochs=1_00, training_timeout_minutes=20)
-    experiment = Experiment(dataset)
+    experiment = ExperimentMultiProcess(dataset)
     experiment.skip_thread = True
     config.masked_order = MaskOrder.TRIU
     experiment.queue(
@@ -403,10 +404,10 @@ def test_pass():
 
 def train():
     transformer_layer()
-    # mixture_of_expert_model_vs_standard()
-    # positional_embeddings()
-    # normalization_layer()
-    # embedding_training()
+    mixture_of_expert_model_vs_standard()
+    positional_embeddings()
+    normalization_layer()
+    embedding_training()
     print("Closing down ...")
 
 

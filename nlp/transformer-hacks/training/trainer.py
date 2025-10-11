@@ -1,19 +1,15 @@
-from .model import Model, Config, TransformerLayerType
+from .model import Config, TransformerLayerType
 import torch
-import torch.optim as optim
-from optimization_playground_shared.nlp.utils.sampling import (
-    temperature_sampling,
-)
 from typing import Callable, Tuple, Optional
 from tqdm import tqdm
 from dataclasses import dataclass
 import os
 import time
 from utils.performance_benchmarker import Timer
-from torch.optim.lr_scheduler import LambdaLR
 from .objectives import BaseObjective
 import torch.distributed as dist
 from torch.amp import autocast, GradScaler
+from abc import ABC
 
 torch.backends.cudnn.benchmark = True
 
@@ -118,13 +114,88 @@ def create_config(vocab_size, padding_index, sequence_length):
 def timer_iterator(dataset):
     with Timer("create_iterator"):
         iterator = iter(dataset)
-    for i in range(len(dataset)):
-        with Timer("timer_iterator"):
-            X, y = next(iterator)
-        yield X, y
+    for _ in range(len(dataset)):
+        try:
+            with Timer("timer_iterator"):
+                X, y = next(iterator)
+            yield X, y
+        except StopIteration:
+            break
 
 
-class Trainer:
+class BaseTrainer(ABC):
+    def __init__(self, optimizer):
+        self.start = time.time()
+        self.optimizer = optimizer
+
+    def train(
+        self,
+        model,
+        objective,
+        dataset,
+        training_options,
+        progress=lambda x: tqdm(x, mininterval=1),
+    ):
+        if dist.is_initialized() and dist.get_rank() != 0:
+            progress = lambda x: x  # noqa: E731
+
+        sum_loss = 0
+        sum_accuracy = 0
+        count_rows = 0
+        progress = progress(dataset)
+        has_tqdm_loader = isinstance(progress, tqdm)
+        iterator = timer_iterator(progress)
+        for _, (X, y) in enumerate(iterator):
+            loss, accuracy, rows = self.forward(
+                model, objective, X, y, training_options
+            )
+
+            if has_tqdm_loader:
+                progress.set_description(
+                    "Loss {loss}, Accuracy {acc}".format(
+                        acc=(sum_accuracy / count_rows * 100) if count_rows > 0 else 0,
+                        loss=sum_loss,
+                    )
+                )
+
+            sum_loss += loss.item()
+            sum_accuracy += accuracy.item()
+            count_rows += rows.item()
+
+            if self.has_timeout(training_options):
+                print("Hit timeout")
+                break
+        return sum_accuracy / count_rows * 100 if count_rows > 0 else None, sum_loss
+
+    def forward(self, model, objective, X, y, training_options: TrainingOptions):
+        X, y = (
+            X.to(training_options.device, non_blocking=True),
+            y.to(
+                training_options.device,
+                non_blocking=True,
+            ),
+        )
+        y_predicted = model(X)
+        loss = objective(y_predicted, y)
+
+        self.optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        self.optimizer.step()
+
+        # Report metrics.
+        if objective.has_evaluator:
+            (accuracy, rows) = objective.evaluator(y_predicted, y)
+            return loss, accuracy, rows
+        return loss, 0, 0
+
+    def has_timeout(self, training_options: TrainingOptions):
+        if training_options.training_timeout_minutes is None:
+            return False
+        delta = time.time() - self.start
+        return delta // 60 >= training_options.training_timeout_minutes
+
+
+class Trainer(BaseTrainer):
     def __init__(
         self,
         model: torch.nn.Module,
@@ -132,6 +203,7 @@ class Trainer:
         optimizer: torch.optim.Optimizer,
         name=None,
     ):
+        super().__init__(optimizer)
         self.name = name
         self.model = model
         self.objective = objective
@@ -141,238 +213,143 @@ class Trainer:
     def train(
         self,
         dataset,
-        options: TrainingOptions,
+        training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
-        start=time.time(),
     ):
-        self.model.to(options.device)
-        if options.batch_size is None:
-            options.batch_size = 32 if options.device.type != "cuda" else 256
-        if dist.is_initialized() and dist.get_rank() != 0:
-            progress = lambda x: x  # noqa: E731
-        timer = TrainingTimer(minutes=30)
-        loader = dataset.iter(batch_size=options.batch_size)
+        self.model.to(training_options.device)
+
         epochs_accuracy = []
         epochs_loss = []
-        # TODO: the scaler option should be an option and not enforced.
-        scaler = GradScaler("cuda")
-        for epoch in range(options.epochs):
-            tqdm_loader = progress(loader)
-            iterator = timer_iterator(tqdm_loader)
-            # Per batch
-            count_rows = 0
-            sum_accuracy = 0
-            sum_loss = torch.tensor(0.0)
-            for index, (X, y) in enumerate(iterator):
-                with autocast("cuda"):
-                    X, y = (
-                        X.to(options.device, non_blocking=True),
-                        y.to(
-                            options.device,
-                            non_blocking=True,
-                        ),
-                    )
-                    y_predicted = self.model(X)
-                    loss: torch.Tensor = self.objective(
-                        y_predicted,
-                        y,
-                    )
-                assert loss.requires_grad
-                # self.optimizer.zero_grad(set_to_none=True)
-                #                self.optimizer.zero_grad()
-                # loss.backward()
-                # self.optimizer.step()
-                scaler.scale(loss).backward()
-
-                if index % 32 == 0:
-                    scaler.step(self.optimizer)
-                    scaler.update()
-                    self.optimizer.zero_grad(set_to_none=True)
-
-                sum_loss += loss.item()
-                # Accuracy metrics
-                if self.objective.has_evaluator:
-                    (accuracy, rows) = self.objective.evaluator(y_predicted, y)
-                    sum_accuracy += accuracy
-                    count_rows += rows
-
-                if index % 10 == 0 and isinstance(tqdm_loader, tqdm) and index > 0:
-                    if self.objective.has_evaluator:
-                        tqdm_loader.set_description(
-                            "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
-                                epoch=epoch,
-                                acc=(sum_accuracy / count_rows * 100),
-                                loss=sum_loss,
-                            )
-                        )
-                    else:
-                        tqdm_loader.set_description(
-                            "Epoch {epoch}, Loss {loss}".format(
-                                epoch=epoch, loss=sum_loss
-                            )
-                        )
-                if self.state_saver is not None and timer.done():
-                    self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
-                    timer.reset()
-                if options.batch_callback is not None:
-                    options.batch_callback(BatchData(model=self.model))
-                if (
-                    options.training_timeout_minutes is not None
-                    and (time.time() - start) // 60 >= options.training_timeout_minutes
-                ):
-                    break
-
-            if options.epoch_callback is not None:
-                options.epoch_callback(
-                    EpochData(
-                        model=self.model,
-                    )
-                )
-            # End of epoch
-            avg_epoch_accuracy = sum_accuracy / count_rows * 100
-            epochs_accuracy.append(avg_epoch_accuracy.item())
-            epochs_loss.append(sum_loss.item())
-            if (
-                options.training_timeout_minutes is not None
-                and (time.time() - start) // 60 >= options.training_timeout_minutes
-            ):
+        loader = dataset.iter(batch_size=training_options.batch_size)
+        for epoch in range(training_options.epochs):
+            epoch_accuracy, epoch_loss = super().train(
+                self.model, self.objective, loader, training_options, progress
+            )
+            print(f"Epoch {epoch} done, accuracy {epoch_accuracy}, loss {epoch_loss}")
+            epochs_accuracy.append(epoch_accuracy)
+            epochs_loss.append(epoch_loss)
+            # Check timeout
+            if self.has_timeout(training_options):
                 print("Hit timeout")
                 break
         return epochs_accuracy, epochs_loss
 
 
-def train(
-    dataset,
-    override: Callable[[Config], Config] = (lambda x: x),
-    create_model: Callable[[Config], Model] = (lambda x: Model(x)),
-    create_optimizer: Callable[
-        [torch.nn.Module, Config], Tuple[optim.Optimizer, Optional[LambdaLR]]
-    ] = lambda model, config: (
-        optim.Adam(model.parameters(), lr=config.learning_rate, betas=(BETA_1, BETA_2)),
-        None,
-    ),
-    options: TrainingOptions = TrainingOptions(),
-    progress=lambda x: x,
-    sampling=temperature_sampling,
-    checkpoint=False,
-):
-    config = create_config(
-        dataset.vocab_size,
-        dataset.padding_index,
-        dataset.sequence_size,
-    )
-    config = override(config)
-    model = create_model(config).to(options.device)
-    optimizer, scheduler = create_optimizer(model, config)
+class GradScalerTrainer(Trainer):
+    def __init__(self, model, objective, optimizer, name=None):
+        super().__init__(model, objective, optimizer, name)
+        self.scaler = GradScaler("cuda")
 
-    state_saver = (
-        ModelStateSaver(config.model_name) if config.model_name is not None else None
-    )
-    loader = dataset.iter(batch_size=options.batch_size)
+    def train(
+        self,
+        dataset,
+        training_options: TrainingOptions,
+        progress=lambda x: tqdm(x, mininterval=1),
+    ):
+        super().train(dataset, training_options, progress)
 
-    epochs = []
-    epochs_loss = []
-    epochs_accuracy = []
-    for epoch in range(options.epochs):
-        timer = TrainingTimer(minutes=30)
-        sum_loss = 0
-        accuracy = 0
-        rows = 0
-        with Timer("epoch"):
-            with Timer("creating_iterator"):
-                tqdm_loader = progress(loader)
-                iterator = timer_iterator(tqdm_loader)
-            for index, (X, y) in enumerate(iterator):
-                with Timer("move_to_device"):
-                    X, y = X.to(options.device), y.to(options.device)
-                with Timer("predictions"):
-                    y_predicted = model(X)
+    def forward(
+        self, model, objective, X, y, _options: TrainingOptions
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        with autocast("cuda"):
+            y_predicted = model(X)
+            loss: torch.Tensor = objective(
+                y_predicted,
+                y,
+            )
+            if self.objective.has_evaluator:
+                accuracy, rows = self.objective.evaluator(y_predicted, y)
+                return loss, accuracy, rows
+            return loss, 0, 0
 
-                with Timer("optimizer"):
-                    loss = torch.nn.functional.cross_entropy(
-                        y_predicted.view(-1, config.vocab_size),
-                        y.view(-1),
-                        ignore_index=config.padding_index,
+
+"""
+if options.batch_size is None:
+    options.batch_size = 32 if options.device.type != "cuda" else 256
+timer = TrainingTimer(minutes=30)
+# TODO: the scaler option should be an option and not enforced.
+scaler = GradScaler("cuda")
+for epoch in range(options.epochs):
+    tqdm_loader = progress(loader)
+    iterator = timer_iterator(tqdm_loader)
+    # Per batch
+    count_rows = 0
+    sum_accuracy = 0
+    sum_loss = torch.tensor(0.0)
+    for index, (X, y) in enumerate(iterator):
+        with autocast("cuda"):
+            X, y = (
+                X.to(options.device, non_blocking=True),
+                y.to(
+                    options.device,
+                    non_blocking=True,
+                ),
+            )
+            y_predicted = self.model(X)
+            loss: torch.Tensor = self.objective(
+                y_predicted,
+                y,
+            )
+        assert loss.requires_grad
+        # self.optimizer.zero_grad(set_to_none=True)
+        #                self.optimizer.zero_grad()
+        # loss.backward()
+        # self.optimizer.step()
+        scaler.scale(loss).backward()
+
+        if index % 32 == 0:
+            scaler.step(self.optimizer)
+            scaler.update()
+            self.optimizer.zero_grad(set_to_none=True)
+
+        sum_loss += loss.item()
+        # Accuracy metrics
+        if self.objective.has_evaluator:
+            (accuracy, rows) = self.objective.evaluator(y_predicted, y)
+            sum_accuracy += accuracy
+            count_rows += rows
+
+        if index % 10 == 0 and isinstance(tqdm_loader, tqdm) and index > 0:
+            if self.objective.has_evaluator:
+                tqdm_loader.set_description(
+                    "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
+                        epoch=epoch,
+                        acc=(sum_accuracy / count_rows * 100),
+                        loss=sum_loss,
                     )
-                    assert not torch.isnan(loss), "NaN in loss"
-                    assert not torch.isinf(loss), "Inf in loss"
-
-                    optimizer.zero_grad()
-                    loss.backward()
-                    if config.max_grad_norm is not None:
-                        torch.nn.utils.clip_grad_norm_(
-                            model.parameters(), config.max_grad_norm
-                        )
-                    optimizer.step()
-                    if scheduler is not None:
-                        scheduler.step()
-
-                    sum_loss += loss.item()
-                    # Accuracy metrics
-                    y_sample_next = sampling(y_predicted[:, -1, :])
-                    y_next = y[:, -1]
-                    assert y_sample_next.shape == y_next.shape
-                    accuracy += (y_sample_next == y_next).sum()
-                    rows += y_next.shape.numel()
-
-                if (
-                    VALIDATION_DEBUG
-                    and index % 10 == 0
-                    and isinstance(tqdm_loader, tqdm)
-                ):
-                    with Timer("update stats"):
-                        tqdm_loader.set_description(
-                            "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
-                                epoch=epoch, acc=(accuracy / rows * 100), loss=sum_loss
-                            )
-                        )
-
-                if checkpoint and timer.done() and state_saver is not None:
-                    with Timer("checkpoints"):
-                        state_saver.save(model, optimizer, epoch, sum_loss)
-                        timer.reset()
-
-        if checkpoint and state_saver is not None:
-            state_saver.save(model, optimizer, epoch, sum_loss)
+                )
+            else:
+                tqdm_loader.set_description(
+                    "Epoch {epoch}, Loss {loss}".format(
+                        epoch=epoch, loss=sum_loss
+                    )
+                )
+        if self.state_saver is not None and timer.done():
+            self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
             timer.reset()
+        if options.batch_callback is not None:
+            options.batch_callback(BatchData(model=self.model))
+        if (
+            options.training_timeout_minutes is not None
+            and (time.time() - start) // 60 >= options.training_timeout_minutes
+        ):
+            break
 
-        acc = accuracy / rows * 100
-        epochs_accuracy.append(acc.item())
-        epochs_loss.append(loss.item())
-        epochs.append(epoch)
-
-        if VALIDATION_DEBUG:
-            assert acc <= 100, acc
-            debug_print(f"epoch: {epoch}, loss: {sum_loss}, accuracy {acc}")
-
-            with torch.no_grad():
-                rows = dataset.sample(n=2)
-                for i, j in rows:
-                    i, j = i.to(options.device), j.to(options.device)
-                    i = i.reshape((1, -1))
-                    predicted = model(i)[0]
-                    word_idx = sampling(predicted)
-
-                    next_word_idx = word_idx[-1].item()
-                    expected_word_idx = j[-1].item()
-
-                    input_document = i[0]
-                    context = "".join(dataset.decode_tokens(input_document.tolist()))
-                    debug_print(f"\tcontext: {context}")
-
-                    word = dataset.decode_tokens([next_word_idx])
-                    expected = dataset.decode_tokens([expected_word_idx])
-                    debug_print(f"\tnext token: '{word}'")
-                    debug_print(f"\texpected token: '{expected}'")
-                    debug_print("")
-            # Check that the model converges to something.
-            with torch.no_grad():
-                accuracy = 0
-                for index, (X, y) in enumerate(dataset.sample(128)):
-                    X = X.to(options.device)
-                    predicted = model(X.reshape((1, -1)))
-                    y_sample_next = sampling(predicted[:, -1, :])
-                    accuracy += y_sample_next.item() == y[-1].item()
-                debug_print((accuracy / index) * 100)
-
-    return (epochs, epochs_accuracy, epochs_loss, model)
+    if options.epoch_callback is not None:
+        options.epoch_callback(
+            EpochData(
+                model=self.model,
+            )
+        )
+    # End of epoch
+    avg_epoch_accuracy = sum_accuracy / count_rows * 100
+    epochs_accuracy.append(avg_epoch_accuracy.item())
+    epochs_loss.append(sum_loss.item())
+    if (
+        options.training_timeout_minutes is not None
+        and (time.time() - start) // 60 >= options.training_timeout_minutes
+    ):
+        print("Hit timeout")
+        break
+return epochs_accuracy, epochs_loss
+"""

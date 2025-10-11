@@ -8,15 +8,13 @@ from training.objectives import NextTokenPrediction
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
 )
-from training.model import Model, TransformerLayerType, MaskOrder
+from training.model import Model
 from experiments import create_default_config
 from torch.cuda.amp import autocast, GradScaler
 
 load_dotenv()
 
 import torch
-from tqdm import tqdm
-import torch.nn as nn
 import torch.distributed as dist
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
@@ -151,5 +149,5 @@ def profile():
 
 
 if __name__ == "__main__":
-#    profile()
-#    profile()
+    #    profile()
+    profile()
