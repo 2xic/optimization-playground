@@ -2,7 +2,7 @@ import pynvml
 import time
 
 
-def get_best_gpu(min_free_gb=2.0):
+def get_best_gpu(model_size_gb, margins_gb=3):
     """Find GPU with most free memory using pynvml"""
     try:
         pynvml.nvmlInit()
@@ -10,6 +10,7 @@ def get_best_gpu(min_free_gb=2.0):
 
         best_gpu = None
         max_free_memory = 0
+        minimum_free_memory = model_size_gb + margins_gb
 
         for i in range(device_count):
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
@@ -18,7 +19,7 @@ def get_best_gpu(min_free_gb=2.0):
 
             print(f"GPU {i}: {free_gb:.2f} GB free")
 
-            if free_gb >= min_free_gb and info.free > max_free_memory:
+            if free_gb >= minimum_free_memory and info.free > max_free_memory:
                 max_free_memory = info.free
                 best_gpu = i
 

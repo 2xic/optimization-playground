@@ -31,8 +31,8 @@ import torch
 import os
 from utis import get_best_gpu, estimate_cuda_size
 
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["TORCH_USE_CUDA_DSA"] = "1"
+# os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+# os.environ["TORCH_USE_CUDA_DSA"] = "1"
 
 torch.autograd.set_detect_anomaly(True)
 torch.set_float32_matmul_precision("high")
@@ -51,10 +51,13 @@ EPOCHS = 10_000
 SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
 
-TARGET_DATASET = os.environ.get("TARGET_DATASET", "small-web").lower()
+TARGET_DATASET = os.environ.get("TARGET_DATASET", "satoshi-whitepaper").lower()
 NAMED_DATASETS = {
     i.name: i
     for i in [
+        WebDataloader(
+            os.environ["WEB_DATALOADER"], "satoshi-whitepaper", batch_size=256
+        ),
         WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=256),
         WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=1024),
         WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=512),
@@ -187,7 +190,7 @@ class ExperimentDistributed:
         model=Model,
         optimizer=AdamConfig(),
         training_options=TrainingOptions(
-            epochs=EPOCHS, batch_size=32, training_timeout_minutes=0
+            epochs=EPOCHS, batch_size=32, training_timeout_minutes=360
         ),
     ):
         model = model(config)
@@ -261,6 +264,7 @@ class ExperimentMultiProcess:
             device_id = None
             while device_id is None:
                 device_id = get_best_gpu(estimate_cuda_size(model))
+                time.sleep(5)
             # Once we have a device, just set it.
             training_options.device = torch.device(f"cuda:{device_id}")
             args = (
