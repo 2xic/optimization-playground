@@ -13,7 +13,7 @@ from training.trainer import Trainer
 from tqdm import tqdm
 import os
 from training.objectives import NextTokenPrediction
-from training.optimizer import AdamConfig, RMSpropConfig
+from training.optimizer import AdamConfig, RMSpropConfig, NoamScheduler
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
@@ -51,7 +51,7 @@ EPOCHS = 10_000
 SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
 
-TARGET_DATASET = os.environ.get("TARGET_DATASET", "satoshi-whitepaper").lower()
+TARGET_DATASET = os.environ.get("TARGET_DATASET", "small-web").lower()
 NAMED_DATASETS = {
     i.name: i
     for i in [
@@ -115,12 +115,6 @@ def create_default_config(dataset):
     )
 
 
-class ModelConfig:
-    model: torch.nn.Module
-    config: Config
-    optimizer: AdamConfig = AdamConfig()
-
-
 def create_next_token_prediction_objective(
     dataset,
     model: Model,
@@ -148,7 +142,6 @@ def execute(
     dataset,
     experiment_variant,
     model: Model,
-    optimizer=AdamConfig(),
     options: TrainingOptions = TrainingOptions(
         epochs=EPOCHS,
         batch_size=32,
@@ -158,7 +151,10 @@ def execute(
     epochs_loss = MinMaxAvgArray()
 
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
-        trainer = create_next_token_prediction_objective(dataset, model, optimizer)
+        # TODO: need to copy model for sampling to be correct.
+        trainer = create_next_token_prediction_objective(
+            dataset, model, options.optimizer
+        )
         (accuracy, loss) = trainer.train(
             dataset,
             options,
@@ -188,9 +184,11 @@ class ExperimentDistributed:
         config: Config,
         experiment_variant,
         model=Model,
-        optimizer=AdamConfig(),
         training_options=TrainingOptions(
-            epochs=EPOCHS, batch_size=32, training_timeout_minutes=360
+            epochs=EPOCHS,
+            batch_size=32,
+            training_timeout_minutes=36,
+            optimizer=AdamConfig(),
         ),
     ):
         model = model(config)
@@ -203,7 +201,7 @@ class ExperimentDistributed:
         else:
             model = FSDP(model)
         experiment_variant, results = execute(
-            self.dataset, experiment_variant, model, optimizer, training_options
+            self.dataset, experiment_variant, model, training_options
         )
         self.experiments[experiment_variant] = results
         return self
@@ -234,16 +232,13 @@ class ExperimentMultiProcess:
         config: Config,
         experiment_variant,
         model=Model,
-        optimizer=AdamConfig(),
         training_options=TrainingOptions(
             epochs=EPOCHS,
             batch_size=32,
             training_timeout_minutes=360,
         ),
     ):
-        self.queue_runs.append(
-            (config, experiment_variant, model, optimizer, training_options)
-        )
+        self.queue_runs.append((config, experiment_variant, model, training_options))
 
     def _execute(self, *args):
         if self.skip_thread:
@@ -257,7 +252,6 @@ class ExperimentMultiProcess:
             config,
             experiment_variant,
             model,
-            optimizer,
             training_options,
         ) in self.queue_runs:
             model = model(config)
@@ -271,7 +265,6 @@ class ExperimentMultiProcess:
                 self.dataset,
                 experiment_variant,
                 model,
-                optimizer,
                 training_options,
             )
             results.append(self._execute(*args))
@@ -375,6 +368,42 @@ def embedding_training():
         experiment.plot("masked_tokens.png")
 
 
+def test_speedups():
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
+        for transformer_layer in [
+            TransformerLayerType.DEEPSEEK,
+            TransformerLayerType.LLAMA2,
+        ]:
+            for with_lr_scheduler in [False, True]:
+                for optimizer in [AdamConfig()]:
+                    config = create_default_config(
+                        dataset,
+                    ).with_transformer_layer(TransformerLayerType.LLAMA2)
+                    scheduler = (
+                        NoamScheduler(
+                            d_model=config.dim_embeddings, factor=2.0, warmup_steps=1000
+                        )
+                        if with_lr_scheduler
+                        else None
+                    )
+                    scheduler_str = (
+                        "with_scheduler" if with_lr_scheduler else "no_scheduler"
+                    )
+                    experiment.queue(
+                        config,
+                        f"{transformer_layer}_{scheduler_str}_{optimizer.__class__.__name__}_{dataset.name}",
+                        training_options=TrainingOptions(
+                            epochs=EPOCHS,
+                            batch_size=32,
+                            training_timeout_minutes=10,
+                            optimizer=optimizer,
+                            lr_scheduler=scheduler,
+                        ),
+                    )
+            experiment.plot("debugging.png")
+
+
 def test_pass():
     #    dataset = XorDataset()
     #    dataset = Datasets().get_tiny_dataset()
@@ -407,11 +436,12 @@ def test_pass():
 
 
 def train():
-    transformer_layer()
-    mixture_of_expert_model_vs_standard()
-    positional_embeddings()
-    normalization_layer()
-    embedding_training()
+    # transformer_layer()
+    # mixture_of_expert_model_vs_standard()
+    # positional_embeddings()
+    # normalization_layer()
+    # embedding_training()
+    test_speedups()
     print("Closing down ...")
 
 

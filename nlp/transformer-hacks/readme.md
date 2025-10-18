@@ -5,13 +5,17 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 - [LLAMA source code](https://github.com/meta-llama/llama/blob/main/llama/model.py)
 - [Transformers and Multi-Head Attention](https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/tutorial6/Transformers_and_MHAttention.html)
 
+## Speed training
+- https://github.com/KellerJordan/modded-nanogpt
+- 
+
 ## Parallelism
 Model parallelism
 ```bash
 torchrun --nproc_per_node=4 experiments.py
 ```
 
-TODO: dat parallelism
+data parallelism
 
 ## Embeddings
 - [LLM2Vec](https://arxiv.org/pdf/2404.05961)

@@ -183,8 +183,9 @@ class Llama2TransformerLayer(nn.Module):
     def forward(self, X, mask):
         first_half = self.rope_attention(self.norm_1(X), mask)
         first_half += X
-        second_half = self.linear(first_half)
-        return self.norm_2(second_half + X)
+        second_half = self.linear(self.norm_2(first_half))
+        second_half += first_half
+        return second_half
 
 
 class Llama3TransformerLayer(nn.Module):
@@ -203,8 +204,9 @@ class Llama3TransformerLayer(nn.Module):
     def forward(self, X, mask):
         first_half = self.rope_attention(self.norm_1(X), mask)
         first_half += X
-        second_half = self.linear(first_half)
-        return self.norm_2(second_half + X)
+        second_half = self.linear(self.norm_2(first_half))
+        second_half += first_half
+        return second_half
 
 
 class DeepSeekLikeTransformerLayer(nn.Module):
@@ -224,8 +226,9 @@ class DeepSeekLikeTransformerLayer(nn.Module):
         X_norm = self.norm_1(X)
         first_half = self.attention(X_norm, X_norm, X_norm, mask)
         first_half += X
-        second_half = self.linear(first_half)
-        return self.norm_2(second_half + X)
+        second_half = self.linear(self.norm_2(first_half))
+        second_half += first_half
+        return second_half
 
 
 class BertLikeTransformerLayer(nn.Module):
@@ -243,8 +246,9 @@ class BertLikeTransformerLayer(nn.Module):
         X_norm = self.norm_1(X)
         first_half = self.attention(X_norm, X_norm, X_norm, mask)
         first_half += X
-        second_half = self.linear(first_half)
-        return self.norm_2(second_half + X)
+        second_half = self.linear(self.norm_2(first_half))
+        second_half += first_half
+        return second_half
 
 
 class GptTransformerLayer(nn.Module):

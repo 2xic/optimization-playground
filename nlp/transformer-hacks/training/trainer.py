@@ -10,6 +10,8 @@ from .objectives import BaseObjective
 import torch.distributed as dist
 from torch.amp import autocast, GradScaler
 from abc import ABC
+from .optimizer import Optimizer, AdamConfig, Scheduler
+from dataclasses import dataclass, field
 
 torch.backends.cudnn.benchmark = True
 
@@ -86,6 +88,9 @@ class TrainingOptions:
     epoch_callback: Optional[Callable[[EpochData], None]] = None
     batch_callback: Optional[Callable[[BatchData], None]] = None
     training_timeout_minutes: Optional[int] = None
+    # Optimizer configuration
+    lr_scheduler: Optional[Scheduler] = None
+    optimizer: Optimizer = field(default_factory=lambda: AdamConfig())
 
     @property
     def sampling_timeout_minutes(self):
@@ -124,9 +129,12 @@ def timer_iterator(dataset):
 
 
 class BaseTrainer(ABC):
-    def __init__(self, optimizer):
+    def __init__(
+        self, optimizer: Optional[Optimizer], lr_scheduler: Optional[Scheduler] = None
+    ):
         self.start = time.time()
         self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
 
     def train(
         self,
@@ -181,6 +189,8 @@ class BaseTrainer(ABC):
         self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
         self.optimizer.step()
+        if self.lr_scheduler is not None:
+            self.lr_scheduler.step()
 
         # Report metrics.
         if objective.has_evaluator:
@@ -201,9 +211,10 @@ class Trainer(BaseTrainer):
         model: torch.nn.Module,
         objective: BaseObjective,
         optimizer: torch.optim.Optimizer,
+        lr_scheduler: Optional[Scheduler] = None,
         name=None,
     ):
-        super().__init__(optimizer)
+        super().__init__(optimizer, lr_scheduler)
         self.name = name
         self.model = model
         self.objective = objective
@@ -261,95 +272,3 @@ class GradScalerTrainer(Trainer):
                 accuracy, rows = self.objective.evaluator(y_predicted, y)
                 return loss, accuracy, rows
             return loss, 0, 0
-
-
-"""
-if options.batch_size is None:
-    options.batch_size = 32 if options.device.type != "cuda" else 256
-timer = TrainingTimer(minutes=30)
-# TODO: the scaler option should be an option and not enforced.
-scaler = GradScaler("cuda")
-for epoch in range(options.epochs):
-    tqdm_loader = progress(loader)
-    iterator = timer_iterator(tqdm_loader)
-    # Per batch
-    count_rows = 0
-    sum_accuracy = 0
-    sum_loss = torch.tensor(0.0)
-    for index, (X, y) in enumerate(iterator):
-        with autocast("cuda"):
-            X, y = (
-                X.to(options.device, non_blocking=True),
-                y.to(
-                    options.device,
-                    non_blocking=True,
-                ),
-            )
-            y_predicted = self.model(X)
-            loss: torch.Tensor = self.objective(
-                y_predicted,
-                y,
-            )
-        assert loss.requires_grad
-        # self.optimizer.zero_grad(set_to_none=True)
-        #                self.optimizer.zero_grad()
-        # loss.backward()
-        # self.optimizer.step()
-        scaler.scale(loss).backward()
-
-        if index % 32 == 0:
-            scaler.step(self.optimizer)
-            scaler.update()
-            self.optimizer.zero_grad(set_to_none=True)
-
-        sum_loss += loss.item()
-        # Accuracy metrics
-        if self.objective.has_evaluator:
-            (accuracy, rows) = self.objective.evaluator(y_predicted, y)
-            sum_accuracy += accuracy
-            count_rows += rows
-
-        if index % 10 == 0 and isinstance(tqdm_loader, tqdm) and index > 0:
-            if self.objective.has_evaluator:
-                tqdm_loader.set_description(
-                    "Epoch {epoch}, Accuracy {acc}, Loss {loss}".format(
-                        epoch=epoch,
-                        acc=(sum_accuracy / count_rows * 100),
-                        loss=sum_loss,
-                    )
-                )
-            else:
-                tqdm_loader.set_description(
-                    "Epoch {epoch}, Loss {loss}".format(
-                        epoch=epoch, loss=sum_loss
-                    )
-                )
-        if self.state_saver is not None and timer.done():
-            self.state_saver.save(self.model, self.optimizer, epoch, sum_loss)
-            timer.reset()
-        if options.batch_callback is not None:
-            options.batch_callback(BatchData(model=self.model))
-        if (
-            options.training_timeout_minutes is not None
-            and (time.time() - start) // 60 >= options.training_timeout_minutes
-        ):
-            break
-
-    if options.epoch_callback is not None:
-        options.epoch_callback(
-            EpochData(
-                model=self.model,
-            )
-        )
-    # End of epoch
-    avg_epoch_accuracy = sum_accuracy / count_rows * 100
-    epochs_accuracy.append(avg_epoch_accuracy.item())
-    epochs_loss.append(sum_loss.item())
-    if (
-        options.training_timeout_minutes is not None
-        and (time.time() - start) // 60 >= options.training_timeout_minutes
-    ):
-        print("Hit timeout")
-        break
-return epochs_accuracy, epochs_loss
-"""

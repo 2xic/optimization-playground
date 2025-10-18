@@ -1,8 +1,7 @@
 import pynvml
-import time
 
 
-def get_best_gpu(model_size_gb, margins_gb=3):
+def get_best_gpu(model_size_gb, margins_gb=4):
     """Find GPU with most free memory using pynvml"""
     try:
         pynvml.nvmlInit()

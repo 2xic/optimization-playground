@@ -3,13 +3,30 @@ from torch.optim.lr_scheduler import _LRScheduler
 from dataclasses import dataclass
 
 import torch.optim.rmsprop
+from abc import ABC, abstractmethod
+
+
+class Optimizer(ABC):
+    @abstractmethod
+    def create_optimizer(self, params):
+        pass
+
+
+class Scheduler(ABC):
+    @abstractmethod
+    def create_scheduler(self, optimizer):
+        pass
 
 
 class NoamScheduler(_LRScheduler):
-    def __init__(self, optimizer, d_model, warmup_steps, factor=1.0, last_epoch=-1):
+    def __init__(self, d_model, warmup_steps, factor=1.0, last_epoch=-1):
         self.d_model = d_model
         self.warmup_steps = warmup_steps
-        super(NoamScheduler, self).__init__(optimizer, last_epoch)
+        self.last_epoch = last_epoch
+        self.factor = factor
+
+    def create_scheduler(self, optimizer):
+        super(NoamScheduler, self).__init__(optimizer, self.last_epoch)
 
     def get_lr(self):
         step = max(1, self.last_epoch)
