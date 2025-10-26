@@ -246,10 +246,35 @@ class Trainer(BaseTrainer):
         return epochs_accuracy, epochs_loss
 
 
+def check_bf16_support():
+    if not torch.cuda.is_available():
+        return False
+
+    major, minor = torch.cuda.get_device_capability()
+    # Ampere (8.0) or newer supports BF16
+    if major >= 8:
+        print(f"✅ BF16 supported (Compute Capability: {major}.{minor})")
+        return True
+    else:
+        print(
+            f"❌ BF16 not supported (Compute Capability: {major}.{minor}, need >= 8.0)"
+        )
+        return False
+
+
 class GradScalerTrainer(Trainer):
-    def __init__(self, model, objective, optimizer, name=None):
-        super().__init__(model, objective, optimizer, name)
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        objective: BaseObjective,
+        optimizer: torch.optim.Optimizer,
+        lr_scheduler: Optional[Scheduler] = None,
+        name=None,
+    ):
+        super().__init__(model, objective, optimizer, lr_scheduler, name)
+        self._original_model = model
         self.scaler = GradScaler("cuda")
+        self.type = torch.bfloat16 if check_bf16_support() else torch.float16
 
     def train(
         self,
@@ -257,18 +282,37 @@ class GradScalerTrainer(Trainer):
         training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
-        super().train(dataset, training_options, progress)
+        self._original_model.to(training_options.device)
+        self.model = self.model  # torch.compile(self.model, mode="reduce-overhead")
+        # Try to enable the fuzed model.
+        self.optimizer.fused = True
+        return super().train(dataset, training_options, progress)
 
     def forward(
-        self, model, objective, X, y, _options: TrainingOptions
+        self, model, objective, X, y, training_options: TrainingOptions
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        with autocast("cuda"):
+        with autocast("cuda", dtype=self.type):
+            X, y = (
+                X.to(training_options.device, non_blocking=True),
+                y.to(
+                    training_options.device,
+                    non_blocking=True,
+                ),
+            )
             y_predicted = model(X)
             loss: torch.Tensor = objective(
                 y_predicted,
                 y,
             )
-            if self.objective.has_evaluator:
-                accuracy, rows = self.objective.evaluator(y_predicted, y)
+            self.optimizer.zero_grad(set_to_none=True)
+            self.scaler.scale(loss).backward()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
+
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
+
+            if objective.has_evaluator:
+                (accuracy, rows) = objective.evaluator(y_predicted, y)
                 return loss, accuracy, rows
             return loss, 0, 0

@@ -12,10 +12,20 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 ## Parallelism
 Model parallelism
 ```bash
-torchrun --nproc_per_node=4 experiments.py
+# Install for torch.compile
+sudo apt-get install nvidia-cuda-toolkit -y
+# Split the model
+DISTRIBUTED_STRATEGY=DDP torchrun --nproc_per_node=4 experiments.py
 ```
 
 data parallelism
+```bash
+DISTRIBUTED_STRATEGY=FSDP torchrun --nproc_per_node=4 experiments.py
+```
+
+## Whisper
+- https://cdn.openai.com/papers/whisper.pdf
+- https://arxiv.org/pdf/2407.03169v1
 
 ## Embeddings
 - [LLM2Vec](https://arxiv.org/pdf/2404.05961)

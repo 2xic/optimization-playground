@@ -9,7 +9,7 @@ from training.model import (
 )
 from training.layers_mixture_of_experts import MoE
 from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
-from training.trainer import Trainer
+from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
 from training.objectives import NextTokenPrediction
@@ -46,6 +46,7 @@ load_dotenv()
 IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
 DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP").lower()
 NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 8))
+USE_GRAD_SCALER = bool(int(os.environ.get("USE_GRAD_SCALER", "1")))
 
 EPOCHS = 10_000
 SAMPLE_SIZE = 1
@@ -59,8 +60,8 @@ NAMED_DATASETS = {
             os.environ["WEB_DATALOADER"], "satoshi-whitepaper", batch_size=256
         ),
         WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=256),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=1024),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=512),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=2048),
+        WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=1024),
     ]
 }
 
@@ -126,7 +127,8 @@ def create_next_token_prediction_objective(
         if model.config.sampling_method == SamplingMethod.TEMPERATURE
         else argmax_sampling
     )
-    trainer = Trainer(
+    trainer_class = Trainer if USE_GRAD_SCALER else GradScalerTrainer
+    trainer = trainer_class(
         model,
         NextTokenPrediction(
             padding_index=dataset.padding_index,
@@ -218,6 +220,15 @@ def get_experiment_instance(dataset):
         return ExperimentMultiProcess(dataset)
 
 
+def GET_DEFAULT_TRAINING_OPTIONS():
+    return TrainingOptions(
+        epochs=EPOCHS,
+        batch_size=32,
+        training_timeout_minutes=36,
+        optimizer=AdamConfig(),
+    )
+
+
 class ExperimentMultiProcess:
     def __init__(self, dataset):
         self.experiments = {}
@@ -232,11 +243,7 @@ class ExperimentMultiProcess:
         config: Config,
         experiment_variant,
         model=Model,
-        training_options=TrainingOptions(
-            epochs=EPOCHS,
-            batch_size=32,
-            training_timeout_minutes=360,
-        ),
+        training_options=GET_DEFAULT_TRAINING_OPTIONS(),
     ):
         self.queue_runs.append((config, experiment_variant, model, training_options))
 
@@ -342,13 +349,14 @@ def mixture_of_expert_model_vs_standard():
     for dataset in DATASETS:
         experiment = get_experiment_instance(dataset)
         for name, model in [
-            ("normal", Model),
             ("mixture of experts", MoE),
+            ("normal", Model),
         ]:
             config = create_default_config(
                 dataset,
             )
             experiment.queue(config, name, model=model)
+            torch.cuda.empty_cache()
         experiment.plot("model_vs_moe.png")
 
 
@@ -359,10 +367,12 @@ def embedding_training():
             config = create_default_config(
                 dataset,
             ).with_transformer_layer(TransformerLayerType.BERT)
+            options = GET_DEFAULT_TRAINING_OPTIONS()
+            options.optimizer = optimizer
             experiment.queue(
                 config,
                 "bert_" + optimizer.__class__.__name__ + f"_{dataset.name}",
-                optimizer=optimizer,
+                training_options=options,
             )
 
         experiment.plot("masked_tokens.png")
@@ -396,7 +406,7 @@ def test_speedups():
                         training_options=TrainingOptions(
                             epochs=EPOCHS,
                             batch_size=32,
-                            training_timeout_minutes=10,
+                            training_timeout_minutes=2,
                             optimizer=optimizer,
                             lr_scheduler=scheduler,
                         ),
@@ -436,12 +446,12 @@ def test_pass():
 
 
 def train():
-    # transformer_layer()
     # mixture_of_expert_model_vs_standard()
-    # positional_embeddings()
-    # normalization_layer()
+    transformer_layer()
+    #   positional_embeddings()
+    #    normalization_layer()
     # embedding_training()
-    test_speedups()
+    # test_speedups()
     print("Closing down ...")
 
 
