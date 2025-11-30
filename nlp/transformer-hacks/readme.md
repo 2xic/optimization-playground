@@ -7,6 +7,8 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 
 ## Speed training
 - https://github.com/KellerJordan/modded-nanogpt
+- https://github.com/karpathy/nanochat
+- https://www.tylerromero.com/posts/nanogpt-speedrun-worklog/#21-architectural-changes-and-training-tweaks
 - 
 
 ## Parallelism

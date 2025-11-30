@@ -13,7 +13,14 @@ from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
 from training.objectives import NextTokenPrediction
-from training.optimizer import AdamConfig, RMSpropConfig, NoamScheduler
+from training.optimizer import (
+    AdamConfig,
+    RMSpropConfig,
+    NoamScheduler,
+    MuonConfig,
+    ExponentialLR,
+    WarmupExpDecay,
+)
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
@@ -29,7 +36,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 import torch
 import os
-from utis import get_best_gpu, estimate_cuda_size
+from utis import get_best_gpu, estimate_cuda_size, benchmark_training
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # os.environ["TORCH_USE_CUDA_DSA"] = "1"
@@ -47,6 +54,7 @@ IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
 DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP").lower()
 NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 8))
 USE_GRAD_SCALER = bool(int(os.environ.get("USE_GRAD_SCALER", "1")))
+TRAINING_TIME_MINUTES = int(os.environ.get("TRAINING_TIME_MINUTES", "180"))
 
 EPOCHS = 10_000
 SAMPLE_SIZE = 1
@@ -189,7 +197,7 @@ class ExperimentDistributed:
         training_options=TrainingOptions(
             epochs=EPOCHS,
             batch_size=32,
-            training_timeout_minutes=36,
+            training_timeout_minutes=TRAINING_TIME_MINUTES,
             optimizer=AdamConfig(),
         ),
     ):
@@ -224,7 +232,7 @@ def GET_DEFAULT_TRAINING_OPTIONS():
     return TrainingOptions(
         epochs=EPOCHS,
         batch_size=32,
-        training_timeout_minutes=36,
+        training_timeout_minutes=TRAINING_TIME_MINUTES,
         optimizer=AdamConfig(),
     )
 
@@ -445,9 +453,77 @@ def test_pass():
     experiment.plot("training_mask_fix.png")
 
 
+def benchmark():
+    dataset = WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=128)
+    config = create_default_config(
+        dataset,
+    )
+    config.dropout = 0.2
+    config.dim_embeddings = 4
+    config.num_transformer_layers = 2
+    config.feed_forward_layer = 32
+    config.num_attention_heads = 2
+    config.sampling_method = SamplingMethod.TEMPERATURE
+
+    #    benchmark_training(Model(config), dataset, AdamConfig(), batch_size=1024)
+    benchmark_training(
+        Model(config),
+        dataset,
+        MuonConfig(),
+        batch_size=256,
+        gradient_accumulation_steps=4,
+    )
+    benchmark_training(Model(config), dataset, AdamConfig(), batch_size=128)
+    benchmark_training(Model(config), dataset, AdamConfig(), batch_size=256)
+    benchmark_training(Model(config), dataset, AdamConfig(), batch_size=512)
+    benchmark_training(
+        Model(config),
+        dataset,
+        AdamConfig(),
+        batch_size=256,
+        gradient_accumulation_steps=4,
+    )
+    benchmark_training(Model(config), dataset, RMSpropConfig(), batch_size=512)
+    benchmark_training(
+        Model(config),
+        dataset,
+        RMSpropConfig(),
+        batch_size=128,
+        gradient_accumulation_steps=8,
+    )
+
+
+def long_running_training():
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
+        for transformer_layer in [
+            TransformerLayerType.LLAMA2,
+            TransformerLayerType.GPT2,
+        ]:
+            config = create_default_config(
+                dataset,
+            ).with_transformer_layer(transformer_layer)
+
+            training_options = GET_DEFAULT_TRAINING_OPTIONS()
+            training_options.optimizer = AdamConfig(lr=1e-3)
+            training_options.lr_scheduler = WarmupExpDecay(warmup_epochs=6, gamma=0.96)
+            # Train for two full days
+            training_options.training_timeout_minutes = 60 * 24 * 2
+            # Try to avoid gradient explosion
+            config.max_grad_norm = 1.0
+            experiment.queue(
+                config,
+                transformer_layer,
+                training_options=training_options,
+            )
+        experiment.plot("long_running_training.png")
+
+
 def train():
+    long_running_training()
+    # benchmark()
     # mixture_of_expert_model_vs_standard()
-    transformer_layer()
+    # transformer_layer()
     #   positional_embeddings()
     #    normalization_layer()
     # embedding_training()

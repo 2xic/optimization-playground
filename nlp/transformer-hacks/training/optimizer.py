@@ -1,5 +1,6 @@
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
+from torch.optim.lr_scheduler import ExponentialLR
 from dataclasses import dataclass
 
 import torch.optim.rmsprop
@@ -32,6 +33,32 @@ class NoamScheduler(_LRScheduler):
         step = max(1, self.last_epoch)
         scale = (self.d_model**-0.5) * min(step**-0.5, step * (self.warmup_steps**-1.5))
         return [base_lr * scale for base_lr in self.base_lrs]
+
+
+class ExponentialLR(ExponentialLR):
+    def __init__(self, gamma):
+        self.gamma = gamma
+
+    def create_scheduler(self, optimizer):
+        super(ExponentialLR, self).__init__(optimizer, gamma=self.gamma)
+
+
+class WarmupExpDecay(_LRScheduler):
+    def __init__(self, warmup_epochs=5, gamma=0.95, last_epoch=-1):
+        self.warmup_epochs = warmup_epochs
+        self.gamma = gamma
+        self.last_epoch = last_epoch
+
+    def create_scheduler(self, optimizer):
+        super().__init__(optimizer, self.last_epoch)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_epochs:
+            alpha = (self.last_epoch + 1) / self.warmup_epochs
+            return [base_lr * alpha for base_lr in self.base_lrs]
+        else:
+            decay_epochs = self.last_epoch - self.warmup_epochs
+            return [base_lr * (self.gamma**decay_epochs) for base_lr in self.base_lrs]
 
 
 def lr_lambda(step):
@@ -67,6 +94,44 @@ class AdamConfig:
             eps=self.eps,
             fused=True,
         )
+
+
+@dataclass
+class MuonConfig:
+    lr: float = 3e-4
+
+    def create_optimizer(self, params):
+        try:
+            return torch.optim.Muon(
+                params,
+                lr=self.lr,
+            )
+        except Exception as e:
+            print(e)
+            # pip install git+https://github.com/KellerJordan/Muon
+            from muon import SingleDeviceMuon
+
+            params = list(params)
+
+            hidden_weights = [
+                dict(
+                    params=[p for p in params if p.ndim >= 2],
+                    use_muon=True,
+                    lr=0.02,
+                    weight_decay=0.01,
+                ),
+                # dict(
+                #    params=[p for p in params if p.ndim < 2],
+                #    use_muon=False,
+                #    lr=0.02,
+                #    weight_decay=0.01,
+                # ),
+            ]
+
+            return SingleDeviceMuon(
+                hidden_weights,
+                lr=self.lr,
+            )
 
 
 @dataclass
