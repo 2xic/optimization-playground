@@ -12,6 +12,8 @@ from torch.amp import autocast, GradScaler
 from abc import ABC
 from .optimizer import Optimizer, AdamConfig, Scheduler
 from dataclasses import dataclass, field
+from utils.metrics import MetricsTracker
+from datetime import datetime
 
 torch.backends.cudnn.benchmark = True
 
@@ -91,12 +93,14 @@ class TrainingOptions:
     # Optimizer configuration
     lr_scheduler: Optional[Scheduler] = None
     optimizer: Optimizer = field(default_factory=lambda: AdamConfig())
+    # accumulation_steps
+    accumulation_steps: int = 1
 
     @property
     def sampling_timeout_minutes(self):
         if self.training_timeout_minutes is None:
             return None
-        return self.training_timeout_minutes * 3
+        return self.training_timeout_minutes  # * 3
 
 
 def debug_print(*args):
@@ -116,13 +120,18 @@ def create_config(vocab_size, padding_index, sequence_length):
     )
 
 
-def timer_iterator(dataset):
+def timer_iterator(dataset, metrics_tracker=None):
     with Timer("create_iterator"):
         iterator = iter(dataset)
     for _ in range(len(dataset)):
         try:
+            wait_start = time.time()
             with Timer("timer_iterator"):
                 X, y = next(iterator)
+            data_wait_time = time.time() - wait_start
+            if metrics_tracker is not None:
+                metrics_tracker.log(data_wait_time=data_wait_time)
+
             yield X, y
         except StopIteration:
             break
@@ -135,13 +144,19 @@ class BaseTrainer(ABC):
         self.start = time.time()
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.batch_num = 0
+        self.metrics_tracker = MetricsTracker(
+            run_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
+            dataset_name=None,
+            rank=dist.get_rank() if dist.is_initialized() else 0,
+        )
 
     def train(
         self,
         model,
         objective,
         dataset,
-        training_options,
+        training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
         if dist.is_initialized() and dist.get_rank() != 0:
@@ -152,7 +167,8 @@ class BaseTrainer(ABC):
         count_rows = 0
         progress = progress(dataset)
         has_tqdm_loader = isinstance(progress, tqdm)
-        iterator = timer_iterator(progress)
+        self.metrics_tracker.dataset_name = dataset.name
+        iterator = timer_iterator(progress, self.metrics_tracker)
         for _, (X, y) in enumerate(iterator):
             loss, accuracy, rows = self.forward(
                 model, objective, X, y, training_options
@@ -160,9 +176,11 @@ class BaseTrainer(ABC):
 
             if has_tqdm_loader:
                 progress.set_description(
-                    "Loss {loss}, Accuracy {acc}".format(
+                    "Loss {loss}, Accuracy {acc}, Training Time {time}m, Max training time {max_time}m".format(
                         acc=(sum_accuracy / count_rows * 100) if count_rows > 0 else 0,
                         loss=sum_loss,
+                        time=self.trained_minutes,
+                        max_time=training_options.training_timeout_minutes,
                     )
                 )
 
@@ -186,12 +204,14 @@ class BaseTrainer(ABC):
         y_predicted = model(X)
         loss = objective(y_predicted, y)
 
-        self.optimizer.zero_grad(set_to_none=True)
         loss.backward()
-        self.optimizer.step()
+        if (self.batch_num + 1) % training_options.accumulation_steps == 0:
+            self.optimizer.step()
+            self.optimizer.zero_grad(set_to_none=True)
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
 
+        self.batch_num += 1
         # Report metrics.
         if objective.has_evaluator:
             (accuracy, rows) = objective.evaluator(y_predicted, y)
@@ -201,8 +221,12 @@ class BaseTrainer(ABC):
     def has_timeout(self, training_options: TrainingOptions):
         if training_options.training_timeout_minutes is None:
             return False
-        delta = time.time() - self.start
-        return delta // 60 >= training_options.training_timeout_minutes
+        training_time = self.trained_minutes
+        return training_time >= training_options.training_timeout_minutes
+
+    @property
+    def trained_minutes(self):
+        return (time.time() - self.start) // 60
 
 
 class Trainer(BaseTrainer):
@@ -236,6 +260,7 @@ class Trainer(BaseTrainer):
             epoch_accuracy, epoch_loss = super().train(
                 self.model, self.objective, loader, training_options, progress
             )
+            loader.iter.set_epoch(epoch + 1)
             print(f"Epoch {epoch} done, accuracy {epoch_accuracy}, loss {epoch_loss}")
             epochs_accuracy.append(epoch_accuracy)
             epochs_loss.append(epoch_loss)
@@ -275,6 +300,7 @@ class GradScalerTrainer(Trainer):
         self._original_model = model
         self.scaler = GradScaler("cuda")
         self.type = torch.bfloat16 if check_bf16_support() else torch.float16
+        self.last_time = None
 
     def train(
         self,
@@ -283,7 +309,11 @@ class GradScalerTrainer(Trainer):
         progress=lambda x: tqdm(x, mininterval=1),
     ):
         self._original_model.to(training_options.device)
-        self.model = self.model  # torch.compile(self.model, mode="reduce-overhead")
+        torch.backends.cuda.enable_flash_sdp(True)
+        torch.backends.cuda.enable_mem_efficient_sdp(True)
+        torch.set_float32_matmul_precision("high")
+        #        self.model = self.model  # torch.compile(self.model, mode="reduce-overhead")
+        #        self.model = torch.compile(self.model, mode="reduce-overhead")
         # Try to enable the fuzed model.
         self.optimizer.fused = True
         return super().train(dataset, training_options, progress)
@@ -291,28 +321,59 @@ class GradScalerTrainer(Trainer):
     def forward(
         self, model, objective, X, y, training_options: TrainingOptions
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        now = time.time()
         with autocast("cuda", dtype=self.type):
-            X, y = (
-                X.to(training_options.device, non_blocking=True),
-                y.to(
-                    training_options.device,
-                    non_blocking=True,
-                ),
-            )
-            y_predicted = model(X)
-            loss: torch.Tensor = objective(
-                y_predicted,
-                y,
-            )
-            self.optimizer.zero_grad(set_to_none=True)
-            self.scaler.scale(loss).backward()
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            with self.metrics_tracker.span("to_device"):
+                X, y = (
+                    X.to(training_options.device, non_blocking=True),
+                    y.to(
+                        training_options.device,
+                        non_blocking=True,
+                    ),
+                )
+            with self.metrics_tracker.span("forward"):
+                y_predicted = model(X)
+            with self.metrics_tracker.span("objective"):
+                loss: torch.Tensor = objective(
+                    y_predicted,
+                    y,
+                )
+            with self.metrics_tracker.span("optimize"):
+                self.scaler.scale(loss).backward()
+                if (self.batch_num + 1) % training_options.accumulation_steps == 0:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    self.optimizer.zero_grad(set_to_none=True)
 
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
 
             if objective.has_evaluator:
-                (accuracy, rows) = objective.evaluator(y_predicted, y)
+                with self.metrics_tracker.span("evaluator"):
+                    (accuracy, rows) = objective.evaluator(y_predicted, y)
+
+                accuracy_tensor = torch.tensor(
+                    [accuracy], device=training_options.device, dtype=torch.float32
+                )
+                rows_tensor = torch.tensor(
+                    [rows], device=training_options.device, dtype=torch.float32
+                )
+
+                dist.all_reduce(accuracy_tensor, op=dist.ReduceOp.SUM)
+                dist.all_reduce(rows_tensor, op=dist.ReduceOp.SUM)
+
+                accuracy = accuracy_tensor
+                rows = rows_tensor
+
+                metrics = {
+                    "loss": loss,
+                    "accuracy": accuracy / rows * 100,
+                }
+                if self.last_time is not None:
+                    elapsed = now - self.last_time
+                    metrics["samples_per_second"] = rows / elapsed
+                    metrics["batches_per_second"] = 1 / (now - self.last_time)
+                self.metrics_tracker.log(**metrics)
+                self.last_time = now
                 return loss, accuracy, rows
             return loss, 0, 0

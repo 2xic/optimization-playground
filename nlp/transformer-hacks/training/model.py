@@ -73,13 +73,6 @@ class Config:
     dropout: float = 0.01
     feed_forward_layer: int = 2048
     bias: bool = False
-    # Optimizer
-    # TODO: this can be removed.
-    weight_decay = 1e-1
-    learning_rate = 3e-4
-    max_grad_norm: Optional[float] = 1
-    # TODO: this can be removed.
-    model_name: Optional[str] = None
 
     def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
         self.positional_embedding = positional_embedding
@@ -137,32 +130,20 @@ class LlamaFeedForward(nn.Module):
 class RoPEMultiheadAttention(nn.Module):
     def __init__(self, embed_dim, num_heads, max_len, gqa):
         super().__init__()
+        head_dim = embed_dim // num_heads
+        rope = RotaryPositionalEncoding(d_model=head_dim, max_len=max_len)
+
         if gqa:
             self.mha = SimpleGQA(
-                embed_dim=embed_dim,
-                num_query_heads=num_heads,
-                num_groups=1,
+                embed_dim=embed_dim, num_query_heads=num_heads, num_groups=1, rope=rope
             )
         else:
             self.mha = MultiheadAttention(
-                embed_dim=embed_dim,
-                num_query_heads=num_heads,
+                embed_dim=embed_dim, num_query_heads=num_heads, rope=rope
             )
-        self.rope = RotaryPositionalEncoding(d_model=embed_dim, max_len=max_len)
-
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=False)
 
     def forward(self, x, mask):
-        q = self.q_proj(x)
-        k = self.k_proj(x)
-        v = self.v_proj(x)
-
-        q = self.rope(q)
-        k = self.rope(k)
-
-        attn_output, _ = self.mha(q, k, v, attn_mask=mask)
+        attn_output, _ = self.mha(x, x, x, attn_mask=mask)
         return attn_output
 
 

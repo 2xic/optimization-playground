@@ -15,6 +15,7 @@ import os
 from training.objectives import NextTokenPrediction
 from training.optimizer import (
     AdamConfig,
+    AdamWConfig,
     RMSpropConfig,
     NoamScheduler,
     MuonConfig,
@@ -51,25 +52,52 @@ load_dotenv()
 # assert torch.cuda.is_available()
 
 IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
-DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP").lower()
+DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP")  # .lower()
 NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 8))
-USE_GRAD_SCALER = bool(int(os.environ.get("USE_GRAD_SCALER", "1")))
+USE_GRAD_SCALER = bool(int(os.environ.get("USE_GRAD_SCALER", "1")) == "1")
 TRAINING_TIME_MINUTES = int(os.environ.get("TRAINING_TIME_MINUTES", "180"))
+DEBUG = int(os.environ.get("DEBUG", "0")) == 1
 
 EPOCHS = 10_000
 SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
+
+rank = int(os.environ.get("RANK", 0))
+world_size = int(os.environ.get("WORLD_SIZE", 1))
+
 
 TARGET_DATASET = os.environ.get("TARGET_DATASET", "small-web").lower()
 NAMED_DATASETS = {
     i.name: i
     for i in [
         WebDataloader(
-            os.environ["WEB_DATALOADER"], "satoshi-whitepaper", batch_size=256
+            os.environ["WEB_DATALOADER"],
+            "satoshi-whitepaper",
+            batch_size=256,
+            rank=rank,
+            world_size=world_size,
         ),
-        WebDataloader(os.environ["WEB_DATALOADER"], "small-web", batch_size=256),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-web", batch_size=2048),
-        WebDataloader(os.environ["WEB_DATALOADER"], "medium-512-web", batch_size=1024),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "small-web",
+            batch_size=256,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "medium-web",
+            batch_size=1024,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "medium-512-web",
+            batch_size=64,
+            rank=rank,
+            world_size=world_size,
+        ),
     ]
 }
 
@@ -127,7 +155,7 @@ def create_default_config(dataset):
 def create_next_token_prediction_objective(
     dataset,
     model: Model,
-    optimizer_config=AdamConfig(),
+    optimizer_config=AdamWConfig(),
 ):
     # TODO: move this.
     sampler = (
@@ -204,12 +232,17 @@ class ExperimentDistributed:
         model = model(config)
         device = torch.device(f"cuda:{dist.get_rank()}")
         model = model.to(device)
+        #       print(model)
+        #        exit(0)
         training_options.device = device
 
         if DISTRIBUTED_STRATEGY == "DDP":
-            model = DDP(model)
+            model = DDP(model, device_ids=[dist.get_rank()])
+            print("Using DDP for distributed training")
         else:
-            model = FSDP(model)
+            model = FSDP(model, device_ids=[dist.get_rank()])
+            print("Using FSDP for distributed training")
+        model.config = config
         experiment_variant, results = execute(
             self.dataset, experiment_variant, model, training_options
         )
@@ -496,21 +529,34 @@ def benchmark():
 def long_running_training():
     for dataset in DATASETS:
         experiment = get_experiment_instance(dataset)
-        for transformer_layer in [
-            TransformerLayerType.LLAMA2,
-            TransformerLayerType.GPT2,
+        for transformer_layer, positional_embeddings in [
+            (TransformerLayerType.LLAMA2, PositionalEmbeddingType.NONE),
+            (TransformerLayerType.GPT2, PositionalEmbeddingType.SINUSOIDAL),
         ]:
-            config = create_default_config(
-                dataset,
-            ).with_transformer_layer(transformer_layer)
+            config = (
+                create_default_config(
+                    dataset,
+                )
+                .with_transformer_layer(transformer_layer)
+                .with_positional_embedding(positional_embeddings)
+            )
 
             training_options = GET_DEFAULT_TRAINING_OPTIONS()
-            training_options.optimizer = AdamConfig(lr=1e-3)
+            training_options.optimizer = AdamConfig(
+                lr=3e-4 * world_size,
+                max_grad_norm=1.0,
+            )
             training_options.lr_scheduler = WarmupExpDecay(warmup_epochs=6, gamma=0.96)
             # Train for two full days
-            training_options.training_timeout_minutes = 60 * 24 * 2
+            # training_options.training_timeout_minutes = 60 * 24 * 2
+            training_options.accumulation_steps = 1
+            training_options.batch_size = dataset.batch_size
+            #            training_options.batch_size = 512
             # Try to avoid gradient explosion
-            config.max_grad_norm = 1.0
+            # config.max_grad_norm = 1.0
+            config.num_transformer_layers = 8
+            config.dim_embeddings = 512
+
             experiment.queue(
                 config,
                 transformer_layer,
@@ -532,7 +578,12 @@ def train():
 
 
 if __name__ == "__main__":
-    print(f"Running distributed {IS_RUNNING_DISTRIBUTED}")
+    print(
+        f"Running distributed {IS_RUNNING_DISTRIBUTED}, strategy={DISTRIBUTED_STRATEGY}"
+    )
+    if DEBUG:
+        print("Debug mode enabled")
+        torch.autograd.set_detect_anomaly(True)
     if IS_RUNNING_DISTRIBUTED:
         dist.init_process_group("nccl")
     else:

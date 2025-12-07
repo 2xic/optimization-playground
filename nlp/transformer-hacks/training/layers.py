@@ -35,7 +35,9 @@ class SimpleMultiHeadAttention(nn.Module):
 # - https://benjaminwarner.dev/2023/07/01/attention-mechanism
 # - https://pytorch.org/blog/flexattention/
 class MultiheadAttention(nn.Module):
-    def __init__(self, embed_dim, num_query_heads, num_groups=None, dropout_p=0.0):
+    def __init__(
+        self, embed_dim, num_query_heads, num_groups=None, dropout_p=0.0, rope=None
+    ):
         super().__init__()
 
         self.embed_dim = embed_dim
@@ -43,6 +45,7 @@ class MultiheadAttention(nn.Module):
         self.num_groups = num_query_heads if num_groups is None else num_groups
         self.head_dim = embed_dim // num_query_heads
         self.dropout_p = dropout_p
+        self.rope = rope
 
         # Linear projections
         self.q_proj = nn.Linear(embed_dim, embed_dim)
@@ -70,6 +73,10 @@ class MultiheadAttention(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
+        if self.rope is not None:
+            q = self.rope(q)
+            k = self.rope(k)
+
         out = F.scaled_dot_product_attention(
             q,
             k,
@@ -86,11 +93,12 @@ class MultiheadAttention(nn.Module):
 
 # GroupedQueryAttention
 class SimpleGQA(MultiheadAttention):
-    def __init__(self, embed_dim, num_query_heads, num_groups):
+    def __init__(self, embed_dim, num_query_heads, num_groups, rope=None):
         super().__init__(
             embed_dim,
             num_query_heads,
             num_groups,
+            rope,
         )
         assert num_query_heads % num_groups == 0, (
             "num_query_heads must be divisible by num_groups"
