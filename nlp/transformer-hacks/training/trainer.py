@@ -13,6 +13,7 @@ from abc import ABC
 from .optimizer import Optimizer, AdamConfig, Scheduler
 from dataclasses import dataclass, field
 from utils.metrics import MetricsTracker
+from utils.checkpoints import StorageBoxCheckpointer, Stats
 from datetime import datetime
 
 torch.backends.cudnn.benchmark = True
@@ -95,6 +96,8 @@ class TrainingOptions:
     optimizer: Optimizer = field(default_factory=lambda: AdamConfig())
     # accumulation_steps
     accumulation_steps: int = 1
+    # misc
+    enable_checkpoints: bool = False
 
     @property
     def sampling_timeout_minutes(self):
@@ -145,11 +148,22 @@ class BaseTrainer(ABC):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.batch_num = 0
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.metrics_tracker = MetricsTracker(
-            run_id=datetime.now().strftime("%Y%m%d_%H%M%S"),
+            run_id=run_id,
             dataset_name=None,
             rank=dist.get_rank() if dist.is_initialized() else 0,
         )
+        self.checkpoints_tracker = StorageBoxCheckpointer(
+            run_id=run_id,
+            host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+            username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+            password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+        )
+        # Do a checkpoint each hour.
+        self.start = time.time()
+        self.checkpoint_interval = 60 * 60
+        self.last_checkpoint = time.time()
 
     def train(
         self,
@@ -184,6 +198,12 @@ class BaseTrainer(ABC):
                     )
                 )
 
+            if (
+                time.time() - self.last_checkpoint > self.checkpoint_interval
+                and training_options.enable_checkpoints
+            ):
+                self.checkpoint(model, sum_loss, sum_accuracy)
+
             sum_loss += loss.item()
             sum_accuracy += accuracy.item()
             count_rows += rows.item()
@@ -191,7 +211,24 @@ class BaseTrainer(ABC):
             if self.has_timeout(training_options):
                 print("Hit timeout")
                 break
+        if training_options.enable_checkpoints:
+            self.checkpoint(model, sum_loss, sum_accuracy)
+
         return sum_accuracy / count_rows * 100 if count_rows > 0 else None, sum_loss
+
+    def checkpoint(self, model, sum_loss, sum_accuracy):
+        self.checkpoints_tracker.checkpoint(
+            model,
+            self.optimizer,
+            model.config,
+            Stats(
+                loss=sum_loss,
+                accuracy=sum_accuracy,
+                runtime_seconds=time.time() - self.start,
+                steps=self.batch_num,
+            ),
+        )
+        self.last_checkpoint = time.time()
 
     def forward(self, model, objective, X, y, training_options: TrainingOptions):
         X, y = (
@@ -352,18 +389,19 @@ class GradScalerTrainer(Trainer):
                 with self.metrics_tracker.span("evaluator"):
                     (accuracy, rows) = objective.evaluator(y_predicted, y)
 
-                accuracy_tensor = torch.tensor(
-                    [accuracy], device=training_options.device, dtype=torch.float32
-                )
-                rows_tensor = torch.tensor(
-                    [rows], device=training_options.device, dtype=torch.float32
-                )
+                if dist.is_initialized():
+                    accuracy_tensor = torch.tensor(
+                        [accuracy], device=training_options.device, dtype=torch.float32
+                    )
+                    rows_tensor = torch.tensor(
+                        [rows], device=training_options.device, dtype=torch.float32
+                    )
 
-                dist.all_reduce(accuracy_tensor, op=dist.ReduceOp.SUM)
-                dist.all_reduce(rows_tensor, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(accuracy_tensor, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(rows_tensor, op=dist.ReduceOp.SUM)
 
-                accuracy = accuracy_tensor
-                rows = rows_tensor
+                    accuracy = accuracy_tensor
+                    rows = rows_tensor
 
                 metrics = {
                     "loss": loss,

@@ -15,7 +15,8 @@ from .layers import (
     BidirectionalAttention,
     SimpleMultiHeadAttention,
 )
-from typing import Optional
+import json
+from dataclasses import dataclass, asdict
 
 
 class PositionalEmbeddingType(Enum):
@@ -85,6 +86,12 @@ class Config:
     def with_normalization_layer(self, normalization_layer: NormalizationLayerType):
         self.normalization_layer = normalization_layer
         return self
+
+    def to_json(self) -> str:
+        def enum_dict_factory(data):
+            return {k: v.value if isinstance(v, Enum) else v for k, v in data}
+
+        return asdict(self, dict_factory=enum_dict_factory)
 
 
 class NormalizationLayer(nn.Module):
@@ -242,11 +249,9 @@ class GptTransformerLayer(nn.Module):
         )
         self.dropout = nn.Dropout(p=self.configs.dropout)
         self.linear = nn.Sequential(
-            *[
-                nn.Linear(self.configs.dim_embeddings, 256),
-                nn.GELU(),
-                nn.Linear(256, self.configs.dim_embeddings),
-            ]
+            nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings * 4),
+            nn.GELU(),
+            nn.Linear(self.configs.dim_embeddings * 4, self.configs.dim_embeddings),
         )
         self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
         self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)

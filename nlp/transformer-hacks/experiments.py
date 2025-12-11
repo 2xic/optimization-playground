@@ -101,7 +101,7 @@ NAMED_DATASETS = {
     ]
 }
 
-DATASETS = [NAMED_DATASETS[TARGET_DATASET]]
+DATASETS = [NAMED_DATASETS[target] for target in TARGET_DATASET.split(",")]
 
 
 class NamedDataset:
@@ -425,12 +425,13 @@ def test_speedups():
         for transformer_layer in [
             TransformerLayerType.DEEPSEEK,
             TransformerLayerType.LLAMA2,
+            TransformerLayerType.GPT2,
         ]:
             for with_lr_scheduler in [False, True]:
                 for optimizer in [AdamConfig()]:
                     config = create_default_config(
                         dataset,
-                    ).with_transformer_layer(TransformerLayerType.LLAMA2)
+                    ).with_transformer_layer(transformer_layer)
                     scheduler = (
                         NoamScheduler(
                             d_model=config.dim_embeddings, factor=2.0, warmup_steps=1000
@@ -450,6 +451,7 @@ def test_speedups():
                             training_timeout_minutes=2,
                             optimizer=optimizer,
                             lr_scheduler=scheduler,
+                            enable_checkpoints=True,
                         ),
                     )
             experiment.plot("debugging.png")
@@ -546,16 +548,19 @@ def long_running_training():
                 lr=3e-4 * world_size,
                 max_grad_norm=1.0,
             )
-            training_options.lr_scheduler = WarmupExpDecay(warmup_epochs=6, gamma=0.96)
+            training_options.lr_scheduler = WarmupExpDecay(warmup_epochs=3, gamma=0.96)
             # Train for two full days
             # training_options.training_timeout_minutes = 60 * 24 * 2
             training_options.accumulation_steps = 1
             training_options.batch_size = dataset.batch_size
             #            training_options.batch_size = 512
             # Try to avoid gradient explosion
-            # config.max_grad_norm = 1.0
-            config.num_transformer_layers = 8
-            config.dim_embeddings = 512
+            # config.num_transformer_layers = 8
+            config.dim_embeddings = dataset.vocab_size**0.25  # 512
+            print(config.dim_embeddings)
+
+            # print(Model(config))
+            # exit(0)
 
             experiment.queue(
                 config,
@@ -565,8 +570,56 @@ def long_running_training():
         experiment.plot("long_running_training.png")
 
 
+def embedding_sizes_functions():
+    for transformer_layer, positional_embeddings in [
+        (TransformerLayerType.DEEPSEEK, PositionalEmbeddingType.NONE),
+        (TransformerLayerType.LLAMA2, PositionalEmbeddingType.NONE),
+        (TransformerLayerType.GPT2, PositionalEmbeddingType.SINUSOIDAL),
+    ]:
+        for dataset in DATASETS:
+            experiment = get_experiment_instance(dataset)
+            # Suggestions by claude (attributions might be incorrect)
+            for experiment_name, embedding_function in [
+                ("Google", lambda vocab_size: vocab_size**0.25),
+                (
+                    "Fast.ai's rule of thumb",
+                    lambda vocab_size: min(50, (vocab_size + 1) // 2),
+                ),
+                (
+                    'The "cardinality" heuristic',
+                    lambda vocab_size: min(256, round(1.6 * vocab_size**0.56)),
+                ),
+            ]:
+                config = (
+                    create_default_config(
+                        dataset,
+                    )
+                    .with_transformer_layer(transformer_layer)
+                    .with_positional_embedding(positional_embeddings)
+                )
+                training_options = GET_DEFAULT_TRAINING_OPTIONS()
+                training_options.accumulation_steps = 1
+                training_options.batch_size = dataset.batch_size
+                training_options.training_timeout_minutes = 2
+
+                raw_dim = int(embedding_function(dataset.vocab_size))
+                config.num_attention_heads = max(1, raw_dim // 8)
+                config.dim_embeddings = config.num_attention_heads * 8
+                assert config.dim_embeddings > 0
+
+                experiment.queue(
+                    config,
+                    experiment_name,
+                    training_options=training_options,
+                )
+            experiment.plot(
+                f"{str(transformer_layer).split('.')[-1]}_embedding_sizes.png"
+            )
+            torch.cuda.empty_cache()
+
+
 def train():
-    long_running_training()
+    # long_running_training()
     # benchmark()
     # mixture_of_expert_model_vs_standard()
     # transformer_layer()
@@ -574,6 +627,7 @@ def train():
     #    normalization_layer()
     # embedding_training()
     # test_speedups()
+    embedding_sizes_functions()
     print("Closing down ...")
 
 
