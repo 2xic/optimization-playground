@@ -239,9 +239,11 @@ class ExperimentDistributed:
         if DISTRIBUTED_STRATEGY == "DDP":
             model = DDP(model, device_ids=[dist.get_rank()])
             print("Using DDP for distributed training")
-        else:
+        elif DISTRIBUTED_STRATEGY == "FDSP":
             model = FSDP(model, device_ids=[dist.get_rank()])
             print("Using FSDP for distributed training")
+        else:
+            raise Exception(f"Unknown DISTRIBUTED_STRATEGY = {DISTRIBUTED_STRATEGY}")
         model.config = config
         experiment_variant, results = execute(
             self.dataset, experiment_variant, model, training_options
@@ -544,6 +546,7 @@ def long_running_training():
             )
 
             training_options = GET_DEFAULT_TRAINING_OPTIONS()
+            training_options.enable_checkpoints = True
             training_options.optimizer = AdamConfig(
                 lr=3e-4 * world_size,
                 max_grad_norm=1.0,
@@ -556,8 +559,9 @@ def long_running_training():
             #            training_options.batch_size = 512
             # Try to avoid gradient explosion
             # config.num_transformer_layers = 8
-            config.dim_embeddings = dataset.vocab_size**0.25  # 512
-            print(config.dim_embeddings)
+            raw_dim = min(256, round(1.6 * dataset.vocab_size**0.56))
+            config.num_attention_heads = max(1, raw_dim // 8)
+            config.dim_embeddings = config.num_attention_heads * 8
 
             # print(Model(config))
             # exit(0)
@@ -619,7 +623,7 @@ def embedding_sizes_functions():
 
 
 def train():
-    # long_running_training()
+    long_running_training()
     # benchmark()
     # mixture_of_expert_model_vs_standard()
     # transformer_layer()
@@ -627,7 +631,7 @@ def train():
     #    normalization_layer()
     # embedding_training()
     # test_speedups()
-    embedding_sizes_functions()
+    # embedding_sizes_functions()
     print("Closing down ...")
 
 

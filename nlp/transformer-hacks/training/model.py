@@ -15,8 +15,7 @@ from .layers import (
     BidirectionalAttention,
     SimpleMultiHeadAttention,
 )
-import json
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, fields
 
 
 class PositionalEmbeddingType(Enum):
@@ -92,6 +91,20 @@ class Config:
             return {k: v.value if isinstance(v, Enum) else v for k, v in data}
 
         return asdict(self, dict_factory=enum_dict_factory)
+
+    @classmethod
+    def from_json(cls, data: dict) -> "Config":
+        converted = {}
+        field_types = {f.name: f.type for f in fields(cls)}
+
+        for key, value in data.items():
+            field_type = field_types.get(key)
+            if isinstance(field_type, type) and issubclass(field_type, Enum):
+                converted[key] = field_type(value)
+            else:
+                converted[key] = value
+
+        return cls(**converted)
 
 
 class NormalizationLayer(nn.Module):
@@ -414,18 +427,26 @@ class EmbeddingModel(nn.Module):
         self.config = config
         self.embeddings: nn.Embedding = None
         self.positional_embeddings: PositionalEmbeddings = None
+        self.first_transformer_layer = None
+        self.mask = None
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 2
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
+        x = self.first_transformer_layer(x, self.mask)
         return x
+
+    def forward_flatten(self, x):
+        return self.forward(x).mean(dim=(0, 1)).reshape((1, -1))
 
     @classmethod
     def from_model(cls, model: "Model"):
         new_embeddings = EmbeddingModel(model.config)
         new_embeddings.embeddings = model.embeddings
         new_embeddings.positional_embeddings = model.positional_embeddings
+        new_embeddings.first_transformer_layer = model.transformer_layers[0]
+        new_embeddings.mask = model.mask
         return new_embeddings
 
     @property
@@ -473,6 +494,26 @@ class Model(nn.Module):
         self.embeddings.weight = self.output_layer.weight
         self.apply(self._init_weights)
 
+        self.mask = None
+        if self.config.masked_order == MaskOrder.TRIU:
+            self.mask = torch.triu(
+                torch.ones(
+                    self.config.sequence_length,
+                    self.config.sequence_length,
+                    # device=x.device,
+                ),
+                diagonal=1,
+            ).bool()
+        elif self.config.masked_order == MaskOrder.TRIL:
+            self.mask = torch.tril(
+                torch.ones(
+                    self.config.sequence_length,
+                    self.config.sequence_length,
+                    # device=x.device,
+                ),
+                diagonal=0,
+            ).bool()
+
     def create_embedding_model(self):
         return EmbeddingModel.from_model(self)
 
@@ -490,27 +531,10 @@ class Model(nn.Module):
         x = self.positional_embeddings(x)
         x = self.dropout(x)
         # Attention mask
-        mask = None
-        if self.config.masked_order == MaskOrder.TRIU:
-            mask = torch.triu(
-                torch.ones(
-                    self.config.sequence_length,
-                    self.config.sequence_length,
-                    device=x.device,
-                ),
-                diagonal=1,
-            ).bool()
-        elif self.config.masked_order == MaskOrder.TRIL:
-            mask = torch.tril(
-                torch.ones(
-                    self.config.sequence_length,
-                    self.config.sequence_length,
-                    device=x.device,
-                ),
-                diagonal=0,
-            ).bool()
+        if self.mask is not None:
+            self.mask.to(x.device)
         for layer in self.transformer_layers:
-            x = layer(x, mask)
+            x = layer(x, self.mask)
         # Output
         x = self.layer_norm(x)
         return self.output_layer(x)

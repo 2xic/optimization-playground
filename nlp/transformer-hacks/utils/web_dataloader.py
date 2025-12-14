@@ -11,6 +11,7 @@ from typing import Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgpack
 import numpy as np
+from typing import List
 
 
 class WebDataloader:
@@ -51,6 +52,33 @@ class WebDataloader:
             rank=self.rank,
             world_size=self.world_size,
         )
+
+    def tokenize(self, documents: List[str]):
+        assert isinstance(documents, list)
+
+        response = self.session.post(
+            f"{self.base_url}/datasets/{self.dataset_name}/tokenize",
+            json={"documents": documents},
+        )
+
+        if response.status_code != 200:
+            raise Exception(response.text)
+
+        tokenized_docs = response.json()["tokenized_documents"]
+
+        results = []
+        for doc in tokenized_docs:
+            chunks = [
+                doc[start : start + self.sequence_size]
+                for start in range(0, len(doc), self.sequence_size)
+            ]
+            padded = [
+                chunk + [self.padding_index] * (self.sequence_size - len(chunk))
+                for chunk in chunks
+            ]
+            results.append(torch.tensor(padded, dtype=torch.long))
+
+        return results
 
 
 class ThreadedDataLoader:

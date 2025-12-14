@@ -202,7 +202,7 @@ class BaseTrainer(ABC):
                 time.time() - self.last_checkpoint > self.checkpoint_interval
                 and training_options.enable_checkpoints
             ):
-                self.checkpoint(model, sum_loss, sum_accuracy)
+                self.checkpoint(model, sum_loss, sum_accuracy, count_rows)
 
             sum_loss += loss.item()
             sum_accuracy += accuracy.item()
@@ -211,19 +211,20 @@ class BaseTrainer(ABC):
             if self.has_timeout(training_options):
                 print("Hit timeout")
                 break
+        # Always do a save of the final model also.
         if training_options.enable_checkpoints:
-            self.checkpoint(model, sum_loss, sum_accuracy)
+            self.checkpoint(model, sum_loss, sum_accuracy, count_rows)
 
         return sum_accuracy / count_rows * 100 if count_rows > 0 else None, sum_loss
 
-    def checkpoint(self, model, sum_loss, sum_accuracy):
+    def checkpoint(self, model, sum_loss, sum_accuracy, sum_rows):
         self.checkpoints_tracker.checkpoint(
             model,
             self.optimizer,
             model.config,
             Stats(
                 loss=sum_loss,
-                accuracy=sum_accuracy,
+                accuracy=sum_accuracy / sum_rows,
                 runtime_seconds=time.time() - self.start,
                 steps=self.batch_num,
             ),
@@ -384,6 +385,8 @@ class GradScalerTrainer(Trainer):
 
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
+
+            self.batch_num += 1
 
             if objective.has_evaluator:
                 with self.metrics_tracker.span("evaluator"):

@@ -17,20 +17,25 @@ from xgboost import XGBRegressor
 from optimization_playground_shared.utils.ClassImbalanceSplitter import balance_classes
 from big_embeddings.Wrapper import Wrapper
 from torch_score_models.linear import ModelInterface
-from optimization_playground_shared.utils.LocalEmbeddingsModelApi import LocalEmbeddingsModelApi
+from optimization_playground_shared.utils.LocalEmbeddingsModelApi import (
+    LocalEmbeddingsModelApi,
+)
+
 
 def evaluation():
     X, y = get_dataset()
     X, y = balance_classes(X, y)
     X = [str(i) for i in X]
-    assert type(X[0]) == str, type(X[0])
-    X_train_original, X_test_original, y_train_original, y_test_original = train_test_split(
-        X, y, test_size=0.33, random_state=42
+    assert isinstance(X[0], str), type(X[0])
+    X_train_original, X_test_original, y_train_original, y_test_original = (
+        train_test_split(X, y, test_size=0.33, random_state=42)
     )
     model_pipeline_configs = {
-#        "local":[
-#            LocalEmbeddingsModelApi("model", os.environ.get("LOCAL_HOST", "http://localhost:1245")),
-#        ],
+        "local": [
+            LocalEmbeddingsModelApi(
+                "model", os.environ.get("LOCAL_HOST", "http://localhost:1245")
+            ),
+        ],
         "BM25": [
             BM25(),
         ],
@@ -48,45 +53,47 @@ def evaluation():
     # TODO: move to other dict if you want to use
     if False:
         _disabled = {
-        "voyage": [
-            ClaudeWrapper(),
-        ],
-        "mixedbread-ai":[
-            HuggingFaceWrapper(
-                "mixedbread-ai/mxbai-embed-large-v1"
-            ),
-        ],
-        "intfloat":[
-            HuggingFaceWrapper("intfloat/multilingual-e5-large"),
-        ],
-        "big_gpt": [
-            Wrapper(),
-        ],
-        "torch_next_token_bigger": [
-            EmbeddingWrapperBigger(),
-            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_old_good_one.pkt"),
-            EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
-        ],
-        "torch_contrastive": [
-            ContrastiveEmbeddingWrapper(),
-        ],
-        "untrained reference": [
-            EmbeddingWrapper(trained=False),
-        ],
-        "torch_next_token": [
-            EmbeddingWrapper(),
-            EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
-        ],
-    }
+            "voyage": [
+                ClaudeWrapper(),
+            ],
+            "mixedbread-ai": [
+                HuggingFaceWrapper("mixedbread-ai/mxbai-embed-large-v1"),
+            ],
+            "intfloat": [
+                HuggingFaceWrapper("intfloat/multilingual-e5-large"),
+            ],
+            "big_gpt": [
+                Wrapper(),
+            ],
+            "torch_next_token_bigger": [
+                EmbeddingWrapperBigger(),
+                EmbeddingWrapperBigger().load(
+                    ".model_state_gpt_bigger_old_good_one.pkt"
+                ),
+                EmbeddingWrapperBigger().load(".model_state_gpt_bigger_lr.pkt"),
+            ],
+            "torch_contrastive": [
+                ContrastiveEmbeddingWrapper(),
+            ],
+            "untrained reference": [
+                EmbeddingWrapper(trained=False),
+            ],
+            "torch_next_token": [
+                EmbeddingWrapper(),
+                EmbeddingWrapper().load(".model_state_gpt_lr.pkt"),
+            ],
+        }
     results = {}
     for base_config_name in model_pipeline_configs:
         best_local_config_score = 0
         best_local_config_string = None
         for index, embedding in enumerate(model_pipeline_configs[base_config_name]):
-            (X_train, X_test, y_train, y_test) = Pipeline(
-                sample_size=1
-            ).transform(
-                X_train_original, X_test_original, y_train_original, y_test_original, embedding
+            (X_train, X_test, y_train, y_test) = Pipeline(sample_size=1).transform(
+                X_train_original,
+                X_test_original,
+                y_train_original,
+                y_test_original,
+                embedding,
             )
             # TODO: Add more fancy models also
             models = [
@@ -100,10 +107,15 @@ def evaluation():
                 BisectingKMeans(n_clusters=2),
             ]
             for model in models:
-                config_name =  f"{model.__class__.__name__} + {base_config_name}"
+                config_name = f"{model.__class__.__name__} + {base_config_name}"
                 print((config_name))
                 model.fit(X_train, y_train)
-                accuracy = accuracy_score(y_test, list(map(lambda x: min(max(round(x), 0), 1), model.predict(X_test))))
+                accuracy = accuracy_score(
+                    y_test,
+                    list(
+                        map(lambda x: min(max(round(x), 0), 1), model.predict(X_test))
+                    ),
+                )
                 print(f"\t{model.__class__.__name__} -> accuracy: {accuracy}")
                 print("")
                 new_score = accuracy * 100
@@ -116,25 +128,20 @@ def evaluation():
         model_pipeline_configs[base_config_name] = []
         results[best_local_config_string] = best_local_config_score
 
-    results = {
-        key:value
-        for key, value in sorted(results.items(), key=lambda x: x[1])
-    }
+    results = {key: value for key, value in sorted(results.items(), key=lambda x: x[1])}
     config_name = list(results.keys())
     values = list(results.values())
-    
-    plt.bar(config_name, values,width = 0.4)
+
+    plt.bar(config_name, values, width=0.4)
     plt.xlabel("Config name")
     plt.ylabel("Accuracy %")
     plt.ylim([50, 100])
     plt.title("Results")
-    path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "results.png"
-    )
-    plt.xticks(rotation=45, ha='right')
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results.png")
+    plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     plt.savefig(path)
+
 
 if __name__ == "__main__":
     evaluation()
