@@ -494,25 +494,27 @@ class Model(nn.Module):
         self.embeddings.weight = self.output_layer.weight
         self.apply(self._init_weights)
 
-        self.mask = None
+        # Attention mask
         if self.config.masked_order == MaskOrder.TRIU:
-            self.mask = torch.triu(
+            mask = torch.triu(
                 torch.ones(
                     self.config.sequence_length,
                     self.config.sequence_length,
-                    # device=x.device,
                 ),
                 diagonal=1,
             ).bool()
+            self.register_buffer("mask", mask, persistent=True)
         elif self.config.masked_order == MaskOrder.TRIL:
-            self.mask = torch.tril(
+            mask = torch.tril(
                 torch.ones(
                     self.config.sequence_length,
                     self.config.sequence_length,
-                    # device=x.device,
                 ),
                 diagonal=0,
             ).bool()
+            self.register_buffer("mask", mask, persistent=True)
+        else:
+            self.register_buffer("mask", None, persistent=False)
 
     def create_embedding_model(self):
         return EmbeddingModel.from_model(self)
@@ -530,9 +532,6 @@ class Model(nn.Module):
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
         x = self.dropout(x)
-        # Attention mask
-        if self.mask is not None:
-            self.mask.to(x.device)
         for layer in self.transformer_layers:
             x = layer(x, self.mask)
         # Output

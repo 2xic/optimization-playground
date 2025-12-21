@@ -79,6 +79,20 @@ NAMED_DATASETS = {
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
+            "smedium-web-256",
+            batch_size=110,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "small-web-1024",
+            batch_size=8,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
             "small-web",
             batch_size=256,
             rank=rank,
@@ -206,6 +220,8 @@ def execute(
             break
         assert len(epochs_accuracy.min_max_avg) == len(accuracy)
     # dist.barrier()
+    # Close out all metrics
+    trainer.metrics_tracker.close()
     return experiment_variant, Results(
         accuracy=epochs_accuracy,
         loss=epochs_loss,
@@ -555,6 +571,8 @@ def long_running_training():
             # Train for two full days
             # training_options.training_timeout_minutes = 60 * 24 * 2
             training_options.accumulation_steps = 1
+            #            if dataset.batch_size < 64:
+            #                training_options.accumulation_steps = 64 // dataset.batch_size
             training_options.batch_size = dataset.batch_size
             #            training_options.batch_size = 512
             # Try to avoid gradient explosion

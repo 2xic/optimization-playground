@@ -10,7 +10,6 @@ from optimization_playground_shared.nlp.utils.sampling import (
 
 
 def get_best_gpu(model_size_gb, margins_gb=4):
-    """Find GPU with most free memory using pynvml"""
     try:
         pynvml.nvmlInit()
         device_count = pynvml.nvmlDeviceGetCount()

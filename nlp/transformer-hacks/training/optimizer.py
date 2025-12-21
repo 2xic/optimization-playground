@@ -164,13 +164,14 @@ class AdamOptimizerWrapper(torch.optim.Adam):
             params,
             **kwargs,
         )
-        self.params = params
         self.defaults["max_grad_norm"] = max_grad_norm
 
     def step(self, closure=None):
         max_grad_norm = self.defaults.get("max_grad_norm")
-        if max_grad_norm is not None:
-            torch.nn.utils.clip_grad_norm_(self.params, max_grad_norm)
+        if max_grad_norm is not None and max_grad_norm > 0:
+            all_params = [p for group in self.param_groups for p in group['params']]
+            if all_params:
+                torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
         return super().step(closure)
 
 
@@ -205,11 +206,12 @@ class AdamWOptimizerWrapper(torch.optim.AdamW):
             params,
             **kwargs,
         )
-        self.params = params
         self.defaults["max_grad_norm"] = max_grad_norm
 
     def step(self, closure=None):
         max_grad_norm = self.defaults.get("max_grad_norm")
         if max_grad_norm and max_grad_norm > 0:
-            torch.nn.utils.clip_grad_norm_(self.params, max_grad_norm)
+            all_params = [p for group in self.param_groups for p in group['params']]
+            if all_params:
+                torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
         return super().step(closure)

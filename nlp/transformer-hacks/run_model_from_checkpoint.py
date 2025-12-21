@@ -25,7 +25,7 @@ class BestModelResult:
             self.path = path
 
     def update_by_accuracy(self, accuracy, path):
-        if accuracy <= 1 and (self.accuracy is None or self.accuracy < accuracy):
+        if self.accuracy < accuracy:
             self.accuracy = accuracy
             self.path = path
 
@@ -47,7 +47,9 @@ def load_best_model_from_checkpoint():
             elif os.path.basename(i) == "stats.json":
                 data = json.loads(storage.load_bytes(i))
                 print(data)
-                best_model_path.update_by_accuracy(data["accuracy"], os.path.dirname(i))
+                best_model_path.update_by_accuracy(
+                    data["accuracy_pct"], os.path.dirname(i)
+                )
 
     model_config = Config.from_json(
         json.loads(

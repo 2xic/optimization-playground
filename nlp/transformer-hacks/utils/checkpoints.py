@@ -1,3 +1,7 @@
+import warnings
+from cryptography.utils import CryptographyDeprecationWarning
+
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 from pathlib import Path
 from dotenv import load_dotenv
 import os
@@ -28,7 +32,6 @@ class StorageBox:
         self.transport = paramiko.Transport((host, 23))
         self.transport.connect(username=username, password=password)
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
-        self.create_directory_recursive(self.remote_dir)
 
     def _path_exists(self, path: str) -> bool:
         try:
@@ -107,10 +110,11 @@ class StorageBox:
 
 @dataclass
 class Stats:
-    accuracy: float
-    loss: float
+    accuracy_pct: float
+    loss_average: float
     runtime_seconds: int
     steps: int
+    dataset: str
 
     def to_json(self) -> dict:
         return asdict(self)
