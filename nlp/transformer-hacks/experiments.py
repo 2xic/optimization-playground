@@ -22,6 +22,7 @@ from training.optimizer import (
     ExponentialLR,
     WarmupExpDecay,
 )
+from typing import Callable
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
@@ -35,9 +36,11 @@ from dotenv import load_dotenv
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
+from dataclasses import dataclass
 import torch
 import os
 from utis import get_best_gpu, estimate_cuda_size, benchmark_training
+from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # os.environ["TORCH_USE_CUDA_DSA"] = "1"
@@ -109,6 +112,13 @@ NAMED_DATASETS = {
             os.environ["WEB_DATALOADER"],
             "medium-512-web",
             batch_size=64,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "smoltalk-256",
+            batch_size=110,
             rank=rank,
             world_size=world_size,
         ),
@@ -228,6 +238,24 @@ def execute(
     )
 
 
+@dataclass
+class LazyModelConstruction:
+    config: Config
+    model: Callable[Model, ...] = Model
+
+    def __call__(self):
+        return self.model(self.config)
+
+
+@dataclass
+class PretrainedModelConstruction:
+    config: Config
+    model: Model
+
+    def __call__(self):
+        return self.model
+
+
 class ExperimentDistributed:
     def __init__(self, dataset):
         self.experiments = {}
@@ -235,9 +263,8 @@ class ExperimentDistributed:
 
     def queue(
         self,
-        config: Config,
+        model_config: LazyModelConstruction,
         experiment_variant,
-        model=Model,
         training_options=TrainingOptions(
             epochs=EPOCHS,
             batch_size=32,
@@ -245,9 +272,9 @@ class ExperimentDistributed:
             optimizer=AdamConfig(),
         ),
     ):
-        model = model(config)
+        model = model_config()
         device = torch.device(f"cuda:{dist.get_rank()}")
-        model = model.to(device)
+        model: Model = model.to(device)
         #       print(model)
         #        exit(0)
         training_options.device = device
@@ -260,7 +287,7 @@ class ExperimentDistributed:
             print("Using FSDP for distributed training")
         else:
             raise Exception(f"Unknown DISTRIBUTED_STRATEGY = {DISTRIBUTED_STRATEGY}")
-        model.config = config
+        model.config = model_config.config
         experiment_variant, results = execute(
             self.dataset, experiment_variant, model, training_options
         )
@@ -299,12 +326,11 @@ class ExperimentMultiProcess:
 
     def queue(
         self,
-        config: Config,
+        model_config: LazyModelConstruction,
         experiment_variant,
-        model=Model,
         training_options=GET_DEFAULT_TRAINING_OPTIONS(),
     ):
-        self.queue_runs.append((config, experiment_variant, model, training_options))
+        self.queue_runs.append((model_config, experiment_variant, training_options))
 
     def _execute(self, *args):
         if self.skip_thread:
@@ -315,12 +341,11 @@ class ExperimentMultiProcess:
     def plot(self, name: str):
         results = []
         for (
-            config,
+            model_config,
             experiment_variant,
-            model,
             training_options,
         ) in self.queue_runs:
-            model = model(config)
+            model = model_config()
             device_id = None
             while device_id is None:
                 device_id = get_best_gpu(estimate_cuda_size(model))
@@ -360,7 +385,7 @@ def positional_embeddings():
                 dataset,
             ).with_positional_embedding(positional_embedding)
             experiment.queue(
-                config,
+                LazyModelConstruction(config),
                 positional_embedding,
             )
         experiment.plot("positional_embeddings.png")
@@ -381,7 +406,7 @@ def transformer_layer():
                 dataset,
             ).with_transformer_layer(transformer_layer)
             experiment.queue(
-                config,
+                LazyModelConstruction(config),
                 transformer_layer,
             )
         experiment.plot("transformer_layer.png")
@@ -398,7 +423,7 @@ def normalization_layer():
                 dataset,
             ).with_normalization_layer(transformer_layer)
             experiment.queue(
-                config,
+                LazyModelConstruction(config),
                 transformer_layer,
             )
         experiment.plot("normalization_layer.png")
@@ -414,7 +439,7 @@ def mixture_of_expert_model_vs_standard():
             config = create_default_config(
                 dataset,
             )
-            experiment.queue(config, name, model=model)
+            experiment.queue(LazyModelConstruction(config), name, model=model)
             torch.cuda.empty_cache()
         experiment.plot("model_vs_moe.png")
 
@@ -429,7 +454,7 @@ def embedding_training():
             options = GET_DEFAULT_TRAINING_OPTIONS()
             options.optimizer = optimizer
             experiment.queue(
-                config,
+                LazyModelConstruction(config),
                 "bert_" + optimizer.__class__.__name__ + f"_{dataset.name}",
                 training_options=options,
             )
@@ -461,7 +486,7 @@ def test_speedups():
                         "with_scheduler" if with_lr_scheduler else "no_scheduler"
                     )
                     experiment.queue(
-                        config,
+                        LazyModelConstruction(config),
                         f"{transformer_layer}_{scheduler_str}_{optimizer.__class__.__name__}_{dataset.name}",
                         training_options=TrainingOptions(
                             epochs=EPOCHS,
@@ -495,11 +520,17 @@ def test_pass():
     experiment.skip_thread = True
     config.masked_order = MaskOrder.TRIU
     experiment.queue(
-        config, "Fixed mask", training_options=options, optimizer=adam_config
+        LazyModelConstruction(config),
+        "Fixed mask",
+        training_options=options,
+        optimizer=adam_config,
     )
     config.masked_order = MaskOrder.TRIL
     experiment.queue(
-        config, "Bad mask", training_options=options, optimizer=adam_config
+        LazyModelConstruction(config),
+        "Bad mask",
+        training_options=options,
+        optimizer=adam_config,
     )
     config.masked_order = MaskOrder.NONE
     experiment.queue(config, "NO mask", training_options=options, optimizer=adam_config)
@@ -585,7 +616,7 @@ def long_running_training():
             # exit(0)
 
             experiment.queue(
-                config,
+                LazyModelConstruction(config),
                 transformer_layer,
                 training_options=training_options,
             )
@@ -630,7 +661,7 @@ def embedding_sizes_functions():
                 assert config.dim_embeddings > 0
 
                 experiment.queue(
-                    config,
+                    LazyModelConstruction(config),
                     experiment_name,
                     training_options=training_options,
                 )
@@ -640,8 +671,26 @@ def embedding_sizes_functions():
             torch.cuda.empty_cache()
 
 
+def fine_tuning():
+    # 1. Take a pre-trained model
+    # 2.Run on new dataset and see what happens
+    dataset = NAMED_DATASETS["smoltalk-256"]
+    base_model, config = load_best_model_from_checkpoint("smedium-web-256")
+    experiment = get_experiment_instance(dataset)
+    training_options = GET_DEFAULT_TRAINING_OPTIONS()
+
+    experiment.queue(
+        PretrainedModelConstruction(config, base_model),
+        config.transformer_layer,
+        training_options,
+    )
+    experiment.plot("finetuning_from_smedium_web.png")
+    print(base_model)
+
+
 def train():
-    long_running_training()
+    # long_running_training()
+    fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()
     # transformer_layer()

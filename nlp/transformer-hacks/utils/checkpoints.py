@@ -120,7 +120,7 @@ class Stats:
         return asdict(self)
 
 
-class StorageBoxCheckpointer(StorageBox):
+class StorageBoxCheckpoint(StorageBox):
     def __init__(self, host, username, password, run_id):
         today = date.today().isoformat()
         self.base_name = f"checkpoints/{today}/{run_id}"

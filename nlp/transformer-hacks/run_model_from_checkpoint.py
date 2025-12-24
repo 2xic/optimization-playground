@@ -9,6 +9,7 @@ import torch
 import io
 from utils.web_dataloader import WebDataloader
 from flask import Flask, request, jsonify
+from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
 
 load_dotenv()
 
@@ -30,45 +31,9 @@ class BestModelResult:
             self.path = path
 
 
-def load_best_model_from_checkpoint():
-    storage = StorageBox(
-        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
-        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
-        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
-    )
-    best_model_path = BestModelResult(path="checkpoints/2025-12-14/")
-    queue = [None]
-    while len(queue) > 0:
-        base = queue.pop()
-        for i in storage.list(base):
-            print(i)
-            if storage.is_directory(i):
-                queue.append(i)
-            elif os.path.basename(i) == "stats.json":
-                data = json.loads(storage.load_bytes(i))
-                print(data)
-                best_model_path.update_by_accuracy(
-                    data["accuracy_pct"], os.path.dirname(i)
-                )
-
-    model_config = Config.from_json(
-        json.loads(
-            storage.load_bytes(os.path.join(best_model_path.path, "config.json"))
-        )
-    )
-    print(best_model_path)
-    print(model_config)
-    model = Model(model_config)
-    print(model)
-    print("Loading weights ... ")
-    weights = torch.load(
-        io.BytesIO(storage.load_bytes(os.path.join(best_model_path.path, "model.pt"))),
-        map_location=torch.device("cpu"),
-    )
-    model.load_state_dict(weights)
-
+def load_model_and_dataloader():
+    model = load_best_model_from_checkpoint(target_dataset="small-web")
     model = model.create_embedding_model()
-
     dataloader = WebDataloader(
         os.environ["WEB_DATALOADER"],
         "small-web",
@@ -80,7 +45,7 @@ def load_best_model_from_checkpoint():
     return model, dataloader
 
 
-model, dataloader = load_best_model_from_checkpoint()
+model, dataloader = load_model_and_dataloader()
 app = Flask(__name__)
 
 

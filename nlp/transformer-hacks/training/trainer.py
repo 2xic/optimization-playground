@@ -13,7 +13,7 @@ from abc import ABC
 from .optimizer import Optimizer, AdamConfig, Scheduler
 from dataclasses import dataclass, field
 from utils.metrics import MetricsTracker
-from utils.checkpoints import StorageBoxCheckpointer, Stats
+from utils.checkpoints import StorageBoxCheckpoint, Stats
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
 
@@ -155,7 +155,7 @@ class BaseTrainer(ABC):
             dataset_name=None,
             rank=dist.get_rank() if dist.is_initialized() else 0,
         )
-        self.checkpoints_tracker = StorageBoxCheckpointer(
+        self.checkpoints_tracker = StorageBoxCheckpoint(
             run_id=run_id,
             host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
             username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
@@ -190,7 +190,8 @@ class BaseTrainer(ABC):
         has_tqdm_loader = isinstance(progress, tqdm)
         self.metrics_tracker.dataset_name = loader.name
         iterator = timer_iterator(progress, self.metrics_tracker)
-        for _, (X, y) in enumerate(iterator):
+        for _index, (X, y) in enumerate(iterator):
+            # print("index", index, (X.shape, y.shape))
             loss, accuracy, rows = self.forward(
                 model, objective, X, y, training_options
             )
