@@ -41,6 +41,7 @@ import torch
 import os
 from utis import get_best_gpu, estimate_cuda_size, benchmark_training
 from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
+from utils.mixture_dataloader import WebDataloaderMixture
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # os.environ["TORCH_USE_CUDA_DSA"] = "1"
@@ -119,6 +120,27 @@ NAMED_DATASETS = {
             os.environ["WEB_DATALOADER"],
             "smoltalk-256",
             batch_size=110,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "self-oss-instruct-sc2-H4-256",
+            batch_size=110,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "everyday-conversations-256",
+            batch_size=110,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "medium-clean-web-256",
+            batch_size=32,
             rank=rank,
             world_size=world_size,
         ),
@@ -241,7 +263,7 @@ def execute(
 @dataclass
 class LazyModelConstruction:
     config: Config
-    model: Callable[Model, ...] = Model
+    model: Callable[..., Model] = Model
 
     def __call__(self):
         return self.model(self.config)
@@ -674,10 +696,19 @@ def embedding_sizes_functions():
 def fine_tuning():
     # 1. Take a pre-trained model
     # 2.Run on new dataset and see what happens
-    dataset = NAMED_DATASETS["smoltalk-256"]
+    # dataset = NAMED_DATASETS["smoltalk-256"]
+    dataset = WebDataloaderMixture(
+        [
+            NAMED_DATASETS["smoltalk-256"],
+            NAMED_DATASETS["everyday-conversations-256"],
+            NAMED_DATASETS["self-oss-instruct-sc2-H4-256"],
+        ]
+    )
+    print(f"Trainging on {dataset.name}")
     base_model, config = load_best_model_from_checkpoint("smedium-web-256")
     experiment = get_experiment_instance(dataset)
     training_options = GET_DEFAULT_TRAINING_OPTIONS()
+    training_options.enable_checkpoints = True
 
     experiment.queue(
         PretrainedModelConstruction(config, base_model),
@@ -689,8 +720,8 @@ def fine_tuning():
 
 
 def train():
-    # long_running_training()
-    fine_tuning()
+    long_running_training()
+    # fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()
     # transformer_layer()

@@ -15,6 +15,10 @@ from datetime import date
 import stat
 from tqdm import tqdm
 import hashlib
+from functools import cache
+from concurrent.futures import ThreadPoolExecutor, Future
+from datetime import date
+import atexit
 
 load_dotenv()
 
@@ -102,6 +106,17 @@ class StorageBox:
             if not self._path_exists(current):
                 self.sftp.mkdir(current)
 
+    @cache
+    def walk(self, base=None):
+        queue = [base]
+        while queue:
+            current = queue.pop()
+            for item in self.list(current):
+                if self.is_directory(item):
+                    queue.append(item)
+                else:
+                    yield item
+
     def _cache_key(self, path: str) -> str:
         stat = self.sftp.stat(path)
         key_str = f"{path}:{stat.st_size}:{stat.st_mtime}"
@@ -120,29 +135,40 @@ class Stats:
         return asdict(self)
 
 
+# Uploads files in background to not block the training loop.
 class StorageBoxCheckpoint(StorageBox):
-    def __init__(self, host, username, password, run_id):
+    def __init__(self, host, username, password, run_id, max_workers=2):
         today = date.today().isoformat()
         self.base_name = f"checkpoints/{today}/{run_id}"
         super().__init__(host, username, password, self.base_name)
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        atexit.register(self._shutdown)
 
-    def checkpoint(self, model, optimizer, config, stats: Stats):
+    def _shutdown(self):
+        self._executor.shutdown(wait=True)
+
+    def checkpoint(self, model, optimizer, config, stats: Stats) -> Future:
         full_path = os.path.join(self.base_name, f"step_{stats.steps}")
+        files = {
+            "model.pt": self._serialize_torch(model),
+            "optimizer.pt": self._serialize_torch(optimizer),
+            "stats.json": self._serialize_json(stats),
+            "config.json": self._serialize_json(config),
+        }
 
-        self._store_torch(model, os.path.join(full_path, "model.pt"))
-        self._store_torch(optimizer, os.path.join(full_path, "optimizer.pt"))
-        self._store_json(stats, os.path.join(full_path, "stats.json"))
-        self._store_json(config, os.path.join(full_path, "config.json"))
+        return self._executor.submit(self._upload, files, full_path)
 
-    def _store_json(self, data, remote_path: str):
-        buffer = io.BytesIO()
-        buffer.write(json.dumps(data.to_json(), indent=2).encode("utf-8"))
-        self.save_bytes(buffer.getvalue(), remote_path)
+    def _upload(self, files, full_path):
+        for name, data in files.items():
+            self.save_bytes(data, os.path.join(full_path, name))
 
-    def _store_torch(self, torch_state, remote_path: str):
+    def _serialize_json(self, data) -> bytes:
+        return json.dumps(data.to_json(), indent=2).encode("utf-8")
+
+    def _serialize_torch(self, torch_state) -> bytes:
         buffer = io.BytesIO()
         torch.save(torch_state.state_dict(), buffer)
-        self.save_bytes(buffer.getvalue(), remote_path)
+        return buffer.getvalue()
 
 
 if __name__ == "__main__":

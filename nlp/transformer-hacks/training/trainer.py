@@ -215,7 +215,7 @@ class BaseTrainer(ABC):
             if self.sizer.record_step(training_options.device):
                 # Update the batch size if needed
                 training_options.batch_size = self.sizer.get_batch_size()
-                loader.dataset.batch_size = self.sizer.get_batch_size()
+                loader.set_batch_size(self.sizer.get_batch_size())
 
             sum_loss += loss.item()
             sum_accuracy += accuracy.item()
@@ -314,7 +314,7 @@ class Trainer(BaseTrainer):
             epoch_accuracy, epoch_loss, epoch_rows = super().train(
                 self.model, self.objective, loader, training_options, progress
             )
-            loader.iter.set_epoch(epoch + 1)
+            loader.set_epoch(epoch + 1)
             print(f"Epoch {epoch} done, accuracy {epoch_accuracy}, loss {epoch_loss}")
             epochs_accuracy.append(epoch_accuracy)
             epochs_loss.append(epoch_loss)

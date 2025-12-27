@@ -36,19 +36,14 @@ def load_best_model_from_checkpoint(target_dataset) -> Tuple[Model, Config]:
         password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
     )
     best_model_path = BestModelResult()
-    queue = [None]
-    while len(queue) > 0:
-        base = queue.pop()
-        for i in storage.list(base):
-            print(i)
-            if storage.is_directory(i):
-                queue.append(i)
-            elif os.path.basename(i) == "stats.json":
-                data = json.loads(storage.load_bytes(i))
-                if data["dataset"] != target_dataset:
-                    continue
+
+    for filepath in storage.walk():
+        if os.path.basename(filepath) == "stats.json":
+            data = json.loads(storage.load_bytes(filepath))
+            print(data["dataset"])
+            if data["dataset"] == target_dataset:
                 best_model_path.update_by_accuracy(
-                    data["accuracy_pct"], os.path.dirname(i)
+                    data["accuracy_pct"], os.path.dirname(filepath)
                 )
     if best_model_path.path is None:
         raise Exception("No model found")
@@ -66,5 +61,7 @@ def load_best_model_from_checkpoint(target_dataset) -> Tuple[Model, Config]:
         io.BytesIO(storage.load_bytes(os.path.join(best_model_path.path, "model.pt"))),
         map_location=torch.device("cpu"),
     )
-    model.load_state_dict(weights)
+    new_state_dict = {k.replace("module.", ""): v for k, v in weights.items()}
+    model.load_state_dict(new_state_dict)
+    print("Model loaded!")
     return (model, model_config)

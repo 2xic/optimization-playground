@@ -56,3 +56,4 @@ def train():
 
 if __name__ == "__main__":
     train()
+    # checkpoints/2025-12-25/20251225_100818/s

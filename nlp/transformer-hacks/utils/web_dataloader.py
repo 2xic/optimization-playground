@@ -28,13 +28,15 @@ class WebDataloader:
 
         self.session = requests.Session()
 
+        print(f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/info")
         response = self.session.get(
             f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/info"
         )
         self.info = response.json()
         self.total_samples = self.info["num_rows"]
 
-        self.num_batches = (self.total_samples + self.batch_size - 1) // self.batch_size
+        # self.num_batches = (self.total_samples + self.batch_size - 1) // self.batch_size
+        self.num_batches = self.total_samples // (self.world_size * self.batch_size)
         self.total_rows = self.info["num_rows"]
         self.vocab_size = self.info["training_metadata"]["vocab_size"]
         self.padding_index = self.info["training_metadata"]["padding_index"]
@@ -80,6 +82,19 @@ class WebDataloader:
 
         return results
 
+    def detokenize(self, token_ids: List[str]):
+        assert isinstance(token_ids, list)
+
+        response = self.session.post(
+            f"{self.base_url}/datasets/{self.dataset_name}/detokenize",
+            json={"token_ids": token_ids},
+        )
+
+        if response.status_code != 200:
+            raise Exception(response.text)
+
+        return response.json()["text"]
+
 
 class ThreadedDataLoader:
     def __init__(
@@ -120,8 +135,14 @@ class ThreadedDataLoader:
             world_size=self.world_size,
         )
 
+    def set_epoch(self, epoch):
+        self.iter.set_epoch(epoch)
+
+    def set_batch_size(self, batch_size):
+        self.iter.set_batch_size(batch_size)
+
     def __len__(self):
-        return self.total_batches // self.world_size
+        return self.total_batches
 
     def __iter__(self) -> Iterator:
         self.iter.set_epoch(self.epoch)
@@ -147,7 +168,7 @@ class ThreadedIterator:
     ):
         self.dataset = dataset
         self.session = session
-        self.total_batches = total_batches // world_size
+        self.total_batches = total_batches
         self.total_global_batches = total_batches
         self.prefetch_factor = prefetch_factor
         self.max_workers = max_workers
@@ -169,6 +190,9 @@ class ThreadedIterator:
             target=self._manage_completed_requests, daemon=True
         )
         self.manager_thread.start()
+
+    def set_batch_size(self, batch_size):
+        self.dataset.batch_size = batch_size
 
     def set_epoch(self, epoch):
         self.epoch = epoch

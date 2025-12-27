@@ -10,8 +10,16 @@ import io
 from utils.web_dataloader import WebDataloader
 from flask import Flask, request, jsonify
 from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
+from functools import lru_cache
+from optimization_playground_shared.nlp.utils.sampling import (
+    temperature_sampling,
+    argmax_sampling,
+)
 
 load_dotenv()
+
+
+app = Flask(__name__)
 
 
 @dataclass
@@ -31,33 +39,30 @@ class BestModelResult:
             self.path = path
 
 
-def load_model_and_dataloader():
-    model = load_best_model_from_checkpoint(target_dataset="small-web")
-    model = model.create_embedding_model()
+@lru_cache(maxsize=4)
+def load_model_and_dataloader(target_dataset, dataloader_dataset=None):
+    if dataloader_dataset is None:
+        dataloader_dataset = target_dataset
+    model, _model_config = load_best_model_from_checkpoint(
+        target_dataset=target_dataset
+    )
     dataloader = WebDataloader(
         os.environ["WEB_DATALOADER"],
-        "small-web",
+        dataloader_dataset,
         batch_size=1024,
     )
-    #    doc_tensors = dataloader.tokenize(["hello world!" * 256, "hello world!" * 512])
-    #    for _, doc_tensor in enumerate(doc_tensors):
-    #        print(model.forward_flatten(doc_tensor))
     return model, dataloader
 
 
-model, dataloader = load_model_and_dataloader()
-app = Flask(__name__)
-
-
-@app.route("/predict", methods=["POST"])
-def predict():
+@app.route("/embedding", methods=["POST"])
+def embedding():
     data = request.json
     text = data["text"]
+    dataset = data["dataset"]
+    model, dataloader = load_model_and_dataloader(dataset)
     doc_tensors = dataloader.tokenize([text])
-    #    for _, doc_tensor in enumerate(doc_tensors):
-    #        print(model.forward_flatten(doc_tensor))
+    model = model.create_embedding_model()
     embedding = model.forward_flatten(doc_tensors[0])
-    # embedding = model.transforms([text])
     embedding = embedding[0]
     return jsonify(
         {
@@ -66,8 +71,35 @@ def predict():
     )
 
 
+@app.route("/predict", methods=["POST"])
+def predict():
+    data = request.json
+    documents = data["documents"]
+    dataset = data["dataset"]
+    dataloader_dataset = data["dataloader_dataset"]
+    model, dataloader = load_model_and_dataloader(dataset, dataloader_dataset)
+    model_response = []
+    for text in documents:
+        doc_tensors = dataloader.tokenize([text])[0]
+        doc_tensors = doc_tensors[0]
+        model_temperature_sampling = model.generate(
+            doc_tensors, 128, temperature_sampling
+        )
+        model_argmax_sampling = model.generate(doc_tensors, 128, argmax_sampling)
+        model_response.append(
+            {
+                "model_temperature_sampling": dataloader.detokenize(
+                    model_temperature_sampling
+                ),
+                "model_argmax_sampling": dataloader.detokenize(model_argmax_sampling),
+            }
+        )
+
+    return jsonify(model_response)
+
+
 if __name__ == "__main__":
-    app.run(port=1245)
+    app.run(port=1247)
 
 # if __name__ == "__main__":
 #    load_best_model_from_checkpoint()
