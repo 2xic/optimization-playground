@@ -2,147 +2,191 @@ import random
 import torch.nn as nn
 import torch.nn.functional as F
 import torch
-from experiments import (
-    create_default_config,
-    TransformerLayerType,
-    Datasets,
-)
+
 from training.model import Model
 import random
+import torch
+from optimization_playground_shared.nlp.utils.sampling import (
+    temperature_sampling_old,
+    temperature_sampling,
+)
+import matplotlib.pyplot as plt
+import torch.utils.benchmark as benchmark
+import time
+import numpy as np
+import torch
+from utils.web_dataloader import WebDataloader
+import os
+from dotenv import load_dotenv
+from utils.checkpoints import StorageBoxCheckpoint, Stats
+from datetime import datetime
+from tqdm import tqdm
+
+load_dotenv()
+import time
+from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
 
 
-def create_triplets_with_hard_negatives(bytecode_sequences):
-    triplets = []
+def random_crop(tokens, length=256):
+    """Random offset crop, padded/truncated to fixed length"""
+    seq_len = tokens.size(1)
 
-    for i, seq in enumerate(bytecode_sequences):
-        for j, anchor in enumerate(seq):
-            # Positive: nearby window from same sequence
-            positives = [
-                seq[k] for k in range(max(0, j - 3), min(len(seq), j + 4)) if k != j
-            ]
+    if seq_len <= length:
+        raise Exception("This should not happen")
 
-            # Negative: random window from different sequence
-            other_sequences = [
-                s for idx, s in enumerate(bytecode_sequences) if idx != i
-            ]
-            negatives = [window for seq in other_sequences for window in seq]
-
-            if positives and negatives:
-                triplets.append(
-                    {
-                        "anchor": anchor,
-                        "positive": random.choice(positives),
-                        "negative": random.choice(negatives),
-                    }
-                )
-
-    return triplets
+    # Random offset
+    max_offset = seq_len - length
+    offset = torch.randint(0, max_offset + 1, (1,)).item()
+    return tokens[:, offset : offset + length]
 
 
-class ContrastiveTransformer(nn.Module):
-    def __init__(self, transformer_model, embedding_dim):
-        super().__init__()
-        self.transformer = transformer_model
-        self.pooler = nn.Linear(transformer_model.config.vocab_size, embedding_dim)
-
-    def forward(self, input_ids):
-        outputs = self.transformer(input_ids)
-        cls_embedding = outputs[:, 0, :]
-        sentence_embedding = self.pooler(cls_embedding)
-        return F.normalize(sentence_embedding, p=2, dim=1)
-
-
-def contrastive_loss(anchor_emb, pos_emb, neg_emb, temperature=0.07):
-    """Calculate contrastive loss"""
-    pos_sim = torch.sum(anchor_emb * pos_emb, dim=1) / temperature
-    neg_sim = torch.sum(anchor_emb * neg_emb, dim=1) / temperature
-
-    logits = torch.stack([pos_sim, neg_sim], dim=1)
-    labels = torch.zeros(logits.size(0), dtype=torch.long, device=logits.device)
-
-    return F.cross_entropy(logits, labels)
-
-
-def prepare_batch(batch_triplets):
-    anchor_ids = []
-    pos_ids = []
-    neg_ids = []
-
-    for triplet in batch_triplets:
-        # Tokenize anchor, positive, negative
-        anchor_tokens = triplet["anchor"]
-        pos_tokens = triplet["positive"]
-        neg_tokens = triplet["negative"]
-
-        anchor_ids.append(anchor_tokens)
-        pos_ids.append(pos_tokens)
-        neg_ids.append(neg_tokens)
-
-    return {
-        "anchor_ids": torch.stack(anchor_ids),
-        "pos_ids": torch.stack(pos_ids),
-        "neg_ids": torch.stack(neg_ids),
-    }
-
-
-def train_loop_test():
-    device = torch.device("cuda:1")
-    dataset = Datasets.tiny_evm_bytecode()
-    model_config = create_default_config(
-        dataset,
-    ).with_transformer_layer(TransformerLayerType.BERT)
-
-    base_model = Model(model_config)
-    contrastive_model = ContrastiveTransformer(base_model, 512).to(device)
-    optimizer = torch.optim.AdamW(contrastive_model.parameters(), lr=1e-4)
-
-    for index, i in enumerate(
-        dataset.dataset.get_file_content_tokenized(sequence_size=512)
-    ):
-        chunks = list(
-            torch.chunk(i, chunks=int(i.shape[-1] / model_config.sequence_length))
+class EmbeddingTrainer:
+    def __init__(self, model: Model, dataloader, lr=2e-5, margin=0.2, device="cuda"):
+        self.model: Model = model.to(device)
+        self.dataloader = dataloader
+        self.device = device
+        self.margin = margin
+        self.optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.checkpoints_tracker = StorageBoxCheckpoint(
+            run_id=run_id,
+            host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+            username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+            password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
         )
-        triplets = create_triplets_with_hard_negatives(chunks)
-        batch_size = 32
+        self.last_checkpoint = time.time()
 
-        anchor = torch.zeros(
-            (len(triplets) // batch_size, batch_size), device=device
-        ).long()
-        pos = torch.zeros(
-            (len(triplets) // batch_size, batch_size), device=device
-        ).long()
-        neg = torch.zeros(
-            (len(triplets) // batch_size, batch_size), device=device
-        ).long()
+    def embed(self, x):
+        """Mean pool hidden states → normalize"""
+        hidden = self.model.get_hidden_states(x)  # (batch, seq, dim)
+        emb = hidden.mean(dim=1)  # (batch, dim)
+        return F.normalize(emb, p=2, dim=-1)
 
-        for batch_index, i in enumerate(range(0, len(triplets), batch_size)):
-            batch_triplets = triplets[i : i + batch_size]
-            batch = prepare_batch(batch_triplets)
+    def triplet_loss(self, anchor, positive, negative):
+        pos_dist = 1 - F.cosine_similarity(anchor, positive)
+        neg_dist = 1 - F.cosine_similarity(anchor, negative)
+        return F.relu(pos_dist - neg_dist + self.margin).mean()
 
-            anchor_ids = batch["anchor_ids"]
-            pos_ids = batch["pos_ids"]
-            neg_ids = batch["neg_ids"]
+    def train(self, epochs=3, timeout_minutes=60):
+        epoch_losses = []
+        epoch_accuracies = []
+        start_time = time.time()
+        timeout_seconds = timeout_minutes * 60
+        batch_num = 0
 
-            anchor[batch_index] = anchor_ids
-            pos[batch_index] = pos_ids
-            neg[batch_index] = neg_ids
+        os.makedirs("plots/embedding-contrastive", exist_ok=True)
 
-        anchor_emb = contrastive_model(anchor)
-        pos_emb = contrastive_model(pos)
-        neg_emb = contrastive_model(neg)
+        for epoch in range(epochs):
+            total_loss = 0
+            total_correct = 0
+            total_samples = 0
+            steps = 0
 
-        # Calculate loss
-        loss = contrastive_loss(anchor_emb, pos_emb, neg_emb)
+            pbar = tqdm(self.dataloader.iter(), desc=f"Epoch {epoch + 1}/{epochs}")
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            for batch in pbar:
+                if time.time() - start_time > timeout_seconds:
+                    pbar.close()
+                    print(f"Timeout reached ({timeout_minutes} min), stopping early...")
+                    break
 
-        if index % 100 == 0:
-            print("Index: {index}, loss: {loss}".format(index=index, loss=loss.item()))
-        if index % 1000 == 0:
-            torch.save(contrastive_model.state_dict(), "evm_contrastive_model_debug")
+                a = random_crop(batch["ref_tokens"].to(self.device))
+                p = random_crop(batch["pos_tokens"].to(self.device))
+                n = random_crop(batch["neg_tokens"].to(self.device))
+
+                if a.numel() == 0:
+                    continue
+
+                anchor_emb = self.embed(a)
+                pos_emb = self.embed(p)
+                neg_emb = self.embed(n)
+
+                loss = self.triplet_loss(anchor_emb, pos_emb, neg_emb)
+
+                pos_dist = 1 - F.cosine_similarity(anchor_emb, pos_emb)
+                neg_dist = 1 - F.cosine_similarity(anchor_emb, neg_emb)
+                correct = (pos_dist < neg_dist).sum().item()
+                total_correct += correct
+                total_samples += a.size(0)
+
+                self.optimizer.zero_grad()
+                loss.backward()
+                self.optimizer.step()
+
+                total_loss += loss.item()
+                steps += 1
+
+                avg_loss = total_loss / steps
+                acc = total_correct / total_samples * 100 if total_samples > 0 else 0
+                elapsed = (time.time() - start_time) / 60
+                pbar.set_postfix(
+                    loss=f"{avg_loss:.4f}", acc=f"{acc:.2f}%", time=f"{elapsed:.1f}m"
+                )
+                batch_num += 1
+
+                if time.time() - self.last_checkpoint > 60 * 60:
+                    self.checkpoints_tracker.checkpoint(
+                        self.model,
+                        self.optimizer,
+                        self.model.config,
+                        Stats(
+                            loss_average=avg_loss,
+                            accuracy_pct=acc,
+                            runtime_seconds=time.time() - start_time,
+                            steps=batch_num,
+                            dataset="etherscan-similarity-256",
+                        ),
+                    )
+                    self.last_checkpoint = time.time()
+
+            if steps > 0:
+                epoch_losses.append(total_loss / steps)
+                epoch_accuracies.append(total_correct / total_samples * 100)
+
+                fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+                ax1.plot(range(1, len(epoch_losses) + 1), epoch_losses, "b-o")
+                ax1.set_xlabel("Epoch")
+                ax1.set_ylabel("Loss")
+                ax1.set_title("Training Loss")
+                ax1.grid(True)
+
+                ax2.plot(range(1, len(epoch_accuracies) + 1), epoch_accuracies, "g-o")
+                ax2.set_xlabel("Epoch")
+                ax2.set_ylabel("Accuracy (%)")
+                ax2.set_title("Training Accuracy")
+                ax2.grid(True)
+
+                plt.tight_layout()
+                plt.savefig("plots/embedding-contrastive/training.png", dpi=150)
+                plt.close()
+
+            if time.time() - start_time > timeout_seconds:
+                self.checkpoints_tracker.checkpoint(
+                    self.model,
+                    self.optimizer,
+                    self.model.config,
+                    Stats(
+                        loss_average=avg_loss,
+                        accuracy_pct=acc,
+                        runtime_seconds=time.time() - start_time,
+                        steps=batch_num,
+                        dataset="etherscan-similarity-256",
+                    ),
+                )
+                break
+
+
+def fine_tune_model():
+    model, _ = load_best_model_from_checkpoint(target_dataset="opcode-tokens-256")
+    dataloader = WebDataloader(
+        os.environ["WEB_DATALOADER"],
+        dataset_name="etherscan-similarity-256",
+        columns=["ref_tokens", "pos_tokens", "neg_tokens"],
+    )
+    trainer = EmbeddingTrainer(model=model, dataloader=dataloader, device="cuda")
+    trainer.train(epochs=1_000, timeout_minutes=61)
 
 
 if __name__ == "__main__":
-    train_loop_test()
+    fine_tune_model()

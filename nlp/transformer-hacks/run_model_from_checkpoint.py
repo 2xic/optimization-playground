@@ -43,8 +43,8 @@ class BestModelResult:
 def load_model_and_dataloader(target_dataset, dataloader_dataset=None):
     if dataloader_dataset is None:
         dataloader_dataset = target_dataset
-    model, _model_config = load_best_model_from_checkpoint(
-        target_dataset=target_dataset
+    model, _ = load_best_model_from_checkpoint(
+        target_dataset=target_dataset, max_age_days=3
     )
     dataloader = WebDataloader(
         os.environ["WEB_DATALOADER"],
@@ -59,14 +59,37 @@ def embedding():
     data = request.json
     text = data["text"]
     dataset = data["dataset"]
+    method = data.get("method", "mean")
+    normalize = data.get("normalize", False)
+
     model, dataloader = load_model_and_dataloader(dataset)
     doc_tensors = dataloader.tokenize([text])
-    model = model.create_embedding_model()
-    embedding = model.forward_flatten(doc_tensors[0])
-    embedding = embedding[0]
+    embeddings = torch.concat([model.embed(v) for v in doc_tensors], dim=0)
+
+    if method == "mean":
+        pooled = torch.mean(embeddings, dim=0)
+    elif method == "max":
+        pooled = torch.max(embeddings, dim=0).values
+    elif method == "first":
+        pooled = embeddings[0]
+    elif method == "last":
+        pooled = embeddings[-1]
+    elif method == "weighted_decay":
+        weights = torch.arange(len(embeddings), 0, -1, dtype=torch.float)
+        weights = weights / weights.sum()
+        pooled = (embeddings * weights.unsqueeze(1)).sum(dim=0)
+    else:
+        return jsonify({"error": f"Unknown method: {method}"}), 400
+
+    if normalize:
+        pooled = torch.nn.functional.normalize(pooled, dim=0)
+
     return jsonify(
         {
-            "embedding": embedding.tolist(),
+            "embedding": pooled.tolist(),
+            "method": method,
+            "normalized": normalize,
+            "num_chunks": len(doc_tensors),
         }
     )
 
@@ -99,7 +122,7 @@ def predict():
 
 
 if __name__ == "__main__":
-    app.run(port=1247)
+    app.run(port=1255)
 
 # if __name__ == "__main__":
 #    load_best_model_from_checkpoint()

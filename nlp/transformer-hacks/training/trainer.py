@@ -131,7 +131,8 @@ def timer_iterator(dataset, metrics_tracker=None):
         try:
             wait_start = time.time()
             with Timer("timer_iterator"):
-                X, y = next(iterator)
+                batch = next(iterator)
+                X, y = batch["x_tokens"], batch["y_tokens"]
             data_wait_time = time.time() - wait_start
             if metrics_tracker is not None:
                 metrics_tracker.log(data_wait_time=data_wait_time)
@@ -232,19 +233,21 @@ class BaseTrainer(ABC):
         )
 
     def checkpoint(self, model, sum_loss, sum_accuracy, sum_rows):
-        self.checkpoints_tracker.checkpoint(
-            model,
-            self.optimizer,
-            model.config,
-            Stats(
-                loss_average=sum_loss / sum_rows,
-                accuracy_pct=sum_accuracy / sum_rows * 100,
-                runtime_seconds=time.time() - self.start,
-                steps=self.batch_num,
-                dataset=self.metrics_tracker.dataset_name,
-            ),
-        )
-        self.last_checkpoint = time.time()
+        # If you are unlucky
+        if sum_rows > 0:
+            self.checkpoints_tracker.checkpoint(
+                model,
+                self.optimizer,
+                model.config,
+                Stats(
+                    loss_average=sum_loss / sum_rows,
+                    accuracy_pct=sum_accuracy / sum_rows * 100,
+                    runtime_seconds=time.time() - self.start,
+                    steps=self.batch_num,
+                    dataset=self.metrics_tracker.dataset_name,
+                ),
+            )
+            self.last_checkpoint = time.time()
 
     def forward(self, model, objective, X, y, training_options: TrainingOptions):
         X, y = (

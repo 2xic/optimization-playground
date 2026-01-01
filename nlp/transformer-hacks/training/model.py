@@ -421,39 +421,6 @@ class PositionalEmbeddings(nn.Module):
         return self.positional_embeddings(x)
 
 
-class EmbeddingModel(nn.Module):
-    def __init__(self, config: Config):
-        super().__init__()
-        self.config = config
-        self.embeddings: nn.Embedding = None
-        self.positional_embeddings: PositionalEmbeddings = None
-        self.first_transformer_layer = None
-        self.mask = None
-
-    def forward(self, x: torch.Tensor):
-        assert len(x.shape) == 2
-        x = self.embeddings(x)
-        x = self.positional_embeddings(x)
-        x = self.first_transformer_layer(x, self.mask)
-        return x
-
-    def forward_flatten(self, x):
-        return self.forward(x).mean(dim=(0, 1)).reshape((1, -1))
-
-    @classmethod
-    def from_model(cls, model: "Model"):
-        new_embeddings = EmbeddingModel(model.config)
-        new_embeddings.embeddings = model.embeddings
-        new_embeddings.positional_embeddings = model.positional_embeddings
-        new_embeddings.first_transformer_layer = model.transformer_layers[0]
-        new_embeddings.mask = model.mask
-        return new_embeddings
-
-    @property
-    def embedding_size(self):
-        return self.config.dim_embeddings
-
-
 class Model(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
@@ -516,9 +483,6 @@ class Model(nn.Module):
         else:
             self.register_buffer("mask", None, persistent=False)
 
-    def create_embedding_model(self):
-        return EmbeddingModel.from_model(self)
-
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
@@ -528,7 +492,7 @@ class Model(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, x: torch.Tensor):
-        assert len(x.shape) == 2
+        assert len(x.shape) == 2, f"X = {x.shape}"
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
         x = self.dropout(x)
@@ -537,6 +501,21 @@ class Model(nn.Module):
         # Output
         x = self.layer_norm(x)
         return self.output_layer(x)
+
+    def embed(self, x):
+        hidden = self.get_hidden_states(x)
+        emb = hidden.mean(dim=1)
+        return F.normalize(emb, p=2, dim=-1)
+
+    def get_hidden_states(self, x: torch.Tensor):
+        assert len(x.shape) == 2, f"X = {x.shape}"
+        x = self.embeddings(x)
+        x = self.positional_embeddings(x)
+        x = self.dropout(x)
+        for layer in self.transformer_layers:
+            x = layer(x, self.mask)
+        x = self.layer_norm(x)
+        return x
 
     @torch.no_grad()
     def generate(self, input_tokens: torch.Tensor, num_tokens_generate, sampler):

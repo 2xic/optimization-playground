@@ -7,16 +7,22 @@ import queue
 import requests
 import torch
 import time
-from typing import Iterator
+from typing import Iterator, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgpack
 import numpy as np
-from typing import List
 
 
 class WebDataloader:
     def __init__(
-        self, base_url, dataset_name, split="train", batch_size=32, rank=0, world_size=1
+        self,
+        base_url,
+        dataset_name,
+        split="train",
+        batch_size=32,
+        rank=0,
+        world_size=1,
+        columns: Optional[List[str]] = None,
     ):
         self.name = dataset_name
         self.base_url = base_url
@@ -25,22 +31,50 @@ class WebDataloader:
         self.batch_size = batch_size
         self.rank = rank
         self.world_size = world_size
+        self.columns = columns
 
         self.session = requests.Session()
+        self._info = None
 
-        print(f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/info")
-        response = self.session.get(
-            f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/info"
-        )
-        self.info = response.json()
-        self.total_samples = self.info["num_rows"]
+    @property
+    def info(self):
+        if self._info is None:
+            print(f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/info")
+            response = self.session.get(
+                f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/info"
+            )
+            self._info = response.json()
+        return self._info
 
-        # self.num_batches = (self.total_samples + self.batch_size - 1) // self.batch_size
-        self.num_batches = self.total_samples // (self.world_size * self.batch_size)
-        self.total_rows = self.info["num_rows"]
-        self.vocab_size = self.info["training_metadata"]["vocab_size"]
-        self.padding_index = self.info["training_metadata"]["padding_index"]
-        self.sequence_size = self.info["training_metadata"]["sequence_size"]
+    @property
+    def column_names(self):
+        if self.columns is not None:
+            return self.columns
+        return self.info.get("columns", ["x_tokens", "y_tokens"])
+
+    @property
+    def total_samples(self):
+        return self.info["num_rows"]
+
+    @property
+    def num_batches(self):
+        return self.total_samples // (self.world_size * self.batch_size)
+
+    @property
+    def total_rows(self):
+        return self.info["num_rows"]
+
+    @property
+    def vocab_size(self):
+        return self.info["training_metadata"]["vocab_size"]
+
+    @property
+    def padding_index(self):
+        return self.info["training_metadata"]["padding_index"]
+
+    @property
+    def sequence_size(self):
+        return self.info["training_metadata"]["sequence_size"]
 
     def __len__(self):
         return self.num_batches
@@ -209,7 +243,6 @@ class ThreadedIterator:
         self.next_expected_idx = 0
         self.completed_batches = {}
 
-        # Shuffle batch indices — same seed on all ranks so they don't overlap
         g = torch.Generator()
         g.manual_seed(42 + self.epoch)
         self.batch_permutation = torch.randperm(
@@ -228,31 +261,39 @@ class ThreadedIterator:
         if self.shutdown:
             return None
 
-        # Get shuffled global batch index for this rank
         global_batch_idx = self.batch_permutation[
             batch_idx * self.world_size + self.rank
         ]
         start_idx = global_batch_idx * self.dataset.batch_size
         end_idx = min(start_idx + self.dataset.batch_size, self.dataset.total_samples)
 
-        url = f"{self.dataset.base_url}/datasets/{self.dataset.dataset_name}/{self.dataset.split}/get?start={start_idx}&end={end_idx}"
+        columns = ",".join(self.dataset.column_names)
+        url = f"{self.dataset.base_url}/datasets/{self.dataset.dataset_name}/{self.dataset.split}/get?start={start_idx}&end={end_idx}&columns={columns}"
         try:
             response = self.session.get(url, timeout=self.timeout)
             response.raise_for_status()
 
             batch = msgpack.unpackb(response.content, raw=False)
+            columns = self.dataset.column_names
 
-            x_array = np.array([item["x_tokens"] for item in batch], dtype=np.int64)
-            y_array = np.array([item["y_tokens"] for item in batch], dtype=np.int64)
+            # Build dict of tensors for each column
+            result = {}
+            for col in columns:
+                arr = np.array([item[col] for item in batch], dtype=np.int64)
+                result[col] = (
+                    torch.from_numpy(arr).pin_memory()
+                    if torch.cuda.is_available()
+                    else torch.from_numpy(arr)
+                )
 
-            x_tokens = torch.from_numpy(x_array).pin_memory()
-            y_tokens = torch.from_numpy(y_array).pin_memory()
-            return batch_idx, (x_tokens, y_tokens)
+            return batch_idx, result
 
         except Exception as e:
             if not self.shutdown:
                 print(f"Error fetching batch {batch_idx}: {e}")
-            return batch_idx, (torch.tensor([]), torch.tensor([]))
+            # Return empty tensors for each column
+            columns = self.dataset.column_names
+            return batch_idx, {col: torch.tensor([]) for col in columns}
 
     def _manage_completed_requests(self):
         while not self.shutdown:
@@ -308,12 +349,20 @@ class ThreadedIterator:
 
     def __next__(self):
         try:
-            batch = self.batch_queue.get(timeout=60.0)
+            while True:
+                batch = self.batch_queue.get(timeout=60.0)
 
-            if self.next_expected_idx >= self.total_batches:
-                self.epoch_finished = True
+                first_col = next(iter(batch.values()))
+                if first_col.numel() == 0:
+                    if self.next_expected_idx >= self.total_batches:
+                        self.epoch_finished = True
+                        raise StopIteration
+                    continue
 
-            return batch
+                if self.next_expected_idx >= self.total_batches:
+                    self.epoch_finished = True
+
+                return batch
 
         except queue.Empty:
             if self.next_expected_idx >= self.total_batches:

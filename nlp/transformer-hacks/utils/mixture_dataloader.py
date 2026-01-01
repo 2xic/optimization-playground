@@ -61,15 +61,19 @@ class MixtureIterator:
         return self.total
 
     def __iter__(self) -> Iterator:
-        rng = random.Random(self.seed + self.epoch)
-
         iters = [iter(loader) for loader in self.loaders]
-        weights = list(self.lengths)
+        counts = list(self.lengths)
+        remaining = sum(counts)
 
-        for _ in range(self.total):
-            loader_idx = rng.choices(range(len(self.loaders)), weights=weights)[0]
-            weights[loader_idx] -= 1
-            yield next(iters[loader_idx])
+        rng = random.Random(self.seed + self.epoch)
+        loader_idx = rng.randrange(len(self.loaders))
+
+        while remaining > 0:
+            if counts[loader_idx] > 0:
+                counts[loader_idx] -= 1
+                remaining -= 1
+                yield next(iters[loader_idx])
+            loader_idx = (loader_idx + 1) % len(self.loaders)
 
     def __del__(self):
         for loader in self.loaders:

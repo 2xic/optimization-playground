@@ -19,6 +19,7 @@ from functools import cache
 from concurrent.futures import ThreadPoolExecutor, Future
 from datetime import date
 import atexit
+import time
 
 load_dotenv()
 
@@ -107,14 +108,20 @@ class StorageBox:
                 self.sftp.mkdir(current)
 
     @cache
-    def walk(self, base=None):
+    def walk(self, base=None, max_age_days=None):
         queue = [base]
+        cutoff_time = None
+        if max_age_days is not None:
+            cutoff_time = time.time() - (max_age_days * 24 * 60 * 60)
+
         while queue:
             current = queue.pop()
             for item in self.list(current):
                 if self.is_directory(item):
                     queue.append(item)
-                else:
+                elif cutoff_time is None:
+                    yield item
+                elif self.sftp.stat(item).st_mtime >= cutoff_time:
                     yield item
 
     def _cache_key(self, path: str) -> str:

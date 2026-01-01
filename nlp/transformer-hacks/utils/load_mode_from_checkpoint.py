@@ -29,7 +29,9 @@ class BestModelResult:
             self.path = path
 
 
-def load_best_model_from_checkpoint(target_dataset) -> Tuple[Model, Config]:
+def load_best_model_from_checkpoint(
+    target_dataset, max_age_days=3
+) -> Tuple[Model, Config]:
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
         username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
@@ -37,7 +39,7 @@ def load_best_model_from_checkpoint(target_dataset) -> Tuple[Model, Config]:
     )
     best_model_path = BestModelResult()
 
-    for filepath in storage.walk():
+    for filepath in storage.walk(max_age_days=max_age_days):
         if os.path.basename(filepath) == "stats.json":
             data = json.loads(storage.load_bytes(filepath))
             print(data["dataset"])

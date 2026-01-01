@@ -144,6 +144,20 @@ NAMED_DATASETS = {
             rank=rank,
             world_size=world_size,
         ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "large-clean-web-256",
+            batch_size=32,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "opcode-tokens-256",
+            batch_size=32,
+            rank=rank,
+            world_size=world_size,
+        ),
     ]
 }
 
@@ -604,7 +618,7 @@ def long_running_training():
         experiment = get_experiment_instance(dataset)
         for transformer_layer, positional_embeddings in [
             (TransformerLayerType.LLAMA2, PositionalEmbeddingType.NONE),
-            (TransformerLayerType.GPT2, PositionalEmbeddingType.SINUSOIDAL),
+            #     (TransformerLayerType.GPT2, PositionalEmbeddingType.SINUSOIDAL),
         ]:
             config = (
                 create_default_config(
@@ -704,8 +718,9 @@ def fine_tuning():
             NAMED_DATASETS["self-oss-instruct-sc2-H4-256"],
         ]
     )
-    print(f"Trainging on {dataset.name}")
-    base_model, config = load_best_model_from_checkpoint("smedium-web-256")
+    print(f"Training on {dataset.name}")
+    base_model_name = "large-clean-web-256"
+    base_model, config = load_best_model_from_checkpoint(base_model_name)
     experiment = get_experiment_instance(dataset)
     training_options = GET_DEFAULT_TRAINING_OPTIONS()
     training_options.enable_checkpoints = True
@@ -715,7 +730,7 @@ def fine_tuning():
         config.transformer_layer,
         training_options,
     )
-    experiment.plot("finetuning_from_smedium_web.png")
+    experiment.plot("finetuning_from_large_clean_web.png")
     print(base_model)
 
 
