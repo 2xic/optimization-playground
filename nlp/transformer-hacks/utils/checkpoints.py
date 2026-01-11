@@ -20,11 +20,22 @@ from concurrent.futures import ThreadPoolExecutor, Future
 from datetime import date
 import atexit
 import time
+from typing import Dict
 
 load_dotenv()
 
 
-class StorageBox:
+class SingletonMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        key = (cls, args, tuple(sorted(kwargs.items())))
+        if key not in cls._instances:
+            cls._instances[key] = super().__call__(*args, **kwargs)
+        return cls._instances[key]
+
+
+class StorageBox(metaclass=SingletonMeta):
     def __init__(
         self, host: str, username: str, password: str, remote_dir: str = "checkpoints"
     ):
@@ -108,21 +119,33 @@ class StorageBox:
                 self.sftp.mkdir(current)
 
     @cache
-    def walk(self, base=None, max_age_days=None):
+    def walk(self, base=None, max_age_days=None, min_age_days=None):
         queue = [base]
-        cutoff_time = None
-        if max_age_days is not None:
-            cutoff_time = time.time() - (max_age_days * 24 * 60 * 60)
+        now = time.time()
+        max_age_cutoff = (
+            now - (max_age_days * 86400) if max_age_days is not None else None
+        )
+        min_age_cutoff = (
+            now - (min_age_days * 86400) if min_age_days is not None else None
+        )
+
+        def skip_file_or_folder(item):
+            mtime = self.sftp.stat(item).st_mtime
+            if max_age_cutoff is not None and mtime < max_age_cutoff:
+                return True
+            if min_age_cutoff is not None and mtime > min_age_cutoff:
+                return True
+            return False
 
         while queue:
             current = queue.pop()
             for item in self.list(current):
+                if skip_file_or_folder(item):
+                    continue
                 if self.is_directory(item):
                     queue.append(item)
-                elif cutoff_time is None:
-                    yield item
-                elif self.sftp.stat(item).st_mtime >= cutoff_time:
-                    yield item
+                    continue
+                yield item
 
     def _cache_key(self, path: str) -> str:
         stat = self.sftp.stat(path)
@@ -137,6 +160,7 @@ class Stats:
     runtime_seconds: int
     steps: int
     dataset: str
+    metadata: Dict[str, str]
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -167,7 +191,10 @@ class StorageBoxCheckpoint(StorageBox):
 
     def _upload(self, files, full_path):
         for name, data in files.items():
-            self.save_bytes(data, os.path.join(full_path, name))
+            try:
+                self.save_bytes(data, os.path.join(full_path, name))
+            except Exception as e:
+                print(e)
 
     def _serialize_json(self, data) -> bytes:
         return json.dumps(data.to_json(), indent=2).encode("utf-8")

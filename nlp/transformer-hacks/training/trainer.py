@@ -16,6 +16,7 @@ from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
+from typing import Dict
 
 torch.backends.cudnn.benchmark = True
 
@@ -106,6 +107,9 @@ class TrainingOptions:
             return None
         return self.training_timeout_minutes  # * 3
 
+    # Additional metadata
+    metadata: Dict[str, str] = field(default_factory=lambda: {})
+
 
 def debug_print(*args):
     if DEBUG:
@@ -191,7 +195,7 @@ class BaseTrainer(ABC):
         has_tqdm_loader = isinstance(progress, tqdm)
         self.metrics_tracker.dataset_name = loader.name
         iterator = timer_iterator(progress, self.metrics_tracker)
-        for _index, (X, y) in enumerate(iterator):
+        for _, (X, y) in enumerate(iterator):
             # print("index", index, (X.shape, y.shape))
             loss, accuracy, rows = self.forward(
                 model, objective, X, y, training_options
@@ -199,11 +203,12 @@ class BaseTrainer(ABC):
 
             if has_tqdm_loader:
                 progress.set_description(
-                    "Loss {loss}, Accuracy {acc}, Training Time {time}m, Max training time {max_time}m".format(
+                    "Loss {loss}, Accuracy {acc}, batch_size {batch_shape}, Training Time {time}m, Max training time {max_time}m".format(
                         acc=(sum_accuracy / count_rows * 100) if count_rows > 0 else 0,
                         loss=sum_loss,
                         time=self.trained_minutes,
                         max_time=training_options.training_timeout_minutes,
+                        batch_shape=X.shape,
                     )
                 )
 
@@ -211,12 +216,16 @@ class BaseTrainer(ABC):
                 time.time() - self.last_checkpoint > self.checkpoint_interval
                 and training_options.enable_checkpoints
             ):
-                self.checkpoint(model, sum_loss, sum_accuracy, count_rows)
+                self.checkpoint(
+                    training_options, model, sum_loss, sum_accuracy, count_rows
+                )
 
             if self.sizer.record_step(training_options.device):
                 # Update the batch size if needed
                 training_options.batch_size = self.sizer.get_batch_size()
                 loader.set_batch_size(self.sizer.get_batch_size())
+                if isinstance(progress, tqdm):
+                    progress.total = len(loader)
 
             sum_loss += loss.item()
             sum_accuracy += accuracy.item()
@@ -227,12 +236,14 @@ class BaseTrainer(ABC):
                 break
 
         return (
-            sum_accuracy / count_rows * 100 if count_rows > 0 else None,
+            sum_accuracy,
             sum_loss,
             count_rows,
         )
 
-    def checkpoint(self, model, sum_loss, sum_accuracy, sum_rows):
+    def checkpoint(
+        self, training_options: TrainingOptions, model, sum_loss, sum_accuracy, sum_rows
+    ):
         # If you are unlucky
         if sum_rows > 0:
             self.checkpoints_tracker.checkpoint(
@@ -240,11 +251,12 @@ class BaseTrainer(ABC):
                 self.optimizer,
                 model.config,
                 Stats(
-                    loss_average=sum_loss / sum_rows,
-                    accuracy_pct=sum_accuracy / sum_rows * 100,
+                    loss_average=(sum_loss / sum_rows),
+                    accuracy_pct=(sum_accuracy / sum_rows * 100),
                     runtime_seconds=time.time() - self.start,
                     steps=self.batch_num,
                     dataset=self.metrics_tracker.dataset_name,
+                    metadata=training_options.metadata,
                 ),
             )
             self.last_checkpoint = time.time()
@@ -314,20 +326,30 @@ class Trainer(BaseTrainer):
         epochs_loss = []
         loader = dataset.iter(batch_size=training_options.batch_size)
         for epoch in range(training_options.epochs):
-            epoch_accuracy, epoch_loss, epoch_rows = super().train(
+            sum_epoch_accuracy, sum_epoch_loss, sum_epoch_rows = super().train(
                 self.model, self.objective, loader, training_options, progress
             )
             loader.set_epoch(epoch + 1)
-            print(f"Epoch {epoch} done, accuracy {epoch_accuracy}, loss {epoch_loss}")
-            epochs_accuracy.append(epoch_accuracy)
-            epochs_loss.append(epoch_loss)
+            if sum_epoch_rows > 0:
+                accuracy_pct = sum_epoch_accuracy / sum_epoch_rows * 100
+                print(
+                    f"Epoch {epoch} done, accuracy {accuracy_pct}, loss {sum_epoch_loss}"
+                )
+                epochs_accuracy.append(accuracy_pct)
+                epochs_loss.append(sum_epoch_loss)
             # Check timeout
             if self.has_timeout(training_options):
                 print("Hit timeout")
                 break
         # Always do a save of the final model also.
         if training_options.enable_checkpoints:
-            self.checkpoint(self.model, epoch_loss / epoch_rows, epoch_accuracy, 1)
+            self.checkpoint(
+                training_options,
+                self.model,
+                sum_epoch_loss,
+                sum_epoch_accuracy,
+                sum_epoch_rows,
+            )
         return epochs_accuracy, epochs_loss
 
 

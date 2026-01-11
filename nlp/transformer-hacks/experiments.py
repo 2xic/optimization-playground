@@ -40,7 +40,10 @@ from dataclasses import dataclass
 import torch
 import os
 from utis import get_best_gpu, estimate_cuda_size, benchmark_training
-from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
+from utils.load_mode_from_checkpoint import (
+    load_best_model_from_checkpoint,
+    load_model_from_path,
+)
 from utils.mixture_dataloader import WebDataloaderMixture
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -85,6 +88,13 @@ NAMED_DATASETS = {
             os.environ["WEB_DATALOADER"],
             "smedium-web-256",
             batch_size=110,
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "medium-web-256-v2",
+            batch_size=32,
             rank=rank,
             world_size=world_size,
         ),
@@ -646,6 +656,7 @@ def long_running_training():
             # config.num_transformer_layers = 8
             raw_dim = min(256, round(1.6 * dataset.vocab_size**0.56))
             config.num_attention_heads = max(1, raw_dim // 8)
+            config.num_transformer_layers = 8
             config.dim_embeddings = config.num_attention_heads * 8
 
             # print(Model(config))
@@ -718,25 +729,33 @@ def fine_tuning():
             NAMED_DATASETS["self-oss-instruct-sc2-H4-256"],
         ]
     )
-    print(f"Training on {dataset.name}")
-    base_model_name = "large-clean-web-256"
-    base_model, config = load_best_model_from_checkpoint(base_model_name)
     experiment = get_experiment_instance(dataset)
-    training_options = GET_DEFAULT_TRAINING_OPTIONS()
-    training_options.enable_checkpoints = True
+    # for base_model_name in ["medium-web-256", "smedium-web-256", "medium-web-256-v2"]:
+    base_model_name = "medium-web-256-v2"
+    checkpoint_model = "checkpoints/2026-01-09/20260109_212946/step_349032"
+    if True:
+        print(f"Training on {dataset.name}")
+        #        base_model, config = load_best_model_from_checkpoint(base_model_name)
+        base_model, config = load_model_from_path(checkpoint_model)
+        training_options = GET_DEFAULT_TRAINING_OPTIONS()
+        training_options.enable_checkpoints = True
+        # Need to keep track of this to make life easier.
+        training_options.metadata = {
+            "base_model_name": base_model_name,
+        }
 
-    experiment.queue(
-        PretrainedModelConstruction(config, base_model),
-        config.transformer_layer,
-        training_options,
-    )
-    experiment.plot("finetuning_from_large_clean_web.png")
+        experiment.queue(
+            PretrainedModelConstruction(config, base_model),
+            base_model_name,
+            training_options,
+        )
+    experiment.plot("finetuning_from_dataset.png")
     print(base_model)
 
 
 def train():
-    long_running_training()
-    # fine_tuning()
+    # long_running_training()
+    fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()
     # transformer_layer()

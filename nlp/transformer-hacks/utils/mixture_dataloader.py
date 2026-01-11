@@ -62,17 +62,17 @@ class MixtureIterator:
 
     def __iter__(self) -> Iterator:
         iters = [iter(loader) for loader in self.loaders]
-        counts = list(self.lengths)
-        remaining = sum(counts)
+        active = [True] * len(self.loaders)
 
         rng = random.Random(self.seed + self.epoch)
         loader_idx = rng.randrange(len(self.loaders))
 
-        while remaining > 0:
-            if counts[loader_idx] > 0:
-                counts[loader_idx] -= 1
-                remaining -= 1
-                yield next(iters[loader_idx])
+        while any(active):
+            if active[loader_idx]:
+                try:
+                    yield next(iters[loader_idx])
+                except StopIteration:
+                    active[loader_idx] = False
             loader_idx = (loader_idx + 1) % len(self.loaders)
 
     def __del__(self):

@@ -29,6 +29,30 @@ class BestModelResult:
             self.path = path
 
 
+def load_model_from_path(best_model_path):
+    storage = StorageBox(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+    )
+    model_config = Config.from_json(
+        json.loads(storage.load_bytes(os.path.join(best_model_path, "config.json")))
+    )
+    print(best_model_path)
+    print(model_config)
+    model = Model(model_config)
+    print(model)
+    print("Loading weights ... ")
+    weights = torch.load(
+        io.BytesIO(storage.load_bytes(os.path.join(best_model_path, "model.pt"))),
+        map_location=torch.device("cpu"),
+    )
+    new_state_dict = {k.replace("module.", ""): v for k, v in weights.items()}
+    model.load_state_dict(new_state_dict)
+    print("Model loaded!")
+    return (model, model_config)
+
+
 def load_best_model_from_checkpoint(
     target_dataset, max_age_days=3
 ) -> Tuple[Model, Config]:
@@ -41,7 +65,11 @@ def load_best_model_from_checkpoint(
 
     for filepath in storage.walk(max_age_days=max_age_days):
         if os.path.basename(filepath) == "stats.json":
-            data = json.loads(storage.load_bytes(filepath))
+            try:
+                file_content = storage.load_bytes(filepath)
+                data = json.loads(file_content)
+            except Exception as e:
+                print(f"Failed to load file: {e}")
             print(data["dataset"])
             if data["dataset"] == target_dataset:
                 best_model_path.update_by_accuracy(
@@ -49,21 +77,4 @@ def load_best_model_from_checkpoint(
                 )
     if best_model_path.path is None:
         raise Exception("No model found")
-    model_config = Config.from_json(
-        json.loads(
-            storage.load_bytes(os.path.join(best_model_path.path, "config.json"))
-        )
-    )
-    print(best_model_path)
-    print(model_config)
-    model = Model(model_config)
-    print(model)
-    print("Loading weights ... ")
-    weights = torch.load(
-        io.BytesIO(storage.load_bytes(os.path.join(best_model_path.path, "model.pt"))),
-        map_location=torch.device("cpu"),
-    )
-    new_state_dict = {k.replace("module.", ""): v for k, v in weights.items()}
-    model.load_state_dict(new_state_dict)
-    print("Model loaded!")
-    return (model, model_config)
+    return load_model_from_path(best_model_path.path)

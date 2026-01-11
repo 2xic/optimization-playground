@@ -174,9 +174,10 @@ class ThreadedDataLoader:
 
     def set_batch_size(self, batch_size):
         self.iter.set_batch_size(batch_size)
+        self.dataset.batch_size = batch_size
 
     def __len__(self):
-        return self.total_batches
+        return len(self.dataset)
 
     def __iter__(self) -> Iterator:
         self.iter.set_epoch(self.epoch)
@@ -184,6 +185,9 @@ class ThreadedDataLoader:
         return iter(self.iter)
 
     def __del__(self):
+        if hasattr(self, "iter"):
+            self.iter.cleanup()
+
         if hasattr(self, "session"):
             self.session.close()
 
@@ -377,14 +381,16 @@ class ThreadedIterator:
         self.shutdown = True
         self.epoch_finished = True
 
+        if self.manager_thread.is_alive():
+            self.manager_thread.join(timeout=2.0)
+
         while not self.batch_queue.empty():
             try:
                 self.batch_queue.get_nowait()
             except queue.Empty:
                 break
 
-        if hasattr(self, "executor"):
-            self.executor.shutdown(wait=True)
+        self.executor.shutdown(wait=False, cancel_futures=True)
 
     def __del__(self):
         self.cleanup()

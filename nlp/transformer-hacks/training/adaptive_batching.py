@@ -1,8 +1,6 @@
 import collections
-import torch
 import time
-
-
+import torch.distributed as dist
 import pynvml
 
 
@@ -65,11 +63,13 @@ class AdaptiveBatchSizer:
         headroom = self.target_utilization - peak_usage - self.safety_margin
 
         if headroom > increment_cost * 2 and time.time() > self.next_scale_up:
+            rank = dist.get_rank() if dist.is_initialized() else 0
             new_batch = min(self.current_batch + increment, self.max_batch)
-            print(
-                f"Scaling {self.current_batch} -> {new_batch} "
-                f"(+{increment_cost * 100:.1f}%, headroom was {headroom * 100:.1f}%)"
-            )
+            if rank == 0:
+                print(
+                    f"Scaling {self.current_batch} -> {new_batch} "
+                    f"(+{increment_cost * 100:.1f}%, headroom was {headroom * 100:.1f}%)"
+                )
             self.current_batch = new_batch
             self.memory_history.clear()
             self.next_scale_up = time.time() + 30
