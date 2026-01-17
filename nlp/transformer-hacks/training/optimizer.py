@@ -8,6 +8,8 @@ from abc import ABC, abstractmethod
 
 
 class Optimizer(ABC):
+    lr: float = 3e-4
+
     @abstractmethod
     def create_optimizer(self, params):
         pass

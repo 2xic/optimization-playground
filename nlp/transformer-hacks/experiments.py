@@ -168,6 +168,13 @@ NAMED_DATASETS = {
             rank=rank,
             world_size=world_size,
         ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "fineweb-256",
+            batch_size=32,
+            rank=rank,
+            world_size=world_size,
+        ),
     ]
 }
 
@@ -640,8 +647,13 @@ def long_running_training():
 
             training_options = GET_DEFAULT_TRAINING_OPTIONS()
             training_options.enable_checkpoints = True
+            # training_options.optimizer = AdamConfig(
+            #    lr=3e-4 * world_size,
+            #    max_grad_norm=1.0,
+            # )
+            # TODO: experiment with and without world_size scaling
             training_options.optimizer = AdamConfig(
-                lr=3e-4 * world_size,
+                lr=3e-4,
                 max_grad_norm=1.0,
             )
             training_options.lr_scheduler = WarmupExpDecay(warmup_epochs=3, gamma=0.96)
@@ -654,10 +666,18 @@ def long_running_training():
             #            training_options.batch_size = 512
             # Try to avoid gradient explosion
             # config.num_transformer_layers = 8
-            raw_dim = min(256, round(1.6 * dataset.vocab_size**0.56))
-            config.num_attention_heads = max(1, raw_dim // 8)
+
+            # raw_dim = min(256, round(1.6 * dataset.vocab_size**0.56))
+            # config.num_attention_heads = max(1, raw_dim // 8)
+            # config.num_transformer_layers = 8
+            # config.dim_embeddings = config.num_attention_heads * 8
+
+            # TODO: suggestions form talking with Claude
+            head_dim = 64
+            raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+            config.num_attention_heads = max(1, raw_dim // head_dim)
+            config.dim_embeddings = config.num_attention_heads * head_dim
             config.num_transformer_layers = 8
-            config.dim_embeddings = config.num_attention_heads * 8
 
             # print(Model(config))
             # exit(0)
@@ -730,14 +750,16 @@ def fine_tuning():
         ]
     )
     experiment = get_experiment_instance(dataset)
-    # for base_model_name in ["medium-web-256", "smedium-web-256", "medium-web-256-v2"]:
     base_model_name = "medium-web-256-v2"
-    checkpoint_model = "checkpoints/2026-01-09/20260109_212946/step_349032"
+    checkpoint_model = "checkpoints/2026-01-10/20260110_215823/step_159014"
+    # for base_model_name in ["medium-web-256", "smedium-web-256", "medium-web-256-v2"]:
     if True:
         print(f"Training on {dataset.name}")
         #        base_model, config = load_best_model_from_checkpoint(base_model_name)
         base_model, config = load_model_from_path(checkpoint_model)
         training_options = GET_DEFAULT_TRAINING_OPTIONS()
+        # Lower the learning rate by 10x from what we used during training.
+        training_options.optimizer.lr /= 10
         training_options.enable_checkpoints = True
         # Need to keep track of this to make life easier.
         training_options.metadata = {
@@ -754,8 +776,8 @@ def fine_tuning():
 
 
 def train():
-    # long_running_training()
-    fine_tuning()
+    long_running_training()
+    # fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()
     # transformer_layer()

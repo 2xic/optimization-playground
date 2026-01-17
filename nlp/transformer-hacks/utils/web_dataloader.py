@@ -11,6 +11,18 @@ from typing import Iterator, List, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import msgpack
 import numpy as np
+from dataclasses import dataclass
+
+
+@dataclass
+class FloatColumn:
+    name: str
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class WebDataloader:
@@ -89,7 +101,13 @@ class WebDataloader:
             world_size=self.world_size,
         )
 
-    def tokenize(self, documents: List[str]):
+    def convert_token_to_id(self, token):
+        tokenized = self.tokenize([token], padding=False)
+        assert len(tokenized) == 1
+        assert len(tokenized[0]) == 1
+        return tokenized[0][0]
+
+    def tokenize(self, documents: List[str], padding=True):
         assert isinstance(documents, list)
 
         response = self.session.post(
@@ -108,15 +126,19 @@ class WebDataloader:
                 doc[start : start + self.sequence_size]
                 for start in range(0, len(doc), self.sequence_size)
             ]
-            padded = [
-                chunk + [self.padding_index] * (self.sequence_size - len(chunk))
-                for chunk in chunks
-            ]
-            results.append(torch.tensor(padded, dtype=torch.long))
+            if padding:
+                chunks = [
+                    chunk + [self.padding_index] * (self.sequence_size - len(chunk))
+                    for chunk in chunks
+                ]
+            results.append(torch.tensor(chunks, dtype=torch.long))
 
         return results
 
-    def detokenize(self, token_ids: List[str]):
+    def detokenize(self, token_ids: List[int]):
+        assert isinstance(token_ids, list)
+        # remove the [PAD] token
+        token_ids = list(filter(lambda x: x != self.padding_index, token_ids))
         assert isinstance(token_ids, list)
 
         response = self.session.post(
@@ -133,7 +155,7 @@ class WebDataloader:
 class ThreadedDataLoader:
     def __init__(
         self,
-        dataset,
+        dataset: WebDataloader,
         batch_size: int = 1,
         prefetch_factor: int = 4,
         max_workers: int = 8,
@@ -195,7 +217,7 @@ class ThreadedDataLoader:
 class ThreadedIterator:
     def __init__(
         self,
-        dataset,
+        dataset: WebDataloader,
         session,
         total_batches,
         prefetch_factor,
@@ -271,7 +293,7 @@ class ThreadedIterator:
         start_idx = global_batch_idx * self.dataset.batch_size
         end_idx = min(start_idx + self.dataset.batch_size, self.dataset.total_samples)
 
-        columns = ",".join(self.dataset.column_names)
+        columns = ",".join(list(map(str, self.dataset.column_names)))
         url = f"{self.dataset.base_url}/datasets/{self.dataset.dataset_name}/{self.dataset.split}/get?start={start_idx}&end={end_idx}&columns={columns}"
         try:
             response = self.session.get(url, timeout=self.timeout)
@@ -279,17 +301,19 @@ class ThreadedIterator:
 
             batch = msgpack.unpackb(response.content, raw=False)
             columns = self.dataset.column_names
-
             # Build dict of tensors for each column
-            result = {}
+            result = {"dataset": self.dataset.name}
             for col in columns:
-                arr = np.array([item[col] for item in batch], dtype=np.int64)
+                if isinstance(col, FloatColumn):
+                    arr = np.array([item[col.name] for item in batch], dtype=np.float32)
+                    col = col.name
+                else:
+                    arr = np.array([item[col] for item in batch], dtype=np.int64)
                 result[col] = (
                     torch.from_numpy(arr).pin_memory()
                     if torch.cuda.is_available()
                     else torch.from_numpy(arr)
                 )
-
             return batch_idx, result
 
         except Exception as e:
@@ -356,7 +380,10 @@ class ThreadedIterator:
             while True:
                 batch = self.batch_queue.get(timeout=60.0)
 
-                first_col = next(iter(batch.values()))
+                iterator = iter(batch.values())
+                first_col = next(iterator)
+                while not torch.is_tensor(first_col):
+                    first_col = next(iterator)
                 if first_col.numel() == 0:
                     if self.next_expected_idx >= self.total_batches:
                         self.epoch_finished = True

@@ -65,10 +65,9 @@ def temperature_sampling(logits, temperature=0.95, top_k=10, top_p=0.6):
     cumulative_probs = torch.cumsum(top_values, dim=-1)
     cutoff_mask = cumulative_probs > top_p
 
-    cutoff_mask = cumulative_probs > top_p
-
     filtered_probs = top_values.clone()
     cutoff_mask[..., 0] = False
+    filtered_probs[cutoff_mask] = 0
 
     probs_sum = filtered_probs.sum(dim=-1, keepdim=True)
     probs_sum = torch.clamp(probs_sum, min=1e-9)

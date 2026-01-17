@@ -29,22 +29,22 @@ class BestModelResult:
             self.path = path
 
 
-def load_model_from_path(best_model_path):
+def load_model_from_path(base_model_path):
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
         username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
         password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
     )
     model_config = Config.from_json(
-        json.loads(storage.load_bytes(os.path.join(best_model_path, "config.json")))
+        json.loads(storage.load_bytes(os.path.join(base_model_path, "config.json")))
     )
-    print(best_model_path)
+    print(base_model_path)
     print(model_config)
     model = Model(model_config)
     print(model)
     print("Loading weights ... ")
     weights = torch.load(
-        io.BytesIO(storage.load_bytes(os.path.join(best_model_path, "model.pt"))),
+        io.BytesIO(storage.load_bytes(os.path.join(base_model_path, "model.pt"))),
         map_location=torch.device("cpu"),
     )
     new_state_dict = {k.replace("module.", ""): v for k, v in weights.items()}
@@ -53,28 +53,48 @@ def load_model_from_path(best_model_path):
     return (model, model_config)
 
 
-def load_best_model_from_checkpoint(
-    target_dataset, max_age_days=3
-) -> Tuple[Model, Config]:
+def load_raw_from_path(base_model_path):
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
         username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
         password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
     )
-    best_model_path = BestModelResult()
+    stats = json.loads(storage.load_bytes(os.path.join(base_model_path, "stats.json")))
+    model_state = torch.load(
+        io.BytesIO(storage.load_bytes(os.path.join(base_model_path, "model.pt"))),
+        map_location=torch.device("cpu"),
+    )
+    optimizer_state = torch.load(
+        io.BytesIO(storage.load_bytes(os.path.join(base_model_path, "optimizer.pt"))),
+        map_location=torch.device("cpu"),
+    )
+    return model_state, optimizer_state, stats
 
-    for filepath in storage.walk(max_age_days=max_age_days):
-        if os.path.basename(filepath) == "stats.json":
-            try:
-                file_content = storage.load_bytes(filepath)
-                data = json.loads(file_content)
-            except Exception as e:
-                print(f"Failed to load file: {e}")
-            print(data["dataset"])
-            if data["dataset"] == target_dataset:
-                best_model_path.update_by_accuracy(
-                    data["accuracy_pct"], os.path.dirname(filepath)
-                )
+
+def iterate_over_dataset(target_dataset, max_age_days):
+    storage = StorageBox(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+    )
+    #    for filepath in storage.walk(max_age_days=max_age_days):
+    #        if os.path.basename(filepath) == "stats.json":
+    for entry in storage.iterate_index():
+        dataset = entry["stats"]["dataset"]
+        filepath = entry["path"]
+        if dataset == target_dataset:
+            yield filepath, entry["stats"]
+
+
+def load_best_model_from_checkpoint(
+    target_dataset, max_age_days=3
+) -> Tuple[Model, Config]:
+    best_model_path = BestModelResult()
+    for model_dir, data in iterate_over_dataset(target_dataset, max_age_days):
+        # TODO: was some older entries which had a corrupted values, they can probably soon be disregarded.
+        if data["accuracy_pct"] <= 100:
+            best_model_path.update_by_accuracy(data["accuracy_pct"], model_dir)
     if best_model_path.path is None:
         raise Exception("No model found")
+    print(best_model_path.path)
     return load_model_from_path(best_model_path.path)

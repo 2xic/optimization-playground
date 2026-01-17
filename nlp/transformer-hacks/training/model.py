@@ -518,7 +518,13 @@ class Model(nn.Module):
         return x
 
     @torch.no_grad()
-    def generate(self, input_tokens: torch.Tensor, num_tokens_generate, sampler):
+    def generate(
+        self,
+        input_tokens: torch.Tensor,
+        num_tokens_generate,
+        sampler,
+        end_token_id=None,
+    ):
         output = input_tokens
         output = output.unsqueeze(0)
 
@@ -527,4 +533,42 @@ class Model(nn.Module):
             last_token = logits[:, -1, :]
             next_token = sampler(last_token).unsqueeze(0)
             output = torch.cat((output, next_token), dim=1)
+            # Early stopping
+            if end_token_id == next_token:
+                break
         return output[0].tolist()
+
+    def beam_search(self, input_ids, max_len=50, beam_width=3, end_token_id=None):
+        # (score, seq, is_finished)
+        beams = [(0.0, input_ids, False)]
+
+        for _ in range(max_len):
+            candidates = []
+
+            for score, seq, finished in beams:
+                if finished:
+                    candidates.append((score, seq, True))
+                    continue
+
+                # logits = self.forward(seq.unsqueeze(0))[:, -1, :]
+                logits = self.forward(seq[-self.config.sequence_length :].unsqueeze(0))[
+                    :, -1, :
+                ]
+                log_probs = F.log_softmax(logits, dim=-1).squeeze(0)
+
+                top_log_probs, top_ids = log_probs.topk(beam_width)
+
+                for log_p, token_id in zip(top_log_probs, top_ids):
+                    new_seq = torch.cat([seq, token_id.unsqueeze(0)])
+                    is_eos = (
+                        end_token_id is not None and token_id.item() == end_token_id
+                    )
+                    candidates.append((score + log_p.item(), new_seq, is_eos))
+
+            beams = sorted(candidates, key=lambda x: x[0], reverse=True)[:beam_width]
+
+            # All done?
+            if all(b[2] for b in beams):
+                break
+
+        return beams[0][1].tolist()

@@ -174,7 +174,7 @@ def list():
 
 
 if __name__ == "__main__":
-    app.run(port=1252)
+    app.run(port=1259)
 
 # if __name__ == "__main__":
 #    load_best_model_from_checkpoint()

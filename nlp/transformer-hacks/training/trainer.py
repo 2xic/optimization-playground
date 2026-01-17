@@ -13,7 +13,7 @@ from abc import ABC
 from .optimizer import Optimizer, AdamConfig, Scheduler
 from dataclasses import dataclass, field
 from utils.metrics import MetricsTracker
-from utils.checkpoints import StorageBoxCheckpoint, Stats
+from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingHistory
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
 from typing import Dict
@@ -148,7 +148,10 @@ def timer_iterator(dataset, metrics_tracker=None):
 
 class BaseTrainer(ABC):
     def __init__(
-        self, optimizer: Optional[Optimizer], lr_scheduler: Optional[Scheduler] = None
+        self,
+        optimizer: Optional[Optimizer],
+        lr_scheduler: Optional[Scheduler] = None,
+        plot=TrainingHistory(),
     ):
         self.start = time.time()
         self.optimizer = optimizer
@@ -176,6 +179,7 @@ class BaseTrainer(ABC):
         self.start = time.time()
         self.checkpoint_interval = 60 * 60
         self.last_checkpoint = time.time()
+        self.plot = plot
 
     def train(
         self,
@@ -322,8 +326,10 @@ class Trainer(BaseTrainer):
         self.model.to(training_options.device)
         #
         self.sizer.current_batch = training_options.batch_size
-        epochs_accuracy = []
-        epochs_loss = []
+        # Keep track of plots so that they can be tracked
+        # TODO: implement loading from previously trained checkpoints into model.
+        if "plots" not in training_options.metadata:
+            training_options.metadata["plots"] = self.plot
         loader = dataset.iter(batch_size=training_options.batch_size)
         for epoch in range(training_options.epochs):
             sum_epoch_accuracy, sum_epoch_loss, sum_epoch_rows = super().train(
@@ -335,8 +341,7 @@ class Trainer(BaseTrainer):
                 print(
                     f"Epoch {epoch} done, accuracy {accuracy_pct}, loss {sum_epoch_loss}"
                 )
-                epochs_accuracy.append(accuracy_pct)
-                epochs_loss.append(sum_epoch_loss)
+                self.plot.record(loss=sum_epoch_loss, accuracy=accuracy_pct)
             # Check timeout
             if self.has_timeout(training_options):
                 print("Hit timeout")
@@ -350,7 +355,7 @@ class Trainer(BaseTrainer):
                 sum_epoch_accuracy,
                 sum_epoch_rows,
             )
-        return epochs_accuracy, epochs_loss
+        return self.plot.accuracies, self.plot.losses
 
 
 def check_bf16_support():

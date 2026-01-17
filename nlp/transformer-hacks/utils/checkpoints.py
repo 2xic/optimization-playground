@@ -1,28 +1,28 @@
 import warnings
 from cryptography.utils import CryptographyDeprecationWarning
-
-warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 from pathlib import Path
 from dotenv import load_dotenv
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 import json
 import torch
 import paramiko
 import io
-from dataclasses import dataclass, asdict
 from datetime import date
 import stat
 from tqdm import tqdm
 import hashlib
 from functools import cache
 from concurrent.futures import ThreadPoolExecutor, Future
-from datetime import date
 import atexit
 import time
 from typing import Dict
+from datetime import datetime
 
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 load_dotenv()
+
+INDEX_PATH = "checkpoints/index.ndjson"
 
 
 class SingletonMeta(type):
@@ -152,6 +152,40 @@ class StorageBox(metaclass=SingletonMeta):
         key_str = f"{path}:{stat.st_size}:{stat.st_mtime}"
         return hashlib.sha256(key_str.encode()).hexdigest()
 
+    def append_entry(self, run_id: str, step: int, path: str, stats: dict = None):
+        entry = {
+            "run_id": run_id,
+            "step": step,
+            "path": path,
+            "stats": stats,
+            "indexed_at": datetime.now().isoformat(),
+        }
+        line = json.dumps(entry) + "\n"
+
+        with self.sftp.open(INDEX_PATH, "a") as f:
+            f.write(line.encode("utf-8"))
+
+    def iterate_index(self):
+        with self.sftp.open(INDEX_PATH, "r") as f:
+            return [json.loads(i) for i in f.readlines()]
+
+
+@dataclass
+class TrainingHistory:
+    losses: list = field(default_factory=list)
+    accuracies: list = field(default_factory=list)
+
+    def record(self, loss, accuracy):
+        self.losses.append(loss)
+        self.accuracies.append(accuracy)
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(**d)
+
 
 @dataclass
 class Stats:
@@ -170,6 +204,7 @@ class Stats:
 class StorageBoxCheckpoint(StorageBox):
     def __init__(self, host, username, password, run_id, max_workers=2):
         today = date.today().isoformat()
+        self.run_id = run_id
         self.base_name = f"checkpoints/{today}/{run_id}"
         super().__init__(host, username, password, self.base_name)
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
@@ -187,9 +222,30 @@ class StorageBoxCheckpoint(StorageBox):
             "config.json": self._serialize_json(config),
         }
 
-        return self._executor.submit(self._upload, files, full_path)
+        future = self._executor.submit(self._upload, files, full_path, stats)
+        future.add_done_callback(self._handle_upload_error)
+        return future
 
-    def _upload(self, files, full_path):
+    def checkpoint_files(self, files: Dict[str, bytes], stats: Stats) -> Future:
+        full_path = os.path.join(self.base_name, f"step_{stats.steps}")
+        serialized_files = {}
+        for key, value in files.items():
+            if isinstance(value, torch.nn.Module):
+                serialized_files[key] = self._serialize_torch(value)
+            else:
+                serialized_files[key] = self._serialize_torch(value)
+
+        future = self._executor.submit(self._upload, serialized_files, full_path, stats)
+        future.add_done_callback(self._handle_upload_error)
+        return future
+
+    def _handle_upload_error(self, future):
+        exc = future.exception()
+        if exc:
+            print("Checkpoint upload failed", exc_info=exc)
+
+    def _upload(self, files, full_path, stats: Stats):
+        self.append_entry(self.run_id, stats.steps, full_path, stats.to_json())
         for name, data in files.items():
             try:
                 self.save_bytes(data, os.path.join(full_path, name))
@@ -206,20 +262,27 @@ class StorageBoxCheckpoint(StorageBox):
 
 
 if __name__ == "__main__":
-    checkpointer = StorageBox(
+    storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
         username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
         password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
     )
-    # checkpointer.list()
-    #    with open("local_checkpoint2.pth", "w") as file:
-    #        file.write("tset")
-    #    checkpointer.save("local_checkpoint2.pth")
-    #   checkpointer.delete("local_checkpoint.pth")
-    #    print("Available checkpoints:", checkpointer.list())
-    print(
-        checkpointer.load_bytes(
-            "20251212_204548/step_0/stats.json"  # , "/tmp/stats.json"
-        )
-    )
-    checkpointer.close()
+
+    # Example: index existing checkpoints
+    for filepath in storage.walk("checkpoints"):
+        if not filepath.endswith("stats.json"):
+            continue
+
+        parts = filepath.split("/")
+        run_id = parts[2]
+        step = int(parts[3].replace("step_", ""))
+        path = "/".join(parts[:-1])
+        try:
+            stats = json.loads(storage.load_bytes(filepath).decode("utf-8"))
+        except Exception as e:
+            print(e)
+            continue
+        storage.append_entry(run_id, step, path, stats)
+        print(f"Indexed {run_id} step {step}")
+
+    storage.close()
