@@ -34,9 +34,11 @@ class TransformerLayerType(Enum):
     DEEPSEEK = 5
     # Useful for debugging, use the built in nn.TransformerDecoderLayer
     TORCH_TRANSFORMER_DECODE_LAYER = 6
-    # cont.
     BERT = 7
     SIMPLE_ATTENTION_AT_HOME = 8
+    OLMO = 9
+    OLMO_HYPER_CONNECTIONS = 10
+    OLMO_CONSTRAINED_HYPER_CONNECTIONS = 11
 
 
 class NormalizationLayerType(Enum):
@@ -73,6 +75,7 @@ class Config:
     dropout: float = 0.01
     feed_forward_layer: int = 2048
     bias: bool = False
+    hc_n: int = 4
 
     def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
         self.positional_embedding = positional_embedding
@@ -333,6 +336,154 @@ class SimpleAttentionAtHomeTransformerLayer(nn.Module):
         return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
 
 
+# https://arxiv.org/pdf/2512.24880
+# Deepseek builds on top of the hyperConnection, but adds a step to normalize
+def sinkhorn(H, iterations=20):
+    P = torch.exp(H)
+    for _ in range(iterations):
+        P = P / P.sum(dim=-1, keepdim=True)
+        P = P / P.sum(dim=-2, keepdim=True)
+    return P
+
+
+class mHyperConnection(nn.Module):
+    def __init__(self, n: int = 4, layer_idx: int = 0):
+        super().__init__()
+        self.n = n
+        alpha = torch.zeros(n, n + 1)
+        alpha[layer_idx % n, 0] = 1.0
+        alpha[:, 1:] = torch.eye(n)
+        self.alpha = nn.Parameter(alpha)
+        self.beta = nn.Parameter(torch.ones(n))
+
+    def forward(self, H: torch.Tensor, layer_fn) -> torch.Tensor:
+        # H: (B, S, n, D)
+        # (n, 1)
+        A_m = self.alpha[:, :1]
+        # (n, n)
+        A_r = self.alpha[:, 1:]
+        A_r = sinkhorn(A_r)
+        # Bound beta with sigmoid
+        beta = torch.sigmoid(self.beta)
+
+        # Weighted sum of copies -> layer input
+        # (B, S, D)
+        h_in = torch.einsum("bsnd,nk->bskd", H, A_m).squeeze(2)
+        h_out = layer_fn(h_in)
+        # Distribute output + residual
+        out = h_out.unsqueeze(2) * beta.view(1, 1, self.n, 1) + torch.einsum(
+            "nm,bsmd->bsnd", A_r, H
+        )
+
+        return out
+
+
+# https://arxiv.org/pdf/2409.19606#page=14
+# https://arxiv.org/pdf/2409.19606#page=28
+# https://arxiv.org/pdf/2409.19606#page=29
+class HyperConnection(nn.Module):
+    def __init__(self, n: int = 4, layer_idx: int = 0):
+        super().__init__()
+        self.n = n
+        self.beta = nn.Parameter(torch.ones(n))
+
+        alpha = torch.zeros(n, n + 1)
+        alpha[layer_idx % n, 0] = 1.0
+        alpha[:, 1:] = torch.eye(n)
+        self.alpha = nn.Parameter(alpha)
+
+    def forward(self, H: torch.Tensor, layer_fn) -> torch.Tensor:
+        # H: (B, S, n, D)
+        # (n, 1)
+        A_m = self.alpha[:, :1]
+        # (n, n)
+        A_r = self.alpha[:, 1:]
+
+        # Weighted sum of copies -> layer input
+        # (B, S, D)
+        h_in = torch.einsum("bsnd,nk->bskd", H, A_m).squeeze(2)
+        h_out = layer_fn(h_in)
+        # Distribute output + residual
+        out = h_out.unsqueeze(2) * self.beta.view(1, 1, self.n, 1) + torch.einsum(
+            "nm,bsmd->bsnd", A_r, H
+        )
+
+        return out
+
+
+# Basically the same as LLAMA
+# (todo: maybe we should just replace it with the LLAMA model, only diff is bias is just turned off)
+# https://arxiv.org/pdf/2501.00656#page=5
+class OlmoFeedForward(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.l1 = nn.Linear(
+            config.dim_embeddings,
+            config.feed_forward_layer,
+            bias=False,
+        )
+        self.l2 = nn.Linear(
+            config.feed_forward_layer,
+            config.dim_embeddings,
+            bias=False,
+        )
+        self.gate = nn.Linear(
+            config.dim_embeddings,
+            config.feed_forward_layer,
+            bias=False,
+        )
+
+    def forward(self, X):
+        return self.l2(F.silu(self.l1(X) * self.gate(X)))
+
+
+class OlmoTransformerLayer(nn.Module):
+    def __init__(self, config: Config):
+        super().__init__()
+        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.rope_attention = RoPEMultiheadAttention(
+            config.dim_embeddings,
+            config.num_attention_heads,
+            config.sequence_length,
+            gqa=False,
+        )
+        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.linear = OlmoFeedForward(config)
+
+    def forward(self, X, mask):
+        first_half = self.rope_attention(self.norm_1(X), mask)
+        first_half += X
+        second_half = self.linear(self.norm_2(first_half))
+        second_half += first_half
+        return second_half
+
+
+class OlmoTransformerLayerHyperConnectivity(nn.Module):
+    def __init__(self, config: Config, layer_idx: int, use_manifold_constraint=False):
+        super().__init__()
+        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.rope_attention = RoPEMultiheadAttention(
+            config.dim_embeddings,
+            config.num_attention_heads,
+            config.sequence_length,
+            gqa=False,
+        )
+        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.linear = OlmoFeedForward(config)
+
+        if use_manifold_constraint:
+            self.hc_attn = mHyperConnection(n=config.hc_n, layer_idx=layer_idx * 2)
+            self.hc_mlp = mHyperConnection(n=config.hc_n, layer_idx=layer_idx * 2 + 1)
+        else:
+            self.hc_attn = HyperConnection(n=config.hc_n, layer_idx=layer_idx * 2)
+            self.hc_mlp = HyperConnection(n=config.hc_n, layer_idx=layer_idx * 2 + 1)
+
+    def forward(self, H, mask=None):
+        H = self.hc_attn(H, lambda x: self.rope_attention(self.norm_1(x), mask))
+        H = self.hc_mlp(H, lambda x: self.linear(self.norm_2(x)))
+        return H
+
+
 class TransformerDecoderWrapper(nn.Module):
     def __init__(self, layer: nn.TransformerDecoderLayer) -> None:
         super(TransformerDecoderWrapper, self).__init__()
@@ -342,7 +493,7 @@ class TransformerDecoderWrapper(nn.Module):
         return self.layer(x, torch.zeros_like(x), tgt_mask=mask)
 
 
-def get_transformer_layer(config: Config):
+def get_transformer_layer(config: Config, layer_idx):
     if config.transformer_layer in [
         TransformerLayerType.SIMPLE,
         TransformerLayerType.SIMPLE_NO_ATTENTION,
@@ -372,6 +523,17 @@ def get_transformer_layer(config: Config):
                 batch_first=True,
                 activation=nn.functional.gelu,
             )
+        )
+    elif config.transformer_layer == TransformerLayerType.OLMO:
+        return OlmoTransformerLayer(config)
+    elif config.transformer_layer == TransformerLayerType.OLMO_HYPER_CONNECTIONS:
+        return OlmoTransformerLayerHyperConnectivity(config, layer_idx)
+    elif (
+        config.transformer_layer
+        == TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS
+    ):
+        return OlmoTransformerLayerHyperConnectivity(
+            config, layer_idx, use_manifold_constraint=True
         )
     else:
         raise Exception(f"unknown type {config.transformer_layer}")
@@ -443,8 +605,8 @@ class Model(nn.Module):
         )
         self.transformer_layers = nn.ModuleList(
             [
-                get_transformer_layer(config)
-                for _ in range(self.config.num_transformer_layers)
+                get_transformer_layer(config, layer_idx)
+                for layer_idx in range(self.config.num_transformer_layers)
             ]
         )
         self.dropout = nn.Dropout(config.dropout)
@@ -493,14 +655,27 @@ class Model(nn.Module):
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 2, f"X = {x.shape}"
-        x = self.embeddings(x)
-        x = self.positional_embeddings(x)
-        x = self.dropout(x)
-        for layer in self.transformer_layers:
-            x = layer(x, self.mask)
-        # Output
-        x = self.layer_norm(x)
-        return self.output_layer(x)
+        if self.config.transformer_layer in [
+            TransformerLayerType.OLMO_HYPER_CONNECTIONS,
+            TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
+        ]:
+            x = self.embeddings(x)
+            H = x.unsqueeze(2).expand(-1, -1, self.config.hc_n, -1).contiguous()
+            H = self.dropout(H)
+            for layer in self.transformer_layers:
+                H = layer(H, self.mask)
+            x = H.sum(dim=2)
+            x = self.layer_norm(x)
+            return self.output_layer(x)
+        else:
+            x = self.embeddings(x)
+            x = self.positional_embeddings(x)
+            x = self.dropout(x)
+            for layer in self.transformer_layers:
+                x = layer(x, self.mask)
+            # Output
+            x = self.layer_norm(x)
+            return self.output_layer(x)
 
     def embed(self, x):
         hidden = self.get_hidden_states(x)

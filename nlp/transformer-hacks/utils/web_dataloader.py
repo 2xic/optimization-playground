@@ -2,16 +2,19 @@
 Loads in tensor from a hosted server
 """
 
+import asyncio
 import threading
 import queue
 import requests
 import torch
-import time
 from typing import Iterator, List, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import msgpack
+import aiohttp
+import ormsgpack
 import numpy as np
 from dataclasses import dataclass
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -137,7 +140,6 @@ class WebDataloader:
 
     def detokenize(self, token_ids: List[int]):
         assert isinstance(token_ids, list)
-        # remove the [PAD] token
         token_ids = list(filter(lambda x: x != self.padding_index, token_ids))
         assert isinstance(token_ids, list)
 
@@ -174,117 +176,122 @@ class ThreadedDataLoader:
         self.world_size = world_size
         self.epoch = 0
 
-        self.session = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(
-            pool_connections=max_workers, pool_maxsize=max_workers * 2, max_retries=3
-        )
-        self.session.mount("http://", adapter)
-        self.session.mount("https://", adapter)
-        self.iter = ThreadedIterator(
-            dataset=self.dataset,
-            session=self.session,
-            total_batches=self.total_batches,
-            prefetch_factor=self.prefetch_factor,
-            max_workers=self.max_workers,
-            timeout=self.timeout,
-            rank=self.rank,
-            world_size=self.world_size,
-        )
+        self.batch_queue = queue.Queue(maxsize=prefetch_factor * 2)
+        self.shutdown_event = threading.Event()
+
+        self.async_thread = None
+        self.batch_permutation = None
 
     def set_epoch(self, epoch):
-        self.iter.set_epoch(epoch)
+        self.epoch = epoch
 
     def set_batch_size(self, batch_size):
-        self.iter.set_batch_size(batch_size)
+        self.batch_size = batch_size
         self.dataset.batch_size = batch_size
 
     def __len__(self):
         return len(self.dataset)
 
     def __iter__(self) -> Iterator:
-        self.iter.set_epoch(self.epoch)
-        self.epoch += 1
-        return iter(self.iter)
+        if self.async_thread and self.async_thread.is_alive():
+            self.async_thread.join(timeout=5.0)
+            if self.async_thread.is_alive():
+                logger.warning("Previous async thread did not finish in time")
 
-    def __del__(self):
-        if hasattr(self, "iter"):
-            self.iter.cleanup()
-
-        if hasattr(self, "session"):
-            self.session.close()
-
-
-class ThreadedIterator:
-    def __init__(
-        self,
-        dataset: WebDataloader,
-        session,
-        total_batches,
-        prefetch_factor,
-        max_workers,
-        timeout,
-        rank=0,
-        world_size=1,
-    ):
-        self.dataset = dataset
-        self.session = session
-        self.total_batches = total_batches
-        self.total_global_batches = total_batches
-        self.prefetch_factor = prefetch_factor
-        self.max_workers = max_workers
-        self.timeout = timeout
-        self.rank = rank
-        self.world_size = world_size
-        self.epoch = 0
-        self.batch_permutation = None
-
-        self.batch_queue = queue.Queue(maxsize=prefetch_factor)
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.shutdown = False
-
-        self.current_batch_idx = 0
-        self.futures = {}
-        self.epoch_finished = False
-
-        self.manager_thread = threading.Thread(
-            target=self._manage_completed_requests, daemon=True
-        )
-        self.manager_thread.start()
-
-    def set_batch_size(self, batch_size):
-        self.dataset.batch_size = batch_size
-
-    def set_epoch(self, epoch):
-        self.epoch = epoch
-
-    def _start_epoch(self):
+        self.shutdown_event.clear()
         while not self.batch_queue.empty():
             try:
                 self.batch_queue.get_nowait()
             except queue.Empty:
                 break
 
-        self.current_batch_idx = 0
-        self.epoch_finished = False
-        self.next_expected_idx = 0
-        self.completed_batches = {}
-
         g = torch.Generator()
         g.manual_seed(42 + self.epoch)
         self.batch_permutation = torch.randperm(
-            self.total_global_batches, generator=g
+            self.total_batches, generator=g
         ).tolist()
 
-        batches_to_prefetch = min(self.prefetch_factor, self.total_batches)
-        for i in range(batches_to_prefetch):
-            if not self.shutdown:
-                future = self.executor.submit(self._fetch_batch, i)
-                self.futures[future] = i
+        self.async_thread = threading.Thread(target=self._run_async_loop, daemon=True)
+        self.async_thread.start()
 
-        self.current_batch_idx = batches_to_prefetch
+        self.epoch += 1
+        return self
 
-    def _fetch_batch(self, batch_idx: int):
-        if self.shutdown:
+    def __next__(self):
+        try:
+            while True:
+                batch = self.batch_queue.get(timeout=60.0)
+                if batch is None:
+                    raise StopIteration
+
+                first_tensor = None
+                for v in batch.values():
+                    if torch.is_tensor(v):
+                        first_tensor = v
+                        break
+
+                if first_tensor is not None and first_tensor.numel() > 0:
+                    return batch
+
+                logger.warning("Skipping empty batch from failed fetch")
+
+        except queue.Empty:
+            logger.warning("Timeout waiting for batch")
+            raise StopIteration
+
+    def _run_async_loop(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self._fetch_all_batches())
+        except Exception:
+            logger.exception("Error in async fetch loop")
+        finally:
+            loop.close()
+
+    async def _fetch_all_batches(self):
+        connector = aiohttp.TCPConnector(
+            limit=self.max_workers,
+            limit_per_host=self.max_workers,
+        )
+        timeout = aiohttp.ClientTimeout(total=self.timeout)
+
+        async with aiohttp.ClientSession(
+            connector=connector, timeout=timeout
+        ) as session:
+            batch_idx = 0
+
+            while batch_idx < self.total_batches and not self.shutdown_event.is_set():
+                chunk_size = min(self.prefetch_factor, self.total_batches - batch_idx)
+                tasks = [
+                    self._fetch_batch(session, batch_idx + i) for i in range(chunk_size)
+                ]
+
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                fetched = {}
+                for i, result in enumerate(results):
+                    idx = batch_idx + i
+                    if isinstance(result, Exception):
+                        logger.exception(
+                            f"Fetch failed for batch {idx}", exc_info=result
+                        )
+                        fetched[idx] = self._empty_batch()
+                    elif result is not None:
+                        fetched[idx] = result
+
+                for i in range(chunk_size):
+                    idx = batch_idx + i
+                    if idx in fetched and not self.shutdown_event.is_set():
+                        self.batch_queue.put(fetched[idx])
+
+                batch_idx += chunk_size
+
+            if not self.shutdown_event.is_set():
+                self.batch_queue.put(None)
+
+    async def _fetch_batch(self, session: aiohttp.ClientSession, batch_idx: int):
+        if self.shutdown_event.is_set():
             return None
 
         global_batch_idx = self.batch_permutation[
@@ -295,15 +302,16 @@ class ThreadedIterator:
 
         columns = ",".join(list(map(str, self.dataset.column_names)))
         url = f"{self.dataset.base_url}/datasets/{self.dataset.dataset_name}/{self.dataset.split}/get?start={start_idx}&end={end_idx}&columns={columns}"
-        try:
-            response = self.session.get(url, timeout=self.timeout)
-            response.raise_for_status()
 
-            batch = msgpack.unpackb(response.content, raw=False)
-            columns = self.dataset.column_names
-            # Build dict of tensors for each column
+        try:
+            async with session.get(url) as response:
+                response.raise_for_status()
+                content = await response.read()
+
+            batch = ormsgpack.unpackb(content)
             result = {"dataset": self.dataset.name}
-            for col in columns:
+
+            for col in self.dataset.column_names:
                 if isinstance(col, FloatColumn):
                     arr = np.array([item[col.name] for item in batch], dtype=np.float32)
                     col = col.name
@@ -314,110 +322,25 @@ class ThreadedIterator:
                     if torch.cuda.is_available()
                     else torch.from_numpy(arr)
                 )
-            return batch_idx, result
 
-        except Exception as e:
-            if not self.shutdown:
-                print(f"Error fetching batch {batch_idx}: {e}")
-            # Return empty tensors for each column
-            columns = self.dataset.column_names
-            return batch_idx, {col: torch.tensor([]) for col in columns}
+            return result
 
-    def _manage_completed_requests(self):
-        while not self.shutdown:
-            try:
-                if self.futures:
-                    for future in as_completed(self.futures, timeout=1.0):
-                        if self.shutdown:
-                            break
+        except Exception:
+            logger.exception(f"Error fetching batch {batch_idx} from {url}")
+            return self._empty_batch()
 
-                        _ = self.futures.pop(future)
-                        result = future.result()
-
-                        if result and not self.epoch_finished:
-                            completed_idx, batch_data = result
-                            self.completed_batches[completed_idx] = batch_data
-
-                            if (
-                                self.current_batch_idx < self.total_batches
-                                and not self.shutdown
-                            ):
-                                next_future = self.executor.submit(
-                                    self._fetch_batch, self.current_batch_idx
-                                )
-                                self.futures[next_future] = self.current_batch_idx
-                                self.current_batch_idx += 1
-
-                            while (
-                                self.next_expected_idx in self.completed_batches
-                                and not self.shutdown
-                                and not self.epoch_finished
-                            ):
-                                batch_data = self.completed_batches.pop(
-                                    self.next_expected_idx
-                                )
-                                try:
-                                    self.batch_queue.put(batch_data, timeout=1.0)
-                                    self.next_expected_idx += 1
-                                except queue.Full:
-                                    self.completed_batches[self.next_expected_idx] = (
-                                        batch_data
-                                    )
-                                    break
-                        break
-                else:
-                    time.sleep(0.1)
-
-            except Exception as e:
-                time.sleep(0.1)
-
-    def __iter__(self):
-        self._start_epoch()
-        return self
-
-    def __next__(self):
-        try:
-            while True:
-                batch = self.batch_queue.get(timeout=60.0)
-
-                iterator = iter(batch.values())
-                first_col = next(iterator)
-                while not torch.is_tensor(first_col):
-                    first_col = next(iterator)
-                if first_col.numel() == 0:
-                    if self.next_expected_idx >= self.total_batches:
-                        self.epoch_finished = True
-                        raise StopIteration
-                    continue
-
-                if self.next_expected_idx >= self.total_batches:
-                    self.epoch_finished = True
-
-                return batch
-
-        except queue.Empty:
-            if self.next_expected_idx >= self.total_batches:
-                self.epoch_finished = True
-                raise StopIteration
-            else:
-                print("Timeout waiting for batch")
-                self.epoch_finished = True
-                raise StopIteration
+    def _empty_batch(self):
+        return {col: torch.tensor([]) for col in self.dataset.column_names}
 
     def cleanup(self):
-        self.shutdown = True
-        self.epoch_finished = True
-
-        if self.manager_thread.is_alive():
-            self.manager_thread.join(timeout=2.0)
-
+        self.shutdown_event.set()
+        if self.async_thread and self.async_thread.is_alive():
+            self.async_thread.join(timeout=2.0)
         while not self.batch_queue.empty():
             try:
                 self.batch_queue.get_nowait()
             except queue.Empty:
                 break
-
-        self.executor.shutdown(wait=False, cancel_futures=True)
 
     def __del__(self):
         self.cleanup()

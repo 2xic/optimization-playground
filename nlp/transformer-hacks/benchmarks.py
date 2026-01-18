@@ -58,16 +58,24 @@ def test_memory_creation():
 
 def dataloader():
     dataloader = WebDataloader(
-        os.environ["WEB_DATALOADER"], "small-web", batch_size=1024
+        os.environ["WEB_DATALOADER"], "satoshi-whitepaper", batch_size=1024
     )
-
+    count = 100
     start = time.time()
-    for index, (X, y) in enumerate(dataloader.iter()):
-        if index > 100:
-            break
+    index = 0
+    iterator = dataloader.iter()
+    for epoch in range(10):
+        for _, _batch in enumerate(iterator):
+            print(index)
+            index += 1
+            # if index > count:
+            #    break
+        print("epoch done")
     print(time.time() - start)
+    print(count / (time.time() - start))
 
 
 if __name__ == "__main__":
     #    test_memory_creation()
-    test_sampling()
+    #    test_sampling()
+    dataloader()

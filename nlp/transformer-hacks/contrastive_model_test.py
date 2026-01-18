@@ -149,12 +149,15 @@ class InfoObjectiveDataset:
             is_positive,
         ) = (batch["tokens_a"], batch["tokens_b"], batch["is_positive"])
 
-        tokens_a = tokens_a.to(self.device)
-        tokens_b = tokens_b.to(self.device)
+        tokens_a = tokens_a.to(self.device, non_blocking=True)
+        tokens_b = tokens_b.to(self.device, non_blocking=True)
 
         #   with torch.no_grad():
-        base_emb_a = self.base_model(tokens_a)
-        base_emb_b = self.base_model(tokens_b)
+        # base_emb_a = self.base_model(tokens_a)
+        # base_emb_b = self.base_model(tokens_b)
+        combined = torch.cat([tokens_a, tokens_b], dim=0)
+        base_emb = self.base_model(combined)
+        base_emb_a, base_emb_b = torch.chunk(base_emb, 2, dim=0)
 
         emb_a = self.proj_head(base_emb_a)
         emb_b = self.proj_head(base_emb_b)
@@ -236,6 +239,7 @@ class EmbeddingTrainer:
             "objective": objective.__class__.__name__,
             "plots": self.plot,
         }
+        threaded_loader = objective.dataloader.iter(batch_size=32)
 
         try:
             for epoch in range(epochs):
@@ -246,8 +250,11 @@ class EmbeddingTrainer:
                 avg_loss = 0
                 acc = 0
 
-                threaded_loader = objective.dataloader.iter(batch_size=32)
                 pbar = tqdm(threaded_loader, desc=f"Epoch {epoch + 1}/{epochs}")
+                timing_samples = 0
+                time_forward = 0
+                time_backward = 0
+                time_step = 0
 
                 try:
                     for index, batch in enumerate(pbar):
@@ -259,59 +266,25 @@ class EmbeddingTrainer:
                             timed_out = True
                             break
 
-                        """
-                        if use_triplet_loss:
-                            a = batch["ref_tokens"].to(self.device)
-                            p = batch["pos_tokens"].to(self.device)
-                            n = batch["neg_tokens"].to(self.device)
-                            if a.numel() == 0:
-                                continue
-
-                            anchor_emb = self.embed(a)
-                            pos_emb = self.embed(p)
-                            neg_emb = self.embed(n)
-                            loss = self.triplet_loss(anchor_emb, pos_emb, neg_emb)
-                            pos_dist = 1 - F.cosine_similarity(anchor_emb, pos_emb)
-                            neg_dist = 1 - F.cosine_similarity(anchor_emb, neg_emb)
-                            total_correct += (pos_dist < neg_dist).sum().item()
-                        elif use_similarity_loss:
-                            a = batch["tokens_a"].to(self.device)
-                            p = batch["tokens_b"].to(self.device)
-                            target_scores = batch["similarity"].to(self.device)
-
-                            if a.numel() == 0:
-                                continue
-                            # print(target_scores)
-                            anchor_emb = self.embed(a).float()
-                            pos_emb = self.embed(p).float()
-
-                            cos_sim = F.cosine_similarity(anchor_emb, pos_emb)
-                            loss = F.mse_loss(cos_sim, target_scores)
-                            threshold = 0.1
-                            total_correct += (
-                                (torch.abs(cos_sim - target_scores) < threshold)
-                                .sum()
-                                .item()
-                            )
-                        else:
-                            a = batch["ref_tokens"].to(self.device)
-                            p = batch["pos_tokens"].to(self.device)
-                            if a.numel() == 0:
-                                continue
-
-                            anchor_emb = self.embed(a)
-                            pos_emb = self.embed(p)
-                            neg_emb = self.embed(n)
-                            loss, correct = self.in_batch_contrastive_loss(
-                                anchor_emb, pos_emb
-                            )
-                            total_correct += correct
-                        """
+                        t0 = time.perf_counter()
                         loss, correct, samples = objective.forward(batch)
+                        torch.cuda.synchronize()
+                        t1 = time.perf_counter()
+
                         loss.backward()
+                        torch.cuda.synchronize()
+                        t2 = time.perf_counter()
+
                         if index % 4 == 0 and index != 0:
                             objective.optimizer.step()
-                            objective.optimizer.zero_grad()
+                            objective.optimizer.zero_grad(set_to_none=True)
+                        torch.cuda.synchronize()
+                        t3 = time.perf_counter()
+
+                        time_forward += t1 - t0
+                        time_backward += t2 - t1
+                        time_step += t3 - t2
+                        timing_samples += 1
 
                         total_correct += correct
                         total_samples += samples
@@ -325,9 +298,13 @@ class EmbeddingTrainer:
                             else 0
                         )
                         elapsed = (time.time() - start_time) / 60
+
                         pbar.set_postfix(
                             loss=f"{avg_loss:.4f}",
                             acc=f"{acc:.2f}%",
+                            fwd=f"{1000 * time_forward / timing_samples:.0f}ms",
+                            bwd=f"{1000 * time_backward / timing_samples:.0f}ms",
+                            stp=f"{1000 * time_step / timing_samples:.0f}ms",
                             time=f"{elapsed:.1f}m",
                         )
                         batch_num += 1
@@ -348,9 +325,7 @@ class EmbeddingTrainer:
 
                 finally:
                     # Always cleanup the loader after each epoch
-                    if threaded_loader is not None:
-                        threaded_loader.iter.cleanup()
-                        threaded_loader = None
+                    pass
 
                 if steps > 0:
                     self.plot.record(
@@ -401,14 +376,14 @@ class EmbeddingTrainer:
         finally:
             # Final cleanup in case of any exception
             if threaded_loader is not None:
-                threaded_loader.iter.cleanup()
+                threaded_loader.cleanup()
             print("Shutting down .... ")
         print("Waiting for full shutdown")
         self.checkpoints_tracker._shutdown()
         print("DOne")
 
 
-def fine_tune_model(epochs):
+def train_model(epochs):
     # (model, _) = load_model_from_path(
     #    #"checkpoints/2026-01-11/20260111_115502/step_180841"
     # )
@@ -434,7 +409,7 @@ def fine_tune_model(epochs):
     # trainer.optimizer.load_state_dict(optimizer_state)
     objective = InfoObjectiveDataset(model, "cuda")
     trainer = EmbeddingTrainer(device="cuda", margin=0.6, plot=plot)
-    trainer.train(objective, epochs=epochs, timeout_minutes=600)
+    trainer.train(objective, epochs=epochs, timeout_minutes=(48 * 60))
 
 
 def serve_model(port):
@@ -450,7 +425,7 @@ def serve_model(port):
     project_head_state = torch.load(
         io.BytesIO(
             storage.load_bytes(
-                "checkpoints/2026-01-17/20260117_132340/step_34239/proj_head.pt"
+                "checkpoints/2026-01-17/20260117_132340/step_85673/proj_head.pt"
             )
         ),
         map_location=torch.device("cpu"),
@@ -469,8 +444,9 @@ def serve_model(port):
         method = data.get("method", "mean")
         normalize = data.get("normalize", False)
 
-        doc_tensors = dataloader.tokenize([text])
-        embeddings = torch.concat([model.embed(v) for v in doc_tensors], dim=0)
+        with torch.no_grad():
+            doc_tensors = dataloader.tokenize([text])
+            embeddings = torch.concat([model.embed(v) for v in doc_tensors], dim=0)
 
         if method == "mean":
             pooled = torch.mean(embeddings, dim=0)
@@ -520,7 +496,7 @@ def main():
     args = parser.parse_args()
 
     if args.command == "train":
-        fine_tune_model(epochs=args.epochs)
+        train_model(epochs=args.epochs)
     elif args.command == "serve":
         serve_model(port=args.port)
     else:

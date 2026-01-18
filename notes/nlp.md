@@ -128,3 +128,27 @@ It's easy to remove safety features when you have access to the model.
 The author conclusion suggests that RL doesn't seem to cause LLM to acquire better reasoning capabilities, but instead it makes them more sample efficient. Distilled models on the other hand, seems to improve the reasoning capabilities of the base model.
 
 
+## [mHC: Manifold-Constrained Hyper-Connections](https://arxiv.org/abs/2512.24880)
+- Trying to improve the residual path of the transformer. Most of the other improvements to the original transformer architecture have happened other places in the model (normalization, attention or feed forward layer)
+- The HC parts is built on top of the [HYPER-CONNECTIONS](https://arxiv.org/pdf/2409.19606) paper.
+  - THe paper illustrates the [idea on page 14](https://arxiv.org/pdf/2409.19606#page=14). The residual connections that are in the feed forward network is replaced with a learned weight matrix. More correctly it's actually one for the attention and one for the feed forward network.
+  - Look inside the transformer-hacks model.py for more details.
+- the m (Manifold-Constrained) part in the paper 
+  - "doubly stochastic matrices" which just means sum of [all columns + rows will be 1](https://en.wikipedia.org/wiki/Doubly_stochastic_matrix) 
+  - [Uses the sinkhorn theorem](https://en.wikipedia.org/wiki/Sinkhorn%27s_theorem) 
+- [LAUREL: learned Augmented Residual Layer](https://arxiv.org/pdf/2411.07501v3)
+  - Very similar idea.
+- More sources
+  - https://magazine.sebastianraschka.com/i/180569384/8-deepseeks-mhc-manifold-constrained-hyper-connections
+  - https://news.ycombinator.com/item?id=46588572
+  - https://taylorkolasinski.com/notes/mhc-reproduction/
+
+```python
+def sinkhorn(H, iterations=20):
+    P = torch.exp(H)
+    for _ in range(iterations):
+        P = P / P.sum(dim=-1, keepdim=True)
+        P = P / P.sum(dim=-2, keepdim=True)
+    return P
+```
+

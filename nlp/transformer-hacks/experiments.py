@@ -515,6 +515,29 @@ def embedding_training():
         experiment.plot("masked_tokens.png")
 
 
+def residual_connections():
+    for dataset in DATASETS:
+        experiment = get_experiment_instance(dataset)
+        for name, transformer_layer in [
+            ("hyper connections", TransformerLayerType.OLMO_HYPER_CONNECTIONS),
+            ("residual connections", TransformerLayerType.OLMO),
+            (
+                "constrained hyper connection",
+                TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
+            ),
+        ]:
+            config = create_default_config(
+                dataset,
+            ).with_transformer_layer(transformer_layer)
+            options = GET_DEFAULT_TRAINING_OPTIONS()
+            experiment.queue(
+                LazyModelConstruction(config),
+                name + f"_{dataset.name}",
+                training_options=options,
+            )
+        experiment.plot("residual_connections.png")
+
+
 def test_speedups():
     for dataset in DATASETS:
         experiment = get_experiment_instance(dataset)
@@ -776,7 +799,8 @@ def fine_tuning():
 
 
 def train():
-    long_running_training()
+    residual_connections()
+    # long_running_training()
     # fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()

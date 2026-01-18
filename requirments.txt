@@ -9,3 +9,4 @@ tiktoken
 # TODO deprecate this
 git+https://github.com/2xic-speedrun/optimization-utils.git
 msgpack
+prometheus-client

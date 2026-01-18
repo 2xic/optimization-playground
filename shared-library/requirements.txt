@@ -15,5 +15,6 @@ tiktoken
 pydub
 tokenizers
 msgpack
+ormsgpack
 pysftp
 paramiko==3.3.1
