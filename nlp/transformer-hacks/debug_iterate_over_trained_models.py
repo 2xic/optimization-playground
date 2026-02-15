@@ -79,8 +79,8 @@ def remove_padding_sampling(logits, underling_func):
 
 end_token_id = dataloader.convert_token_to_id("<|end|>")
 
-for base_model_path, stats in iterate_over_dataset(dataloader_dataset, max_age_days=3):
-    if stats["steps"] < 244391:
+for base_model_path, stats in iterate_over_dataset(dataloader_dataset, max_age_days=10):
+    if stats["steps"] < 907027:
         continue
     (model, model_config) = load_model_from_path(base_model_path)
     model_response = []

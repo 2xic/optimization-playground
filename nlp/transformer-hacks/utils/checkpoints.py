@@ -18,6 +18,16 @@ import atexit
 import time
 from typing import Dict
 from datetime import datetime
+from tqdm import tqdm
+from concurrent.futures import wait, FIRST_COMPLETED
+import gzip
+from paramiko.common import MAX_WINDOW_SIZE
+import subprocess
+import tempfile
+import shutil
+
+assert shutil.which("rsync"), "rsync not installed (apt install rsync)"
+assert shutil.which("sshpass"), "sshpass not installed (apt install sshpass)"
 
 warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 load_dotenv()
@@ -41,11 +51,19 @@ class StorageBox(metaclass=SingletonMeta):
     ):
         self.remote_dir = remote_dir
         self.password = password
+        self.username = username
+        self.host = host
 
         self.cache_dir = Path("/tmp/sftp_cache")
         self.cache_dir.mkdir(exist_ok=True)
 
         self.transport = paramiko.Transport((host, 23))
+        self.transport.default_window_size = MAX_WINDOW_SIZE  # ~2GB
+        self.transport.default_max_packet_size = 2**15  # 32KB packets
+
+        self.transport.packetizer.REKEY_BYTES = 2**40
+        self.transport.packetizer.REKEY_PACKETS = 2**40
+
         self.transport.connect(username=username, password=password)
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
@@ -56,33 +74,82 @@ class StorageBox(metaclass=SingletonMeta):
         except FileNotFoundError:
             return False
 
+    # def save_bytes(self, data: bytes, path: str):
+    #    #self.create_directory_recursive(str(Path(path).parent))
+    #    #with self.sftp.open(path, "wb") as f:
+    #    #    #chunk_size = 1024 * 1024  # 1 MiB chunks
+    #    #    #for i in range(0, len(data), chunk_size):
+    #    #    #    #f.write(data[i : i + chunk_size])
+    #    #        f.flush()
+
     def save_bytes(self, data: bytes, path: str):
         self.create_directory_recursive(str(Path(path).parent))
-        with self.sftp.open(path, "wb") as f:
-            f.write(data)
+
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+
+        try:
+            env = os.environ.copy()
+            env["SSHPASS"] = self.password
+            # paramiko is so slow ...
+            subprocess.run(
+                [
+                    "sshpass",
+                    "-e",
+                    "rsync",
+                    "-e",
+                    "ssh -p 23 -T -o Compression=no -o StrictHostKeyChecking=no",
+                    tmp_path,
+                    f"{self.username}@{self.host}:{path}",
+                ],
+                env=env,
+                check=True,
+            )
+        finally:
+            os.unlink(tmp_path)
 
     def load_bytes(self, path: str, use_cache: bool = True) -> bytes:
         if use_cache:
             cache_path = self.cache_dir / self._cache_key(path)
             if cache_path.exists():
-                return cache_path.read_bytes()
+                data = cache_path.read_bytes()
+                if data[:2] == b"\x1f\x8b":
+                    data = gzip.decompress(data)
+                return data
 
-        with self.sftp.open(path, "rb") as f:
-            file_size = f.stat().st_size
-            chunks = []
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            tmp_path = tmp.name
 
-            with tqdm(total=file_size, unit="B", unit_scale=True, desc=path) as pbar:
-                while True:
-                    chunk = f.read(32768)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                    pbar.update(len(chunk))
+        try:
+            env = os.environ.copy()
+            env["SSHPASS"] = self.password
 
-        data = b"".join(chunks)
+            subprocess.run(
+                [
+                    "sshpass",
+                    "-e",
+                    "rsync",
+                    "-e",
+                    "ssh -p 23 -T -o Compression=no -o StrictHostKeyChecking=no",
+                    "--progress",
+                    f"{self.username}@{self.host}:{path}",
+                    tmp_path,
+                ],
+                env=env,
+                check=True,
+            )
+
+            data = Path(tmp_path).read_bytes()
+        finally:
+            os.unlink(tmp_path)
 
         if use_cache:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_bytes(data)
+
+        if data[:2] == b"\x1f\x8b":
+            data = gzip.decompress(data)
 
         return data
 
@@ -152,7 +219,7 @@ class StorageBox(metaclass=SingletonMeta):
         key_str = f"{path}:{stat.st_size}:{stat.st_mtime}"
         return hashlib.sha256(key_str.encode()).hexdigest()
 
-    def append_entry(self, run_id: str, step: int, path: str, stats: dict = None):
+    def append_index_entry(self, run_id: str, step: int, path: str, stats: dict = None):
         entry = {
             "run_id": run_id,
             "step": step,
@@ -161,7 +228,8 @@ class StorageBox(metaclass=SingletonMeta):
             "indexed_at": datetime.now().isoformat(),
         }
         line = json.dumps(entry) + "\n"
-
+        # TODO: ?
+        # self.save_bytes(line.encode("utf-8"), INDEX_PATH)
         with self.sftp.open(INDEX_PATH, "a") as f:
             f.write(line.encode("utf-8"))
 
@@ -187,6 +255,66 @@ class TrainingHistory:
         return cls(**d)
 
 
+class TrainingMetadata(dict):
+    @property
+    def plots(self) -> TrainingHistory:
+        if "plots" not in self:
+            self["plots"] = TrainingHistory()
+        return self["plots"]
+
+    @plots.setter
+    def plots(self, value):
+        self["plots"] = value
+
+    @property
+    def batches_consumed(self) -> int:
+        return self.get("batches_consumed", 0)
+
+    @batches_consumed.setter
+    def batches_consumed(self, value):
+        self["batches_consumed"] = value
+
+    @property
+    def epoch(self) -> int:
+        return self.get("epoch", 0)
+
+    @epoch.setter
+    def epoch(self, value):
+        self["epoch"] = value
+
+    @property
+    def sum_accuracy(self) -> float:
+        return self.get("sum_accuracy", 0.0)
+
+    @sum_accuracy.setter
+    def sum_accuracy(self, value):
+        self["sum_accuracy"] = value
+
+    @property
+    def sum_loss(self) -> float:
+        return self.get("sum_loss", 0.0)
+
+    @sum_loss.setter
+    def sum_loss(self, value):
+        self["sum_loss"] = value
+
+    @property
+    def count_rows(self) -> int:
+        return self.get("count_rows", 0)
+
+    @count_rows.setter
+    def count_rows(self, value):
+        self["count_rows"] = value
+
+    @property
+    def total_batch_num(self) -> int:
+        return self.get("total_batch_num", 0)
+
+    @total_batch_num.setter
+    def total_batch_num(self, value):
+        self["total_batch_num"] = value
+
+
 @dataclass
 class Stats:
     accuracy_pct: float
@@ -194,7 +322,7 @@ class Stats:
     runtime_seconds: int
     steps: int
     dataset: str
-    metadata: Dict[str, str]
+    metadata: TrainingMetadata
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -209,9 +337,24 @@ class StorageBoxCheckpoint(StorageBox):
         super().__init__(host, username, password, self.base_name)
         self._executor = ThreadPoolExecutor(max_workers=max_workers)
         atexit.register(self._shutdown)
+        self._futures: list[Future] = []
+        # debug flag
+        self.sync = True
 
-    def _shutdown(self):
-        self._executor.shutdown(wait=True)
+    def _submit(self, fn, *args) -> Future:
+        if self.sync:
+            # Run directly, wrap result in a completed Future
+            f = Future()
+            try:
+                result = fn(*args)
+                f.set_result(result)
+            except Exception as e:
+                f.set_exception(e)
+            return f
+        else:
+            future = self._executor.submit(fn, *args)
+            self._track(future)
+            return future
 
     def checkpoint(self, model, optimizer, config, stats: Stats) -> Future:
         full_path = os.path.join(self.base_name, f"step_{stats.steps}")
@@ -222,9 +365,19 @@ class StorageBoxCheckpoint(StorageBox):
             "config.json": self._serialize_json(config),
         }
 
-        future = self._executor.submit(self._upload, files, full_path, stats)
-        future.add_done_callback(self._handle_upload_error)
-        return future
+        return self._submit(self._upload, files, full_path, stats)
+
+    def tag(self, tag_name: str, stats: Stats):
+        """Tag the current run so it can be found later by name."""
+        tag_path = f"checkpoints/tags/{tag_name}"
+        tag_data = {
+            "run_id": self.run_id,
+            "step": stats.steps,
+            "path": os.path.join(self.base_name, f"step_{stats.steps}"),
+            "tagged_at": datetime.now().isoformat(),
+        }
+        files = {"latest.json": self._serialize_json(tag_data)}
+        return self._submit(self._upload, files, tag_path, stats)
 
     def checkpoint_files(self, files: Dict[str, bytes], stats: Stats) -> Future:
         full_path = os.path.join(self.base_name, f"step_{stats.steps}")
@@ -236,7 +389,7 @@ class StorageBoxCheckpoint(StorageBox):
                 serialized_files[key] = self._serialize_torch(value)
 
         future = self._executor.submit(self._upload, serialized_files, full_path, stats)
-        future.add_done_callback(self._handle_upload_error)
+        self._track(future)
         return future
 
     def _handle_upload_error(self, future):
@@ -245,7 +398,7 @@ class StorageBoxCheckpoint(StorageBox):
             print("Checkpoint upload failed", exc_info=exc)
 
     def _upload(self, files, full_path, stats: Stats):
-        self.append_entry(self.run_id, stats.steps, full_path, stats.to_json())
+        self.append_index_entry(self.run_id, stats.steps, full_path, stats.to_json())
         for name, data in files.items():
             try:
                 self.save_bytes(data, os.path.join(full_path, name))
@@ -253,12 +406,35 @@ class StorageBoxCheckpoint(StorageBox):
                 print(e)
 
     def _serialize_json(self, data) -> bytes:
-        return json.dumps(data.to_json(), indent=2).encode("utf-8")
+        if isinstance(data, dict):
+            raw = json.dumps(data, indent=2).encode("utf-8")
+        else:
+            raw = json.dumps(data.to_json(), indent=2).encode("utf-8")
+        return raw
 
     def _serialize_torch(self, torch_state) -> bytes:
         buffer = io.BytesIO()
         torch.save(torch_state.state_dict(), buffer)
-        return buffer.getvalue()
+        return gzip.compress(buffer.getvalue(), compresslevel=1)
+
+    def _track(self, future: Future) -> Future:
+        self._futures.append(future)
+        future.add_done_callback(lambda f: self._futures.remove(f))
+        future.add_done_callback(self._handle_upload_error)
+        return future
+
+    def flush(self, timeout=None):
+        if self.sync:
+            return
+        print("FLUSHING")
+        for future in list(self._futures):
+            print(f"Awaiting future {future}")
+            future.result(timeout=timeout)
+            print("DONE!")
+
+    def _shutdown(self):
+        self.flush()
+        self._executor.shutdown(wait=True)
 
 
 if __name__ == "__main__":
@@ -282,7 +458,7 @@ if __name__ == "__main__":
         except Exception as e:
             print(e)
             continue
-        storage.append_entry(run_id, step, path, stats)
+        storage.append_index_entry(run_id, step, path, stats)
         print(f"Indexed {run_id} step {step}")
 
     storage.close()

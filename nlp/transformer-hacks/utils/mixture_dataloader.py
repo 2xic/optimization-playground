@@ -51,11 +51,11 @@ class MixtureIterator:
 
     def set_batch_size(self, batch_size):
         for i in self.loaders:
-            i.dataset.batch_size = batch_size
+            i.set_batch_size(batch_size)
 
     def set_epoch(self, epoch):
         for i in self.loaders:
-            i.iter.set_epoch(epoch)
+            i.set_epoch(epoch)
 
     def __len__(self):
         return self.total

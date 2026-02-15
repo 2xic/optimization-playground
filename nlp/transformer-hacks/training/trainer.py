@@ -10,13 +10,14 @@ from .objectives import BaseObjective
 import torch.distributed as dist
 from torch.amp import autocast, GradScaler
 from abc import ABC
-from .optimizer import Optimizer, AdamConfig, Scheduler
+from .optimizer import BaseOptimizerConfig, AdamConfig, Scheduler
 from dataclasses import dataclass, field
 from utils.metrics import MetricsTracker
-from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingHistory
+from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
-from typing import Dict
+from utils.web_dataloader import WebDataloader, ThreadedDataLoader
+from typing import List
 
 torch.backends.cudnn.benchmark = True
 
@@ -95,11 +96,12 @@ class TrainingOptions:
     training_timeout_minutes: Optional[int] = None
     # Optimizer configuration
     lr_scheduler: Optional[Scheduler] = None
-    optimizer: Optimizer = field(default_factory=lambda: AdamConfig())
+    optimizer: BaseOptimizerConfig = field(default_factory=lambda: AdamConfig())
     # accumulation_steps
     accumulation_steps: int = 1
     # misc
     enable_checkpoints: bool = False
+    checkpoint_tag: Optional[str] = None
 
     @property
     def sampling_timeout_minutes(self):
@@ -108,7 +110,7 @@ class TrainingOptions:
         return self.training_timeout_minutes  # * 3
 
     # Additional metadata
-    metadata: Dict[str, str] = field(default_factory=lambda: {})
+    metadata: TrainingMetadata = field(default_factory=lambda: TrainingMetadata())
 
 
 def debug_print(*args):
@@ -149,14 +151,13 @@ def timer_iterator(dataset, metrics_tracker=None):
 class BaseTrainer(ABC):
     def __init__(
         self,
-        optimizer: Optional[Optimizer],
+        optimizer: Optional[BaseOptimizerConfig],
         lr_scheduler: Optional[Scheduler] = None,
-        plot=TrainingHistory(),
     ):
         self.start = time.time()
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
-        self.batch_num = 0
+        self.total_batch_num = 0
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.metrics_tracker = MetricsTracker(
             run_id=run_id,
@@ -179,13 +180,12 @@ class BaseTrainer(ABC):
         self.start = time.time()
         self.checkpoint_interval = 60 * 60
         self.last_checkpoint = time.time()
-        self.plot = plot
 
     def train(
         self,
         model,
         objective,
-        loader,
+        loader: ThreadedDataLoader,
         training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
@@ -196,9 +196,18 @@ class BaseTrainer(ABC):
         sum_accuracy = 0
         count_rows = 0
         progress = progress(loader)
+        model.train()
         has_tqdm_loader = isinstance(progress, tqdm)
         self.metrics_tracker.dataset_name = loader.name
         iterator = timer_iterator(progress, self.metrics_tracker)
+
+        # Restore sum_loss, accuracy and rows if we match the epoch ....
+        if training_options.metadata.epoch == loader.epoch:
+            sum_loss = training_options.metadata.sum_loss
+            sum_accuracy = training_options.metadata.sum_accuracy
+            count_rows = training_options.metadata.count_rows
+            self.total_batch_num = training_options.metadata.total_batch_num
+
         for _, (X, y) in enumerate(iterator):
             # print("index", index, (X.shape, y.shape))
             loss, accuracy, rows = self.forward(
@@ -207,12 +216,14 @@ class BaseTrainer(ABC):
 
             if has_tqdm_loader:
                 progress.set_description(
-                    "Loss {loss}, Accuracy {acc}, batch_size {batch_shape}, Training Time {time}m, Max training time {max_time}m".format(
+                    "Loss {loss}, Accuracy {acc}, batch_size {batch_shape}, {batches_consumed}/{total_batches} Training Time {time}m, Max training time {max_time}m".format(
                         acc=(sum_accuracy / count_rows * 100) if count_rows > 0 else 0,
                         loss=sum_loss,
                         time=self.trained_minutes,
                         max_time=training_options.training_timeout_minutes,
                         batch_shape=X.shape,
+                        batches_consumed=loader._batches_consumed,
+                        total_batches=loader.total_batches,
                     )
                 )
 
@@ -235,6 +246,15 @@ class BaseTrainer(ABC):
             sum_accuracy += accuracy.item()
             count_rows += rows.item()
 
+            # Store metadata if we need to restore it later ...
+            training_options.metadata.epoch = loader.epoch
+            training_options.metadata.batches_consumed = loader._batches_consumed
+            # Update the loss metadata
+            training_options.metadata.sum_accuracy = sum_accuracy
+            training_options.metadata.sum_loss = sum_loss
+            training_options.metadata.count_rows = count_rows
+            training_options.metadata.total_batch_num = self.total_batch_num
+
             if self.has_timeout(training_options):
                 print("Hit timeout")
                 break
@@ -250,19 +270,24 @@ class BaseTrainer(ABC):
     ):
         # If you are unlucky
         if sum_rows > 0:
+            stats = Stats(
+                loss_average=(sum_loss / sum_rows),
+                accuracy_pct=(sum_accuracy / sum_rows * 100),
+                runtime_seconds=time.time() - self.start,
+                steps=self.total_batch_num,
+                dataset=self.metrics_tracker.dataset_name,
+                metadata=training_options.metadata,
+            )
             self.checkpoints_tracker.checkpoint(
                 model,
                 self.optimizer,
                 model.config,
-                Stats(
-                    loss_average=(sum_loss / sum_rows),
-                    accuracy_pct=(sum_accuracy / sum_rows * 100),
-                    runtime_seconds=time.time() - self.start,
-                    steps=self.batch_num,
-                    dataset=self.metrics_tracker.dataset_name,
-                    metadata=training_options.metadata,
-                ),
+                stats,
             )
+            if training_options.checkpoint_tag is not None:
+                self.checkpoints_tracker.tag(
+                    tag_name=training_options.checkpoint_tag, stats=stats
+                )
             self.last_checkpoint = time.time()
 
     def forward(self, model, objective, X, y, training_options: TrainingOptions):
@@ -277,13 +302,13 @@ class BaseTrainer(ABC):
         loss = objective(y_predicted, y)
 
         loss.backward()
-        if (self.batch_num + 1) % training_options.accumulation_steps == 0:
+        if (self.total_batch_num + 1) % training_options.accumulation_steps == 0:
             self.optimizer.step()
             self.optimizer.zero_grad(set_to_none=True)
         if self.lr_scheduler is not None:
             self.lr_scheduler.step()
 
-        self.batch_num += 1
+        self.total_batch_num += 1
         # Report metrics.
         if objective.has_evaluator:
             (accuracy, rows) = objective.evaluator(y_predicted, y)
@@ -319,18 +344,30 @@ class Trainer(BaseTrainer):
 
     def train(
         self,
-        dataset,
+        dataset: WebDataloader,
         training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
+        print(f"Training on {training_options.device}")
         self.model.to(training_options.device)
+        for state in self.optimizer.state.values():
+            for k, v in state.items():
+                if isinstance(v, torch.Tensor):
+                    state[k] = v.to(training_options.device)
         #
         self.sizer.current_batch = training_options.batch_size
         # Keep track of plots so that they can be tracked
         # TODO: implement loading from previously trained checkpoints into model.
-        if "plots" not in training_options.metadata:
-            training_options.metadata["plots"] = self.plot
+        # if "plots" not in training_options.metadata:
+        # training_options.metadata.plots = training_options.plots
+        print("Starting to train now!")
         loader = dataset.iter(batch_size=training_options.batch_size)
+        # Resume the loader iterator ... ?
+        loader.load_state_dict(
+            batches_consumed=training_options.metadata.batches_consumed,
+            epoch=training_options.metadata.epoch,
+        )
+
         for epoch in range(training_options.epochs):
             sum_epoch_accuracy, sum_epoch_loss, sum_epoch_rows = super().train(
                 self.model, self.objective, loader, training_options, progress
@@ -341,13 +378,16 @@ class Trainer(BaseTrainer):
                 print(
                     f"Epoch {epoch} done, accuracy {accuracy_pct}, loss {sum_epoch_loss}"
                 )
-                self.plot.record(loss=sum_epoch_loss, accuracy=accuracy_pct)
+                training_options.metadata.plots.record(
+                    loss=sum_epoch_loss, accuracy=accuracy_pct
+                )
             # Check timeout
             if self.has_timeout(training_options):
                 print("Hit timeout")
                 break
         # Always do a save of the final model also.
         if training_options.enable_checkpoints:
+            print("storing checkpoints ...")
             self.checkpoint(
                 training_options,
                 self.model,
@@ -355,7 +395,12 @@ class Trainer(BaseTrainer):
                 sum_epoch_accuracy,
                 sum_epoch_rows,
             )
-        return self.plot.accuracies, self.plot.losses
+            self.checkpoints_tracker.flush()
+
+        return (
+            training_options.metadata.plots.accuracies,
+            training_options.metadata.plots.losses,
+        )
 
 
 def check_bf16_support():
@@ -427,7 +472,9 @@ class GradScalerTrainer(Trainer):
                 )
             with self.metrics_tracker.span("optimize"):
                 self.scaler.scale(loss).backward()
-                if (self.batch_num + 1) % training_options.accumulation_steps == 0:
+                if (
+                    self.total_batch_num + 1
+                ) % training_options.accumulation_steps == 0:
                     self.scaler.step(self.optimizer)
                     self.scaler.update()
                     self.optimizer.zero_grad(set_to_none=True)
@@ -435,7 +482,7 @@ class GradScalerTrainer(Trainer):
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
 
-            self.batch_num += 1
+            self.total_batch_num += 1
 
             if objective.has_evaluator:
                 with self.metrics_tracker.span("evaluator"):

@@ -66,10 +66,11 @@ class AdaptiveBatchSizer:
             rank = dist.get_rank() if dist.is_initialized() else 0
             new_batch = min(self.current_batch + increment, self.max_batch)
             if rank == 0:
-                print(
-                    f"Scaling {self.current_batch} -> {new_batch} "
-                    f"(+{increment_cost * 100:.1f}%, headroom was {headroom * 100:.1f}%)"
-                )
+                # print(
+                #    f"Scaling {self.current_batch} -> {new_batch} "
+                #    f"(+{increment_cost * 100:.1f}%, headroom was {headroom * 100:.1f}%)"
+                # )
+                pass
             self.current_batch = new_batch
             self.memory_history.clear()
             self.next_scale_up = time.time() + 30

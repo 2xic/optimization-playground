@@ -94,7 +94,7 @@ class WebDataloader:
     def __len__(self):
         return self.num_batches
 
-    def iter(self, batch_size=4, workers=16):
+    def iter(self, batch_size=4, workers=8):
         self.batch_size = batch_size
         return ThreadedDataLoader(
             dataset=self,
@@ -182,6 +182,23 @@ class ThreadedDataLoader:
         self.async_thread = None
         self.batch_permutation = None
 
+        # Checkpointing state
+        self._batches_consumed = 0
+        self._resume_from = 0
+        self._remaining_batches = None
+
+    def state_dict(self):
+        return {
+            "epoch": self.epoch,
+            "batches_consumed": self._batches_consumed,
+        }
+
+    def load_state_dict(self, epoch, batches_consumed):
+        self.epoch = epoch
+        self._resume_from = batches_consumed
+        self._batches_consumed = batches_consumed
+        self._remaining_batches = self.total_batches - self._resume_from
+
     def set_epoch(self, epoch):
         self.epoch = epoch
 
@@ -190,6 +207,8 @@ class ThreadedDataLoader:
         self.dataset.batch_size = batch_size
 
     def __len__(self):
+        if self._remaining_batches is not None:
+            return self._remaining_batches
         return len(self.dataset)
 
     def __iter__(self) -> Iterator:
@@ -205,6 +224,8 @@ class ThreadedDataLoader:
             except queue.Empty:
                 break
 
+        self._batches_consumed = self._resume_from
+
         g = torch.Generator()
         g.manual_seed(42 + self.epoch)
         self.batch_permutation = torch.randperm(
@@ -214,7 +235,6 @@ class ThreadedDataLoader:
         self.async_thread = threading.Thread(target=self._run_async_loop, daemon=True)
         self.async_thread.start()
 
-        self.epoch += 1
         return self
 
     def __next__(self):
@@ -222,6 +242,7 @@ class ThreadedDataLoader:
             while True:
                 batch = self.batch_queue.get(timeout=60.0)
                 if batch is None:
+                    self.epoch += 1
                     raise StopIteration
 
                 first_tensor = None
@@ -231,6 +252,7 @@ class ThreadedDataLoader:
                         break
 
                 if first_tensor is not None and first_tensor.numel() > 0:
+                    self._batches_consumed += 1
                     return batch
 
                 logger.warning("Skipping empty batch from failed fetch")
@@ -259,7 +281,9 @@ class ThreadedDataLoader:
         async with aiohttp.ClientSession(
             connector=connector, timeout=timeout
         ) as session:
-            batch_idx = 0
+            batch_idx = self._resume_from
+            self._resume_from = 0  # Reset so next epoch starts from 0
+            self._remaining_batches = None
 
             while batch_idx < self.total_batches and not self.shutdown_event.is_set():
                 chunk_size = min(self.prefetch_factor, self.total_batches - batch_idx)

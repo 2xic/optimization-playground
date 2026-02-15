@@ -5,14 +5,7 @@ from dataclasses import dataclass
 
 import torch.optim.rmsprop
 from abc import ABC, abstractmethod
-
-
-class Optimizer(ABC):
-    lr: float = 3e-4
-
-    @abstractmethod
-    def create_optimizer(self, params):
-        pass
+from typing import Optional, Dict
 
 
 class Scheduler(ABC):
@@ -75,7 +68,21 @@ def lr_lambda(step):
 
 
 @dataclass
-class MuonConfig:
+class BaseOptimizerConfig:
+    optimizer_state: Optional[Dict] = None
+
+    def _build_optimizer(self, params):
+        raise NotImplementedError
+
+    def create_optimizer(self, params):
+        optimizer = self._build_optimizer(params)
+        if self.optimizer_state is not None:
+            optimizer.load_state_dict(self.optimizer_state)
+        return optimizer
+
+
+@dataclass
+class MuonConfig(BaseOptimizerConfig):
     lr: float = 3e-4
 
     def create_optimizer(self, params):
@@ -113,14 +120,14 @@ class MuonConfig:
 
 
 @dataclass
-class RMSpropConfig:
+class RMSpropConfig(BaseOptimizerConfig):
     lr: float = 3e-4
     alpha: float = 0.99
     eps: float = 1e-8
     weight_decay: float = 0
     momentum: float = 0
 
-    def create_optimizer(self, params):
+    def _build_optimizer(self, params):
         return torch.optim.RMSprop(
             params,
             lr=self.lr,
@@ -136,14 +143,14 @@ BETA_2 = 0.95
 
 
 @dataclass
-class AdamConfig:
+class AdamConfig(BaseOptimizerConfig):
     lr: float = 3e-4
     max_grad_norm: float = 0
     betas: tuple = (BETA_1, BETA_2)
     eps: float = 1e-8
     weight_decay: float = 0
 
-    def create_optimizer(self, params):
+    def _build_optimizer(self, params):
         return AdamOptimizerWrapper(
             params,
             max_grad_norm=self.max_grad_norm,
@@ -171,21 +178,21 @@ class AdamOptimizerWrapper(torch.optim.Adam):
     def step(self, closure=None):
         max_grad_norm = self.defaults.get("max_grad_norm")
         if max_grad_norm is not None and max_grad_norm > 0:
-            all_params = [p for group in self.param_groups for p in group['params']]
+            all_params = [p for group in self.param_groups for p in group["params"]]
             if all_params:
                 torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
         return super().step(closure)
 
 
 @dataclass
-class AdamWConfig:
+class AdamWConfig(BaseOptimizerConfig):
     lr: float = 3e-4
     max_grad_norm: float = 0
     betas: tuple = (BETA_1, BETA_2)
     eps: float = 1e-8
     weight_decay: float = 0.01
 
-    def create_optimizer(self, params):
+    def _build_optimizer(self, params):
         return AdamWOptimizerWrapper(
             params,
             max_grad_norm=self.max_grad_norm,
@@ -213,7 +220,7 @@ class AdamWOptimizerWrapper(torch.optim.AdamW):
     def step(self, closure=None):
         max_grad_norm = self.defaults.get("max_grad_norm")
         if max_grad_norm and max_grad_norm > 0:
-            all_params = [p for group in self.param_groups for p in group['params']]
+            all_params = [p for group in self.param_groups for p in group["params"]]
             if all_params:
                 torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
         return super().step(closure)

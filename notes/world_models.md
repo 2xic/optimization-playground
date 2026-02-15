@@ -47,3 +47,6 @@
   - Various tricks are used during training to make the model stable (Sequential Sampling,  Noise Level Augmentation, etc)
 - 
 
+## [The Waymo World Model: A New Frontier For Autonomous Driving Simulation](https://waymo.com/blog/2026/02/the-waymo-world-model-a-new-frontier-for-autonomous-driving-simulation)
+Builds on top of [Genie 3](https://deepmind.google/blog/genie-3-a-new-frontier-for-world-models/)
+

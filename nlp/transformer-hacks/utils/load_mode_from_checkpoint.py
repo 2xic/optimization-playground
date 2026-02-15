@@ -29,6 +29,18 @@ class BestModelResult:
             self.path = path
 
 
+def load_modeL_tag(name):
+    storage = StorageBox(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+    )
+    tag_file = json.loads(
+        storage.load_bytes(os.path.join("checkpoints", "tags", name, "latest.json"))
+    )
+    return tag_file["path"]
+
+
 def load_model_from_path(base_model_path):
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],

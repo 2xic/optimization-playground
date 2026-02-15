@@ -22,7 +22,7 @@ from training.optimizer import (
     ExponentialLR,
     WarmupExpDecay,
 )
-from typing import Callable
+from typing import Callable, Optional
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
@@ -40,10 +40,14 @@ from dataclasses import dataclass
 import torch
 import os
 from utis import get_best_gpu, estimate_cuda_size, benchmark_training
+from utils.checkpoints import TrainingMetadata
 from utils.load_mode_from_checkpoint import (
     load_best_model_from_checkpoint,
     load_model_from_path,
+    load_raw_from_path,
+    load_modeL_tag,
 )
+from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingHistory
 from utils.mixture_dataloader import WebDataloaderMixture
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -202,11 +206,11 @@ class NamedDataset:
         return self.dataset.dataset.iter(**args, workers=0)
 
 
-def get_output_path(dataset: NamedDataset, filename):
+def get_output_path(parent_name: str, filename):
     dir = os.path.join(
         os.path.dirname(__file__),
         "plots",
-        dataset.name,
+        parent_name,
     )
     os.makedirs(dir, exist_ok=True)
     return os.path.join(dir, filename)
@@ -230,9 +234,7 @@ def create_default_config(dataset):
 
 
 def create_next_token_prediction_objective(
-    dataset,
-    model: Model,
-    optimizer_config=AdamWConfig(),
+    dataset, model: Model, optimizer_config=AdamWConfig()
 ):
     # TODO: move this.
     sampler = (
@@ -264,11 +266,12 @@ def execute(
 ):
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
-
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
         # TODO: need to copy model for sampling to be correct.
         trainer = create_next_token_prediction_objective(
-            dataset, model, options.optimizer
+            dataset,
+            model,
+            options.optimizer,
         )
         (accuracy, loss) = trainer.train(
             dataset,
@@ -349,7 +352,13 @@ class ExperimentDistributed:
 
     def plot(self, name):
         if dist.get_rank() == 0:
-            plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
+            plot_accuracy_loss(
+                self.experiments, get_output_path(self.dataset.name, name)
+            )
+
+    def plot_tag(self, name):
+        if dist.get_rank() == 0:
+            plot_accuracy_loss(self.experiments, get_output_path("tags", name))
 
 
 def get_experiment_instance(dataset):
@@ -373,7 +382,7 @@ class ExperimentMultiProcess:
         self.experiments = {}
         self.dataset = dataset
         self.queue_runs = []
-        self.skip_thread = False
+        self.skip_thread = True
         ctx = mp.get_context("spawn")
         self.pool = ctx.Pool(processes=NUM_PROCESSES) if not self.skip_thread else None
 
@@ -391,7 +400,7 @@ class ExperimentMultiProcess:
         else:
             return self.pool.apply_async(execute, args=args)
 
-    def plot(self, name: str):
+    def _execute_plots(self):
         results = []
         for (
             model_config,
@@ -422,7 +431,14 @@ class ExperimentMultiProcess:
             else:
                 experiment_variant, results = i.get()
             self.experiments[experiment_variant] = results
+
+    def plot(self, name: str):
+        self._execute_plots()
         plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
+
+    def plot_tag(self, name):
+        self._execute_plots()
+        plot_accuracy_loss(self.experiments, get_output_path("tags", name))
 
 
 def positional_embeddings():
@@ -773,8 +789,8 @@ def fine_tuning():
         ]
     )
     experiment = get_experiment_instance(dataset)
-    base_model_name = "medium-web-256-v2"
-    checkpoint_model = "checkpoints/2026-01-10/20260110_215823/step_159014"
+    base_model_name = "fineweb-256"
+    checkpoint_model = "checkpoints/2026-01-18/20260118_102043/step_570108"
     # for base_model_name in ["medium-web-256", "smedium-web-256", "medium-web-256-v2"]:
     if True:
         print(f"Training on {dataset.name}")
@@ -798,9 +814,52 @@ def fine_tuning():
     print(base_model)
 
 
+def continue_training_from_checkpoint():
+    base_model_name = "fineweb-256"
+    checkpoint_tag = "pre-training-fineweb256"
+    # checkpoint_model = "checkpoints/2026-01-18/20260118_102043/step_570108"
+    checkpoint_model = load_modeL_tag(checkpoint_tag)
+    #    base_model, config = load_best_model_from_checkpoint(base_model_name)
+    base_model, config = load_model_from_path(checkpoint_model)
+    _, optimizer_state, stats = load_raw_from_path(checkpoint_model)
+    experiment = get_experiment_instance(NAMED_DATASETS[stats["dataset"]])
+    training_options = GET_DEFAULT_TRAINING_OPTIONS()
+    # Lower the learning rate by 10x from what we used during training.
+    # training_options.optimizer.lr /= 10
+    training_options.enable_checkpoints = True
+    training_options.checkpoint_tag = checkpoint_tag
+    # Need to keep track of this to make life easier.
+    # print(stats["metadata"]["plots"])
+    history = TrainingHistory(
+        stats["metadata"]["plots"]["losses"],
+        stats["metadata"]["plots"]["accuracies"],
+    )
+    training_options.metadata = TrainingMetadata(training_options.metadata)
+    training_options.metadata["continued_training_from"] = checkpoint_model
+    training_options.metadata.plots = history
+    # training_options.training_timeout_minutes = 1
+    training_options.optimizer.optimizer_state = optimizer_state
+    training_options.metadata.batches_consumed = stats["metadata"].get(
+        "batches_consumed", 0
+    )
+    training_options.metadata.total_batch_num = stats["steps"]
+    print(training_options.metadata.batches_consumed)
+    # training_options.optimizer.load_state_dict(optimizer_state)
+
+    print("queue")
+    experiment.queue(
+        PretrainedModelConstruction(config, base_model),
+        base_model_name,
+        training_options,
+    )
+    print("end!")
+    experiment.plot_tag(f"{checkpoint_tag}.png")
+
+
 def train():
-    residual_connections()
+    # residual_connections()
     # long_running_training()
+    continue_training_from_checkpoint()
     # fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()

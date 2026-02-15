@@ -89,7 +89,7 @@ class InfoObjectiveDataset:
         self.optimizer = torch.optim.Adam(
             [
                 {"params": self.proj_head.parameters(), "lr": 1e-3},
-                {"params": self.base_model.parameters(), "lr": 1e-5},
+                {"params": self.base_model.parameters(), "lr": 1e-4},
             ]
         )
 
@@ -137,7 +137,14 @@ class InfoObjectiveDataset:
 
         loss_a = F.cross_entropy(sim_matrix[pos_mask], labels[pos_mask])
         loss_b = F.cross_entropy(sim_matrix.T[pos_mask], labels[pos_mask])
-        loss = (loss_a + loss_b) / 2
+        contrastive_loss = (loss_a + loss_b) / 2
+
+        # Variance regularization - prevents embedding collapse
+        # Encourages each dimension to have high variance across the batch
+        var_anchor = anchor_emb.var(dim=0).mean()
+        var_pos = pos_emb.var(dim=0).mean()
+        var_loss = -torch.log(var_anchor + 1e-4) - torch.log(var_pos + 1e-4)
+        loss = contrastive_loss + 0.1 * var_loss
 
         correct = (sim_matrix[pos_mask].argmax(dim=1) == labels[pos_mask]).sum().item()
         return loss, correct
@@ -161,7 +168,7 @@ class InfoObjectiveDataset:
 
         emb_a = self.proj_head(base_emb_a)
         emb_b = self.proj_head(base_emb_b)
-        loss, accuracy = self.loss(emb_a, emb_b, is_positive, temperature=0.07)
+        loss, accuracy = self.loss(emb_a, emb_b, is_positive, temperature=0.03)
         return loss, accuracy, tokens_a.size(0)
 
     def checkpoint_files(self):
@@ -409,7 +416,7 @@ def train_model(epochs):
     # trainer.optimizer.load_state_dict(optimizer_state)
     objective = InfoObjectiveDataset(model, "cuda")
     trainer = EmbeddingTrainer(device="cuda", margin=0.6, plot=plot)
-    trainer.train(objective, epochs=epochs, timeout_minutes=(48 * 60))
+    trainer.train(objective, epochs=epochs, timeout_minutes=(48 * 60 * 2))
 
 
 def serve_model(port):
@@ -425,7 +432,7 @@ def serve_model(port):
     project_head_state = torch.load(
         io.BytesIO(
             storage.load_bytes(
-                "checkpoints/2026-01-17/20260117_132340/step_85673/proj_head.pt"
+                "checkpoints/2026-01-18/20260118_195410/step_467974/proj_head.pt"
             )
         ),
         map_location=torch.device("cpu"),
