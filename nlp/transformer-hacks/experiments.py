@@ -19,10 +19,9 @@ from training.optimizer import (
     RMSpropConfig,
     NoamScheduler,
     MuonConfig,
-    ExponentialLR,
     WarmupExpDecay,
 )
-from typing import Callable, Optional
+from typing import Callable
 from training.trainer import TrainingOptions
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
@@ -42,12 +41,11 @@ import os
 from utis import get_best_gpu, estimate_cuda_size, benchmark_training
 from utils.checkpoints import TrainingMetadata
 from utils.load_mode_from_checkpoint import (
-    load_best_model_from_checkpoint,
     load_model_from_path,
     load_raw_from_path,
     load_modeL_tag,
 )
-from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingHistory
+from utils.checkpoints import TrainingHistory
 from utils.mixture_dataloader import WebDataloaderMixture
 
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"

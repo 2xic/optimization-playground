@@ -1,422 +1,585 @@
+import torch
+import torch.nn as nn
 import torch.nn.functional as F
-import torch
-from training.model import Model
-import torch
 import matplotlib.pyplot as plt
 import time
-import torch
-from utils.web_dataloader import WebDataloader, FloatColumn
 import os
-from dotenv import load_dotenv
-from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingHistory
+import io
+import argparse
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Any, Optional, List
 from datetime import datetime
 from tqdm import tqdm
-from utils.load_mode_from_checkpoint import (
-    load_best_model_from_checkpoint,
-    load_model_from_path,
-    load_raw_from_path,
-)
-import argparse
-import torch.nn as nn
-from abc import ABC, abstractmethod
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
-from utils.checkpoints import StorageBox
-import io
+
+from utils.web_dataloader import WebDataloader
+from utils.checkpoints import StorageBoxCheckpoint, StorageBox, Stats, TrainingHistory
+from utils.load_mode_from_checkpoint import load_best_model_from_checkpoint
+
+load_dotenv()
 
 
-class Objective(ABC):
-    dataloader: WebDataloader
+@dataclass
+class LossResult:
+    loss: torch.Tensor
+    correct: int
 
-    @abstractmethod
-    def forward(self, dataset):
-        pass
 
-    @abstractmethod
-    def checkpoint_files(self):
-        pass
+@dataclass
+class ContrastiveBatch:
+    anchor: torch.Tensor
+    positive: torch.Tensor
+    negative: Optional[torch.Tensor] = None
+    labels: Optional[torch.Tensor] = None
+
+    def to(self, device: str) -> "ContrastiveBatch":
+        return ContrastiveBatch(
+            anchor=self.anchor.to(device, non_blocking=True),
+            positive=self.positive.to(device, non_blocking=True),
+            negative=self.negative.to(device, non_blocking=True)
+            if self.negative is not None
+            else None,
+            labels=self.labels.to(device, non_blocking=True)
+            if self.labels is not None
+            else None,
+        )
+
+    @property
+    def batch_size(self) -> int:
+        return self.anchor.size(0)
+
+
+@dataclass
+class EmbeddedBatch:
+    anchor: torch.Tensor
+    positive: torch.Tensor
+    negative: Optional[torch.Tensor] = None
+    labels: Optional[torch.Tensor] = None
+
+
+def info_nce_loss(
+    batch: EmbeddedBatch,
+    temperature: float = 0.05,
+    variance_weight: float = 0.1,
+) -> LossResult:
+    anchor_emb = F.normalize(batch.anchor, dim=1)
+    pos_emb = F.normalize(batch.positive, dim=1)
+
+    sim_matrix = torch.mm(anchor_emb, pos_emb.t()) / temperature
+    batch_labels = torch.arange(anchor_emb.size(0), device=anchor_emb.device)
+
+    if batch.labels is not None:
+        pos_mask = batch.labels.bool()
+        if pos_mask.sum() == 0:
+            return LossResult(torch.tensor(0.0, device=anchor_emb.device), 0)
+        sim_matrix_filtered = sim_matrix[pos_mask]
+        batch_labels_filtered = batch_labels[pos_mask]
+    else:
+        sim_matrix_filtered = sim_matrix
+        batch_labels_filtered = batch_labels
+        pos_mask = torch.ones(
+            anchor_emb.size(0), dtype=torch.bool, device=anchor_emb.device
+        )
+
+    loss_a = F.cross_entropy(sim_matrix_filtered, batch_labels_filtered)
+    loss_b = F.cross_entropy(sim_matrix.T[pos_mask], batch_labels_filtered)
+    contrastive_loss = (loss_a + loss_b) / 2
+
+    var_anchor = anchor_emb.var(dim=0).mean()
+    var_pos = pos_emb.var(dim=0).mean()
+    var_loss = -torch.log(var_anchor + 1e-4) - torch.log(var_pos + 1e-4)
+
+    total_loss = contrastive_loss + variance_weight * var_loss
+    correct = (sim_matrix_filtered.argmax(dim=1) == batch_labels_filtered).sum().item()
+
+    return LossResult(total_loss, correct)
+
+
+def triplet_loss(
+    batch: EmbeddedBatch,
+    margin: float = 0.2,
+) -> LossResult:
+    anchor = F.normalize(batch.anchor, dim=1)
+    positive = F.normalize(batch.positive, dim=1)
+    negative = F.normalize(batch.negative, dim=1)
+
+    pos_dist = 1 - F.cosine_similarity(anchor, positive)
+    neg_dist = 1 - F.cosine_similarity(anchor, negative)
+    loss = F.relu(pos_dist - neg_dist + margin).mean()
+    correct = (neg_dist > pos_dist).sum().item()
+    return LossResult(loss, correct)
 
 
 class ProjectionHead(nn.Module):
-    def __init__(self, input_dim, hidden_dim=512, output_dim=128):
+    def __init__(self, input_dim: int, hidden_dim: int = 512, output_dim: int = 128):
         super().__init__()
-        # Learned attention pooling
         self.attention = nn.Linear(input_dim, 1)
-
-        # Projection
         self.net = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
         )
 
-    def forward(self, x, mask=None):
+    def forward(
+        self, x: torch.Tensor, mask: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
         scores = self.attention(x).squeeze(-1)
         if mask is not None:
             scores = scores.masked_fill(~mask, float("-inf"))
-
         weights = F.softmax(scores, dim=1)
         x = (x * weights.unsqueeze(-1)).sum(dim=1)
-
         return self.net(x)
 
 
-class InfoObjectiveDataset:
-    def __init__(self, base_model, device):
+class EmbeddingModel(nn.Module):
+    def __init__(self, base_model: nn.Module, projection_head: ProjectionHead):
+        super().__init__()
         self.base_model = base_model
-        self.device = device
-        self.dataloader = WebDataloader(
-            os.environ["WEB_DATALOADER"],
-            # dataset_name="contract-similarity-v2",
-            dataset_name="contrastive_pairs-v3",
-            # "etherscan-similarity-256-v2",
-            # columns=["ref_tokens", "pos_tokens", "neg_tokens"],
-            columns=[
-                "tokens_a",
-                "tokens_b",
-                "is_positive",
-            ],  # , FloatColumn("similarity")],
-            batch_size=1024,
-        )
-        # self.base_model.eval()
-        # for p in self.base_model.parameters():
-        #    p.requires_grad = False
-        self.proj_head = ProjectionHead(
-            input_dim=10000, hidden_dim=512, output_dim=128
-        ).to(self.device)
-        self.base_model = self.base_model.to(self.device)
-        self.proj_head = self.proj_head.to(self.device)
-        # self.optimizer = torch.optim.Adam(self.proj_head.parameters(), lr=1e-3)
-        self.optimizer = torch.optim.Adam(
-            [
-                {"params": self.proj_head.parameters(), "lr": 1e-3},
-                {"params": self.base_model.parameters(), "lr": 1e-4},
-            ]
-        )
+        self.projection_head = projection_head
 
-    @classmethod
-    def load_from_storage(self, base_model, proj_head_state):
-        cls = InfoObjectiveDataset(base_model, "cpu")
-        cls.proj_head.load_state_dict(proj_head_state)
-        return cls
+    def forward(self, tokens: torch.Tensor) -> torch.Tensor:
+        base_emb = self.base_model(tokens)
+        return self.projection_head(base_emb)
 
-    """
-    def loss(self, anchor_emb, pos_emb, temperature=0.05):
-        # Normalize
-        anchor_emb = F.normalize(anchor_emb, dim=1)
-        pos_emb = F.normalize(pos_emb, dim=1)
-
-        sim_matrix = torch.mm(anchor_emb, pos_emb.t()) / temperature
-        labels = torch.arange(anchor_emb.size(0), device=anchor_emb.device)
-
-        # Symmetric loss
-        loss_a = F.cross_entropy(sim_matrix, labels)
-        loss_b = F.cross_entropy(sim_matrix.T, labels)
-        loss = (loss_a + loss_b) / 2
-
-        correct = (sim_matrix.argmax(dim=1) == labels).sum().item()
-        return loss, correct
-    """
-
-    def embed(self, tokens):
-        tokens_a = tokens.to(self.device)
-        base_emb_a = self.base_model(tokens_a)
-        emb_a = self.proj_head(base_emb_a)
-        return emb_a
-
-    def loss(self, anchor_emb, pos_emb, is_positive, temperature=0.05):
-        anchor_emb = F.normalize(anchor_emb, dim=1)
-        pos_emb = F.normalize(pos_emb, dim=1)
-
-        sim_matrix = torch.mm(anchor_emb, pos_emb.t()) / temperature
-        labels = torch.arange(anchor_emb.size(0), device=anchor_emb.device)
-
-        # Only compute loss on positive pairs
-        pos_mask = is_positive.bool()
-        if pos_mask.sum() == 0:
-            return torch.tensor(0.0, device=anchor_emb.device), 0
-
-        loss_a = F.cross_entropy(sim_matrix[pos_mask], labels[pos_mask])
-        loss_b = F.cross_entropy(sim_matrix.T[pos_mask], labels[pos_mask])
-        contrastive_loss = (loss_a + loss_b) / 2
-
-        # Variance regularization - prevents embedding collapse
-        # Encourages each dimension to have high variance across the batch
-        var_anchor = anchor_emb.var(dim=0).mean()
-        var_pos = pos_emb.var(dim=0).mean()
-        var_loss = -torch.log(var_anchor + 1e-4) - torch.log(var_pos + 1e-4)
-        loss = contrastive_loss + 0.1 * var_loss
-
-        correct = (sim_matrix[pos_mask].argmax(dim=1) == labels[pos_mask]).sum().item()
-        return loss, correct
-
-    def forward(self, batch):
-        (
-            tokens_a,
-            tokens_b,
-            is_positive,
-        ) = (batch["tokens_a"], batch["tokens_b"], batch["is_positive"])
-
-        tokens_a = tokens_a.to(self.device, non_blocking=True)
-        tokens_b = tokens_b.to(self.device, non_blocking=True)
-
-        #   with torch.no_grad():
-        # base_emb_a = self.base_model(tokens_a)
-        # base_emb_b = self.base_model(tokens_b)
+    def forward_pair(
+        self, tokens_a: torch.Tensor, tokens_b: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         combined = torch.cat([tokens_a, tokens_b], dim=0)
         base_emb = self.base_model(combined)
         base_emb_a, base_emb_b = torch.chunk(base_emb, 2, dim=0)
-
-        emb_a = self.proj_head(base_emb_a)
-        emb_b = self.proj_head(base_emb_b)
-        loss, accuracy = self.loss(emb_a, emb_b, is_positive, temperature=0.03)
-        return loss, accuracy, tokens_a.size(0)
-
-    def checkpoint_files(self):
-        return {
-            "proj_head.pt": self.proj_head,
-            "optimizer.pt": self.optimizer,
-        }
+        return self.projection_head(base_emb_a), self.projection_head(base_emb_b)
 
 
-load_dotenv()
+class DatasetAdapter(ABC):
+    @abstractmethod
+    def adapt(self, raw_batch: dict) -> ContrastiveBatch:
+        pass
+
+    @property
+    @abstractmethod
+    def columns(self) -> list[str]:
+        pass
 
 
-def random_crop(tokens, length=256):
-    """Random offset crop, padded/truncated to fixed length"""
-    seq_len = tokens.size(1)
+class PairAdapter(DatasetAdapter):
+    @property
+    def columns(self) -> list[str]:
+        return ["tokens_a", "tokens_b", "is_positive"]
 
-    if seq_len <= length:
-        raise Exception(f"This should not happen {length}")
+    def adapt(self, raw_batch: dict) -> ContrastiveBatch:
+        return ContrastiveBatch(
+            anchor=raw_batch["tokens_a"],
+            positive=raw_batch["tokens_b"],
+            labels=raw_batch["is_positive"],
+        )
 
-    # Random offset
-    max_offset = seq_len - length
-    offset = torch.randint(0, max_offset + 1, (1,)).item()
-    return tokens[:, offset : offset + length]
+
+class TripletAdapter(DatasetAdapter):
+    @property
+    def columns(self) -> list[str]:
+        return ["ref_tokens", "pos_tokens", "neg_tokens"]
+
+    def adapt(self, raw_batch: dict) -> ContrastiveBatch:
+        return ContrastiveBatch(
+            anchor=raw_batch["ref_tokens"],
+            positive=raw_batch["pos_tokens"],
+            negative=raw_batch["neg_tokens"],
+        )
 
 
-class EmbeddingTrainer:
-    def __init__(
-        self,
-        plot: TrainingHistory = TrainingHistory(),
-        margin=0.2,
-        device="cuda",
-    ):
+@dataclass
+class ExperimentConfig:
+    name: str
+    dataset_name: str
+    adapter: DatasetAdapter
+    loss_fn: Callable[[EmbeddedBatch], LossResult]
+    loss_kwargs: Dict[str, Any] = field(default_factory=dict)
+
+    projection_hidden_dim: int = 512
+    projection_output_dim: int = 128
+
+    lr_projection: float = 1e-3
+    lr_base_model: float = 1e-4
+    freeze_base_model: bool = False
+
+    batch_size: int = 32
+    gradient_accumulation_steps: int = 4
+    epochs: int = 1000
+    timeout_minutes: int = 60
+    checkpoint_interval_minutes: int = 60
+
+
+@dataclass
+class ExperimentResult:
+    name: str
+    final_loss: float
+    final_accuracy: float
+    runtime_seconds: float
+    steps: int
+
+
+class ContrastiveTrainer:
+    def __init__(self, device: str = "cuda"):
         self.device = device
-        self.margin = margin
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.checkpoints_tracker = StorageBoxCheckpoint(
+        self.plot = TrainingHistory()
+        self.checkpoint_tracker: Optional[StorageBoxCheckpoint] = None
+        self.model: Optional[EmbeddingModel] = None
+        self.optimizer: Optional[torch.optim.Optimizer] = None
+        self.dataloader: Optional[WebDataloader] = None
+        self.config: Optional[ExperimentConfig] = None
+
+    def setup(
+        self, config: ExperimentConfig, base_model: nn.Module, input_dim: int = 10000
+    ):
+        self.config = config
+        self.plot = TrainingHistory()
+
+        run_id = f"{config.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        self.checkpoint_tracker = StorageBoxCheckpoint(
             run_id=run_id,
             host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
             username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
             password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
         )
-        self.last_checkpoint = time.time()
-        self.plot = plot
 
-    def embed(self, x):
-        """Mean pool hidden states → normalize"""
-        hidden = self.model.get_hidden_states(x)  # (batch, seq, dim)
-        emb = hidden.mean(dim=1)  # (batch, dim)
-        return F.normalize(emb, p=2, dim=-1)
+        projection_head = ProjectionHead(
+            input_dim=input_dim,
+            hidden_dim=config.projection_hidden_dim,
+            output_dim=config.projection_output_dim,
+        )
 
-    def triplet_loss(self, anchor, positive, negative):
-        pos_dist = 1 - F.cosine_similarity(anchor, positive)
-        neg_dist = 1 - F.cosine_similarity(anchor, negative)
-        return F.relu(pos_dist - neg_dist + self.margin).mean()
+        self.model = EmbeddingModel(base_model, projection_head).to(self.device)
 
-    # InfoNCE loss with in-batch negatives.
-    def in_batch_contrastive_loss(self, anchor_emb, pos_emb, temperature=0.05):
-        sim_matrix = torch.mm(anchor_emb, pos_emb.t()) / temperature
-        labels = torch.arange(anchor_emb.size(0), device=self.device)
-        loss = F.cross_entropy(sim_matrix, labels)
-        correct = (sim_matrix.argmax(dim=1) == labels).sum().item()
-        return loss, correct
+        if config.freeze_base_model:
+            for p in self.model.base_model.parameters():
+                p.requires_grad = False
+            self.optimizer = torch.optim.Adam(
+                self.model.projection_head.parameters(), lr=config.lr_projection
+            )
+        else:
+            self.optimizer = torch.optim.Adam(
+                [
+                    {
+                        "params": self.model.projection_head.parameters(),
+                        "lr": config.lr_projection,
+                    },
+                    {
+                        "params": self.model.base_model.parameters(),
+                        "lr": config.lr_base_model,
+                    },
+                ]
+            )
 
-    def train(self, objective: Objective, epochs=3, timeout_minutes=60):
-        start_time = time.time()
-        timeout_seconds = timeout_minutes * 60
-        batch_num = 0
+        self.dataloader = WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            dataset_name=config.dataset_name,
+            columns=config.adapter.columns,
+            batch_size=1024,
+        )
 
+    def _embed_batch(self, batch: ContrastiveBatch) -> EmbeddedBatch:
+        emb_a, emb_b = self.model.forward_pair(batch.anchor, batch.positive)
+        emb_neg = self.model(batch.negative) if batch.negative is not None else None
+
+        return EmbeddedBatch(
+            anchor=emb_a,
+            positive=emb_b,
+            negative=emb_neg,
+            labels=batch.labels,
+        )
+
+    def _compute_loss(self, batch: ContrastiveBatch) -> LossResult:
+        batch = batch.to(self.device)
+        embedded = self._embed_batch(batch)
+        return self.config.loss_fn(embedded, **self.config.loss_kwargs)
+
+    def _checkpoint(self, stats: Stats):
+        self.checkpoint_tracker.checkpoint_files(
+            {
+                "proj_head.pt": self.model.projection_head,
+                "optimizer.pt": self.optimizer,
+            },
+            stats,
+        )
+
+    def _save_plots(self):
         os.makedirs("plots/embedding-contrastive", exist_ok=True)
-        threaded_loader = None
-        timed_out = False
-        metadata = {
-            "base_model_name": "opcode-tokens-256",
-            "margins": self.margin,
-            "objective": objective.__class__.__name__,
-            "plots": self.plot,
-        }
-        threaded_loader = objective.dataloader.iter(batch_size=32)
+        _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
+
+        ax1.plot(range(1, len(self.plot.losses) + 1), self.plot.losses, "b-o")
+        ax1.set_xlabel("Epoch")
+        ax1.set_ylabel("Loss")
+        ax1.set_title(f"Training Loss - {self.config.name}")
+        ax1.grid(True)
+
+        ax2.plot(range(1, len(self.plot.accuracies) + 1), self.plot.accuracies, "g-o")
+        ax2.set_xlabel("Epoch")
+        ax2.set_ylabel("Accuracy (%)")
+        ax2.set_title(f"Training Accuracy - {self.config.name}")
+        ax2.grid(True)
+
+        plt.tight_layout()
+        plt.savefig(f"plots/embedding-contrastive/{self.config.name}.png", dpi=150)
+        print(f"plots/embedding-contrastive/{self.config.name}.png")
+        plt.close()
+
+    def _build_stats(
+        self, avg_loss: float, accuracy: float, runtime_seconds: float, steps: int
+    ) -> Stats:
+        return Stats(
+            loss_average=avg_loss,
+            accuracy_pct=accuracy,
+            runtime_seconds=runtime_seconds,
+            steps=steps,
+            dataset=self.config.dataset_name,
+            metadata={
+                "experiment_name": self.config.name,
+                "base_model_name": "opcode-tokens-256",
+                "config": {
+                    "lr_projection": self.config.lr_projection,
+                    "lr_base_model": self.config.lr_base_model,
+                    "loss_kwargs": self.config.loss_kwargs,
+                    "freeze_base_model": self.config.freeze_base_model,
+                },
+                "plots": self.plot,
+            },
+        )
+
+    def train(self) -> ExperimentResult:
+        print(f"\n{'=' * 60}")
+        print(f"Starting experiment: {self.config.name}")
+        print(f"{'=' * 60}")
+
+        start_time = time.time()
+        timeout_seconds = self.config.timeout_minutes * 60
+        last_checkpoint_time = time.time()
+        batch_num = 0
+        final_loss = 0.0
+        final_accuracy = 0.0
+
+        threaded_loader = self.dataloader.iter(batch_size=self.config.batch_size)
 
         try:
-            for epoch in range(epochs):
-                total_loss = 0
-                total_correct = 0
-                total_samples = 0
+            for epoch in range(self.config.epochs):
+                epoch_loss = 0
+                epoch_correct = 0
+                epoch_samples = 0
                 steps = 0
-                avg_loss = 0
-                acc = 0
 
-                pbar = tqdm(threaded_loader, desc=f"Epoch {epoch + 1}/{epochs}")
-                timing_samples = 0
-                time_forward = 0
-                time_backward = 0
-                time_step = 0
+                timing = {"forward": 0, "backward": 0, "step": 0, "samples": 0}
 
-                try:
-                    for index, batch in enumerate(pbar):
-                        if time.time() - start_time > timeout_seconds:
-                            pbar.close()
-                            print(
-                                f"Timeout reached ({timeout_minutes} min), stopping early..."
+                pbar = tqdm(
+                    threaded_loader,
+                    desc=f"[{self.config.name}] Epoch {epoch + 1}/{self.config.epochs}",
+                )
+
+                for index, raw_batch in enumerate(pbar):
+                    elapsed = time.time() - start_time
+                    if elapsed > timeout_seconds:
+                        pbar.close()
+                        print(f"Timeout reached ({self.config.timeout_minutes} min)")
+                        final_loss = epoch_loss / max(steps, 1)
+                        final_accuracy = epoch_correct / max(epoch_samples, 1) * 100
+                        self._checkpoint(
+                            self._build_stats(
+                                final_loss, final_accuracy, elapsed, batch_num
                             )
-                            timed_out = True
-                            break
-
-                        t0 = time.perf_counter()
-                        loss, correct, samples = objective.forward(batch)
-                        torch.cuda.synchronize()
-                        t1 = time.perf_counter()
-
-                        loss.backward()
-                        torch.cuda.synchronize()
-                        t2 = time.perf_counter()
-
-                        if index % 4 == 0 and index != 0:
-                            objective.optimizer.step()
-                            objective.optimizer.zero_grad(set_to_none=True)
-                        torch.cuda.synchronize()
-                        t3 = time.perf_counter()
-
-                        time_forward += t1 - t0
-                        time_backward += t2 - t1
-                        time_step += t3 - t2
-                        timing_samples += 1
-
-                        total_correct += correct
-                        total_samples += samples
-                        total_loss += loss.item()
-                        steps += 1
-
-                        avg_loss = total_loss / steps
-                        acc = (
-                            total_correct / total_samples * 100
-                            if total_samples > 0
-                            else 0
                         )
-                        elapsed = (time.time() - start_time) / 60
-
-                        pbar.set_postfix(
-                            loss=f"{avg_loss:.4f}",
-                            acc=f"{acc:.2f}%",
-                            fwd=f"{1000 * time_forward / timing_samples:.0f}ms",
-                            bwd=f"{1000 * time_backward / timing_samples:.0f}ms",
-                            stp=f"{1000 * time_step / timing_samples:.0f}ms",
-                            time=f"{elapsed:.1f}m",
+                        return ExperimentResult(
+                            name=self.config.name,
+                            final_loss=final_loss,
+                            final_accuracy=final_accuracy,
+                            runtime_seconds=elapsed,
+                            steps=batch_num,
                         )
-                        batch_num += 1
 
-                        if time.time() - self.last_checkpoint > 60 * 60:
-                            self.checkpoints_tracker.checkpoint_files(
-                                objective.checkpoint_files(),
-                                Stats(
-                                    loss_average=avg_loss,
-                                    accuracy_pct=acc,
-                                    runtime_seconds=time.time() - start_time,
-                                    steps=batch_num,
-                                    dataset=objective.dataloader.dataset_name,
-                                    metadata=metadata,
-                                ),
-                            )
-                            self.last_checkpoint = time.time()
+                    batch = self.config.adapter.adapt(raw_batch)
 
-                finally:
-                    # Always cleanup the loader after each epoch
-                    pass
+                    t0 = time.perf_counter()
+                    result = self._compute_loss(batch)
+                    torch.cuda.synchronize()
+                    t1 = time.perf_counter()
+
+                    result.loss.backward()
+                    torch.cuda.synchronize()
+                    t2 = time.perf_counter()
+
+                    if (index + 1) % self.config.gradient_accumulation_steps == 0:
+                        self.optimizer.step()
+                        self.optimizer.zero_grad(set_to_none=True)
+                    torch.cuda.synchronize()
+                    t3 = time.perf_counter()
+
+                    timing["forward"] += t1 - t0
+                    timing["backward"] += t2 - t1
+                    timing["step"] += t3 - t2
+                    timing["samples"] += 1
+
+                    epoch_loss += result.loss.item()
+                    epoch_correct += result.correct
+                    epoch_samples += batch.batch_size
+                    steps += 1
+                    batch_num += 1
+
+                    avg_loss = epoch_loss / steps
+                    accuracy = (
+                        epoch_correct / epoch_samples * 100 if epoch_samples > 0 else 0
+                    )
+                    pbar.set_postfix(
+                        loss=f"{avg_loss:.4f}",
+                        acc=f"{accuracy:.2f}%",
+                        fwd=f"{1000 * timing['forward'] / timing['samples']:.0f}ms",
+                        bwd=f"{1000 * timing['backward'] / timing['samples']:.0f}ms",
+                        stp=f"{1000 * timing['step'] / timing['samples']:.0f}ms",
+                        time=f"{elapsed / 60:.1f}m",
+                    )
+
+                    if (
+                        time.time() - last_checkpoint_time
+                        > self.config.checkpoint_interval_minutes * 60
+                    ):
+                        self._checkpoint(
+                            self._build_stats(avg_loss, accuracy, elapsed, batch_num)
+                        )
+                        last_checkpoint_time = time.time()
 
                 if steps > 0:
-                    self.plot.record(
-                        loss=(total_loss / steps),
-                        accuracy=(total_correct / total_samples * 100),
-                    )
-
-                    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4))
-
-                    ax1.plot(
-                        range(1, len(self.plot.losses) + 1), self.plot.losses, "b-o"
-                    )
-                    ax1.set_xlabel("Epoch")
-                    ax1.set_ylabel("Loss")
-                    ax1.set_title("Training Loss")
-                    ax1.grid(True)
-
-                    ax2.plot(
-                        range(1, len(self.plot.accuracies) + 1),
-                        self.plot.accuracies,
-                        "g-o",
-                    )
-                    ax2.set_xlabel("Epoch")
-                    ax2.set_ylabel("Accuracy (%)")
-                    ax2.set_title("Training Accuracy")
-                    ax2.grid(True)
-
-                    plt.tight_layout()
-                    plt.savefig("plots/embedding-contrastive/training.png", dpi=150)
-                    plt.close()
-
-                if timed_out:
-                    print("Doing a checkpoint")
-                    self.checkpoints_tracker.checkpoint_files(
-                        objective.checkpoint_files(),
-                        Stats(
-                            loss_average=avg_loss,
-                            accuracy_pct=acc,
-                            runtime_seconds=time.time() - start_time,
-                            steps=batch_num,
-                            dataset=objective.dataloader.dataset_name,
-                            metadata=metadata,
-                        ),
-                    )
-                    print("Breaking out")
-                    break
+                    final_loss = epoch_loss / steps
+                    final_accuracy = epoch_correct / epoch_samples * 100
+                    self.plot.record(loss=final_loss, accuracy=final_accuracy)
+                    self._save_plots()
 
         finally:
-            # Final cleanup in case of any exception
             if threaded_loader is not None:
                 threaded_loader.cleanup()
-            print("Shutting down .... ")
-        print("Waiting for full shutdown")
-        self.checkpoints_tracker._shutdown()
-        print("DOne")
+            print(f"Shutting down experiment: {self.config.name}")
+            self.checkpoint_tracker._shutdown()
+
+        return ExperimentResult(
+            name=self.config.name,
+            final_loss=final_loss,
+            final_accuracy=final_accuracy,
+            runtime_seconds=time.time() - start_time,
+            steps=batch_num,
+        )
 
 
-def train_model(epochs):
-    # (model, _) = load_model_from_path(
-    #    #"checkpoints/2026-01-11/20260111_115502/step_180841"
-    # )
-    # _, optimizer_state, stats = load_raw_from_path(
-    #    #"checkpoints/2026-01-11/20260111_115502/step_180841"
-    # )
+def run_experiments(
+    experiments: List[ExperimentConfig], device: str = "cuda"
+) -> List[ExperimentResult]:
+    results = []
+    trainer = ContrastiveTrainer(device=device)
 
-    # dataloader = dataloader.iter(workers=2, batch_size=2)
-    # print(next(iter(dataloader)))
-    # dataloader.iter._start_epoch()
-    # print(dataloader.iter._fetch_batch(0))
-    # exit(0)
-    #    for x in iter(dataloader):
-    #        print(x)
+    for config in experiments:
+        base_model, _ = load_best_model_from_checkpoint(
+            target_dataset="opcode-tokens-256", max_age_days=32
+        )
+        trainer.setup(config, base_model)
+        result = trainer.train()
+        results.append(result)
 
-    model, _ = load_best_model_from_checkpoint(
-        target_dataset="opcode-tokens-256", max_age_days=32
-    )
-    plot = TrainingHistory()  # **stats["metadata"]["plots"])
-    #   print(plot.accuracies)
-    #   print(plot.losses)
-    #    exit(0)
-    # trainer.optimizer.load_state_dict(optimizer_state)
-    objective = InfoObjectiveDataset(model, "cuda")
-    trainer = EmbeddingTrainer(device="cuda", margin=0.6, plot=plot)
-    trainer.train(objective, epochs=epochs, timeout_minutes=(48 * 60 * 2))
+        print(f"\nCompleted: {result.name}")
+        print(f"  Loss: {result.final_loss:.4f}")
+        print(f"  Accuracy: {result.final_accuracy:.2f}%")
+        print(f"  Runtime: {result.runtime_seconds / 60:.1f} min")
+        print(f"  Steps: {result.steps}")
+
+    return results
+
+
+EXPERIMENTS = [
+    # Pair dataset experiments
+    ExperimentConfig(
+        name="baseline",
+        dataset_name="contrastive_pairs-v3",
+        adapter=PairAdapter(),
+        loss_fn=info_nce_loss,
+        loss_kwargs={"temperature": 0.03, "variance_weight": 0.1},
+    ),
+    ExperimentConfig(
+        name="high_temp",
+        dataset_name="contrastive_pairs-v3",
+        adapter=PairAdapter(),
+        loss_fn=info_nce_loss,
+        loss_kwargs={"temperature": 0.1, "variance_weight": 0.1},
+    ),
+    ExperimentConfig(
+        name="no_variance_reg",
+        dataset_name="contrastive_pairs-v3",
+        adapter=PairAdapter(),
+        loss_fn=info_nce_loss,
+        loss_kwargs={"temperature": 0.03, "variance_weight": 0.0},
+    ),
+    ExperimentConfig(
+        name="frozen_base",
+        dataset_name="contrastive_pairs-v3",
+        adapter=PairAdapter(),
+        loss_fn=info_nce_loss,
+        loss_kwargs={"temperature": 0.03, "variance_weight": 0.1},
+        freeze_base_model=True,
+    ),
+    # Triplet dataset experiments
+    ExperimentConfig(
+        name="triplet_baseline",
+        dataset_name="etherscan-similarity-256-v2",
+        adapter=TripletAdapter(),
+        loss_fn=triplet_loss,
+        loss_kwargs={"margin": 0.2},
+    ),
+    ExperimentConfig(
+        name="triplet_high_margin",
+        dataset_name="etherscan-similarity-256-v2",
+        adapter=TripletAdapter(),
+        loss_fn=triplet_loss,
+        loss_kwargs={"margin": 0.5},
+    ),
+    ExperimentConfig(
+        name="triplet_low_margin",
+        dataset_name="etherscan-similarity-256-v2",
+        adapter=TripletAdapter(),
+        loss_fn=triplet_loss,
+        loss_kwargs={"margin": 0.1},
+    ),
+    ExperimentConfig(
+        name="triplet_frozen_base",
+        dataset_name="etherscan-similarity-256-v2",
+        adapter=TripletAdapter(),
+        loss_fn=triplet_loss,
+        loss_kwargs={"margin": 0.2},
+        freeze_base_model=True,
+    ),
+    # Similarity ABI
+    ExperimentConfig(
+        name="selector_pairs_baseline",
+        dataset_name="contrastive_pairs",
+        adapter=PairAdapter(),
+        loss_fn=info_nce_loss,
+        loss_kwargs={"temperature": 0.03, "variance_weight": 0.1},
+    ),
+    ExperimentConfig(
+        name="selector_pairs_high_temp",
+        dataset_name="contrastive_pairs",
+        adapter=PairAdapter(),
+        loss_fn=info_nce_loss,
+        loss_kwargs={"temperature": 0.1, "variance_weight": 0.1},
+    ),
+]
+
+
+def train_model(epochs: int):
+    for config in EXPERIMENTS:
+        config.epochs = epochs
+        config.timeout_minutes = 60 * 3  # 48 * 60 * 2
+
+    results = run_experiments(EXPERIMENTS)
+
+    print("\n" + "=" * 60)
+    print("EXPERIMENT SUMMARY")
+    print("=" * 60)
+    for r in results:
+        print(f"{r.name:20s} | Loss: {r.final_loss:.4f} | Acc: {r.final_accuracy:.2f}%")
 
 
 def serve_model(port):
@@ -429,7 +592,7 @@ def serve_model(port):
     base_model, _ = load_best_model_from_checkpoint(
         target_dataset="opcode-tokens-256", max_age_days=32
     )
-    project_head_state = torch.load(
+    proj_head_state = torch.load(
         io.BytesIO(
             storage.load_bytes(
                 "checkpoints/2026-01-18/20260118_195410/step_467974/proj_head.pt"
@@ -437,7 +600,12 @@ def serve_model(port):
         ),
         map_location=torch.device("cpu"),
     )
-    model = InfoObjectiveDataset.load_from_storage(base_model, project_head_state)
+
+    projection_head = ProjectionHead(input_dim=10000, hidden_dim=512, output_dim=128)
+    projection_head.load_state_dict(proj_head_state)
+    model = EmbeddingModel(base_model, projection_head)
+    model.eval()
+
     dataloader = WebDataloader(
         os.environ["WEB_DATALOADER"],
         dataset_name="opcode-tokens-256",
@@ -453,7 +621,7 @@ def serve_model(port):
 
         with torch.no_grad():
             doc_tensors = dataloader.tokenize([text])
-            embeddings = torch.concat([model.embed(v) for v in doc_tensors], dim=0)
+            embeddings = torch.concat([model(v) for v in doc_tensors], dim=0)
 
         if method == "mean":
             pooled = torch.mean(embeddings, dim=0)
@@ -490,15 +658,11 @@ def main():
     parser = argparse.ArgumentParser(description="Model training and serving CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
-    # Train command
-    train_parser = subparsers.add_parser("train", help="Fine-tune the model")
-    train_parser.add_argument(
-        "--epochs", type=int, default=1000, help="Number of training epochs"
-    )
+    train_parser = subparsers.add_parser("train", help="Run all experiments")
+    train_parser.add_argument("--epochs", type=int, default=1000)
 
-    # Serve command
     serve_parser = subparsers.add_parser("serve", help="Serve the model")
-    serve_parser.add_argument("--port", type=int, default=8020, help="Port to serve on")
+    serve_parser.add_argument("--port", type=int, default=8020)
 
     args = parser.parse_args()
 
