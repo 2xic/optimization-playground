@@ -276,18 +276,16 @@ def train(model, dataset, epochs=100, device="cuda"):
     criterion = nn.CrossEntropyLoss(ignore_index=1024)
     optimizer = optim.AdamW(model.parameters(), lr=3e-4)
 
-    dl = dataset.iter(batch_size=1)
     print(f"total_samples: {dataset.total_samples}")
-    print(f"num_batches: {dataset.num_batches}")
+    print(f"total_batches: {dataset.total_batches}")
     print(f"batch_size: {dataset.batch_size}")
-    print(f"dl.total_batches: {dl.total_batches}")
     print(dataset.info)
 
     for epoch in range(epochs):
         total_loss = 0
 
         dataloader = bucketed_iter(
-            dataset.iter(batch_size=1),
+            dataset,
             batch_size=32,
             text_pad_idx=dataset.info["training_metadata"]["text_padding_idx"],
             audio_pad_idx=dataset.info["training_metadata"]["audio_padding_idx"],

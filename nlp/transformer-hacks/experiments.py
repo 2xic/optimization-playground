@@ -183,27 +183,6 @@ NAMED_DATASETS = {
 DATASETS = [NAMED_DATASETS[target] for target in TARGET_DATASET.split(",")]
 
 
-class NamedDataset:
-    def __init__(self, name, dataset):
-        self.name = name
-        self.dataset = dataset
-
-    @property
-    def vocab_size(self):
-        return self.dataset.dataset.vocab_size
-
-    @property
-    def padding_index(self):
-        return self.dataset.dataset.padding_index
-
-    @property
-    def sequence_size(self):
-        return self.dataset.dataset.sequence_size
-
-    def iter(self, **args):
-        return self.dataset.dataset.iter(**args, workers=0)
-
-
 def get_output_path(parent_name: str, filename):
     dir = os.path.join(
         os.path.dirname(__file__),
@@ -856,8 +835,8 @@ def continue_training_from_checkpoint():
 
 def train():
     # residual_connections()
-    # long_running_training()
-    continue_training_from_checkpoint()
+    long_running_training()
+    # continue_training_from_checkpoint()
     # fine_tuning()
     # benchmark()
     # mixture_of_expert_model_vs_standard()

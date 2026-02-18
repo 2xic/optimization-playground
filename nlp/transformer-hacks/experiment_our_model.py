@@ -51,13 +51,11 @@ def train():
         sampler=temperature_sampling,
     )
     optimizer = optim.Adam(model.parameters())
-    dataloader = dataset.iter()
-
     loss_total = 0
     accuracy_total = 0
     accuracy_rows = 0
     for _ in range(100):
-        for index, (X, y) in enumerate(dataloader):
+        for index, (X, y) in enumerate(dataset):
             print(f"index {index}")
             X = X.to(device)
             y = y.to(device)
@@ -95,11 +93,9 @@ def profile():
     )
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, fused=True)
     scaler = GradScaler()
-    dataloader = dataset.iter(batch_size=micro_batch_size, workers=8)
-
     # Warmup
     optimizer.zero_grad(set_to_none=True)
-    for i, (X, y) in enumerate(dataloader):
+    for i, (X, y) in enumerate(dataset):
         if i >= 5:
             break
         X, y = X.to(device, non_blocking=True), y.to(device, non_blocking=True)
@@ -116,7 +112,7 @@ def profile():
     # Profile 50 effective batches (50 * accumulation_steps micro batches)
     times = {"data": [], "to_device": [], "forward": [], "backward": [], "optim": []}
     queue_sizes = []
-    dataloader_iter = iter(dataloader)
+    dataloader_iter = iter(dataset)
 
     for i in range(50):
         t_data, t_device, t_fwd, t_bwd = 0, 0, 0, 0
@@ -128,8 +124,8 @@ def profile():
             X, y = next(dataloader_iter)
             t1 = time.perf_counter()
 
-            if hasattr(dataloader.iter, "batch_queue"):
-                queue_sizes.append(dataloader.iter.batch_queue.qsize())
+            if hasattr(dataset, "batch_queue"):
+                queue_sizes.append(dataset.batch_queue.qsize())
 
             X, y = X.to(device, non_blocking=True), y.to(device, non_blocking=True)
             torch.cuda.synchronize()

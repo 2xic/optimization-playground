@@ -359,7 +359,7 @@ class ContrastiveTrainer:
         final_loss = 0.0
         final_accuracy = 0.0
 
-        threaded_loader = self.dataloader.iter(batch_size=self.config.batch_size)
+        self.dataloader.set_batch_size(self.config.batch_size)
 
         try:
             for epoch in range(self.config.epochs):
@@ -371,7 +371,7 @@ class ContrastiveTrainer:
                 timing = {"forward": 0, "backward": 0, "step": 0, "samples": 0}
 
                 pbar = tqdm(
-                    threaded_loader,
+                    self.dataloader,
                     desc=f"[{self.config.name}] Epoch {epoch + 1}/{self.config.epochs}",
                 )
 
@@ -452,8 +452,8 @@ class ContrastiveTrainer:
                     self._save_plots()
 
         finally:
-            if threaded_loader is not None:
-                threaded_loader.cleanup()
+            if self.dataloader is not None:
+                self.dataloader.cleanup()
             print(f"Shutting down experiment: {self.config.name}")
             self.checkpoint_tracker._shutdown()
 

@@ -63,7 +63,7 @@ def dataloader():
     count = 100
     start = time.time()
     index = 0
-    iterator = dataloader.iter()
+    iterator = iter(dataloader)
     for epoch in range(10):
         for _, _batch in enumerate(iterator):
             print(index)

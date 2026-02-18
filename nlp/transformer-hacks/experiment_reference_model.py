@@ -31,14 +31,12 @@ def train():
         sampler=argmax_sampling,
     )
     optimizer = optim.Adam(model.parameters())
-    dataloader = dataset.iter()
-
     loss_total = 0
     accuracy_total = 0
     accuracy_rows = 0
     for i in range(100):
         print(f"Epoch {i}")
-        for index, (X, y) in enumerate(dataloader):
+        for index, (X, y) in enumerate(dataset):
             X = X.to(device)
             y = y.to(device)
             optimizer.zero_grad()

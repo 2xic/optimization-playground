@@ -57,8 +57,7 @@ def inspect_dataset():
             ]
         )
     )
-    iter = top_dataloader.iter()
-    for batch in iter:
+    for batch in top_dataloader:
         X, _ = batch["x_tokens"], batch["y_tokens"]
         a = X.tolist()[0]
         #    print(a)

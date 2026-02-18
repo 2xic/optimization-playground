@@ -69,7 +69,8 @@ def benchmark_training(
         vocab_size=dataset.vocab_size,
         sampler=temperature_sampling,
     )
-    dataloader = iter(dataset.iter(batch_size))
+    dataset.set_batch_size(batch_size)
+    dataloader = iter(dataset)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     model.train()

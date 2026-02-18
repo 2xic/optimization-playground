@@ -16,8 +16,9 @@ from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
-from utils.web_dataloader import WebDataloader, ThreadedDataLoader
+from utils.web_dataloader import WebDataloader
 from typing import List
+import shutil
 
 torch.backends.cudnn.benchmark = True
 
@@ -44,7 +45,7 @@ class ModelStateSaver:
         }
         torch.save(checkpoint, self.get_file_path())
         torch.save(checkpoint, self.get_file_path_epoch(epoch))
-        print("save checkpoint")
+        tqdm.write("save checkpoint")
 
     def load_model_state(self, model: torch.nn.Module):
         state = torch.load(self.get_file_path())
@@ -130,22 +131,9 @@ def create_config(vocab_size, padding_index, sequence_length):
     )
 
 
-def timer_iterator(dataset, metrics_tracker=None):
-    with Timer("create_iterator"):
-        iterator = iter(dataset)
-    for _ in range(len(dataset)):
-        try:
-            wait_start = time.time()
-            with Timer("timer_iterator"):
-                batch = next(iterator)
-                X, y = batch["x_tokens"], batch["y_tokens"]
-            data_wait_time = time.time() - wait_start
-            if metrics_tracker is not None:
-                metrics_tracker.log(data_wait_time=data_wait_time)
-
-            yield X, y
-        except StopIteration:
-            break
+def batch_iterator(dataset):
+    for batch in dataset:
+        yield batch["x_tokens"], batch["y_tokens"]
 
 
 class BaseTrainer(ABC):
@@ -185,7 +173,7 @@ class BaseTrainer(ABC):
         self,
         model,
         objective,
-        loader: ThreadedDataLoader,
+        loader: WebDataloader,
         training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
@@ -199,7 +187,7 @@ class BaseTrainer(ABC):
         model.train()
         has_tqdm_loader = isinstance(progress, tqdm)
         self.metrics_tracker.dataset_name = loader.name
-        iterator = timer_iterator(progress, self.metrics_tracker)
+        iterator = batch_iterator(progress)
 
         # Restore sum_loss, accuracy and rows if we match the epoch ....
         if training_options.metadata.epoch == loader.epoch:
@@ -215,17 +203,18 @@ class BaseTrainer(ABC):
             )
 
             if has_tqdm_loader:
-                progress.set_description(
-                    "Loss {loss}, Accuracy {acc}, batch_size {batch_shape}, {batches_consumed}/{total_batches} Training Time {time}m, Max training time {max_time}m".format(
-                        acc=(sum_accuracy / count_rows * 100) if count_rows > 0 else 0,
-                        loss=sum_loss,
-                        time=self.trained_minutes,
-                        max_time=training_options.training_timeout_minutes,
-                        batch_shape=X.shape,
-                        batches_consumed=loader._batches_consumed,
-                        total_batches=loader.total_batches,
-                    )
-                )
+                acc_pct = (sum_accuracy / count_rows * 100) if count_rows > 0 else 0
+                avg_loss = sum_loss / max(self.total_batch_num, 1)
+                postfix = {
+                    "loss": f"{avg_loss:.2f}",
+                    "acc": f"{acc_pct:.1f}%",
+                    "batch": f"{loader._batches_consumed}/{loader.total_batches}",
+                    "time": f"{self.trained_minutes}/{training_options.training_timeout_minutes}m",
+                    "q": loader.batch_queue.qsize(),
+                }
+                if loader._failed_fetches > 0:
+                    postfix["failed_fetches"] = loader._failed_fetches
+                progress.set_postfix(postfix)
 
             if (
                 time.time() - self.last_checkpoint > self.checkpoint_interval
@@ -256,7 +245,7 @@ class BaseTrainer(ABC):
             training_options.metadata.total_batch_num = self.total_batch_num
 
             if self.has_timeout(training_options):
-                print("Hit timeout")
+                self.log("Hit timeout")
                 break
 
         return (
@@ -322,6 +311,14 @@ class BaseTrainer(ABC):
         return training_time >= training_options.training_timeout_minutes
 
     @property
+    def is_main_rank(self):
+        return not dist.is_initialized() or dist.get_rank() == 0
+
+    def log(self, msg):
+        if self.is_main_rank:
+            tqdm.write(msg)
+
+    @property
     def trained_minutes(self):
         return (time.time() - self.start) // 60
 
@@ -344,50 +341,40 @@ class Trainer(BaseTrainer):
 
     def train(
         self,
-        dataset: WebDataloader,
+        dataloader: WebDataloader,
         training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
-        print(f"Training on {training_options.device}")
+        self.log(f"Training on {training_options.device}")
         self.model.to(training_options.device)
         for state in self.optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(training_options.device)
-        #
         self.sizer.current_batch = training_options.batch_size
-        # Keep track of plots so that they can be tracked
-        # TODO: implement loading from previously trained checkpoints into model.
-        # if "plots" not in training_options.metadata:
-        # training_options.metadata.plots = training_options.plots
-        print("Starting to train now!")
-        loader = dataset.iter(batch_size=training_options.batch_size)
-        # Resume the loader iterator ... ?
-        loader.load_state_dict(
+        self.log("Starting to train now!")
+        dataloader.load_state_dict(
             batches_consumed=training_options.metadata.batches_consumed,
             epoch=training_options.metadata.epoch,
         )
 
         for epoch in range(training_options.epochs):
             sum_epoch_accuracy, sum_epoch_loss, sum_epoch_rows = super().train(
-                self.model, self.objective, loader, training_options, progress
+                self.model, self.objective, dataloader, training_options, progress
             )
-            loader.set_epoch(epoch + 1)
+            dataloader.set_epoch(epoch + 1)
             if sum_epoch_rows > 0:
                 accuracy_pct = sum_epoch_accuracy / sum_epoch_rows * 100
-                print(
-                    f"Epoch {epoch} done, accuracy {accuracy_pct}, loss {sum_epoch_loss}"
-                )
+                avg_loss = sum_epoch_loss / max(sum_epoch_rows, 1)
+                self.log(f"Epoch {epoch} | acc={accuracy_pct:.2f}% loss={avg_loss:.4f}")
                 training_options.metadata.plots.record(
                     loss=sum_epoch_loss, accuracy=accuracy_pct
                 )
-            # Check timeout
             if self.has_timeout(training_options):
-                print("Hit timeout")
+                self.log("Hit timeout")
                 break
-        # Always do a save of the final model also.
         if training_options.enable_checkpoints:
-            print("storing checkpoints ...")
+            self.log("Storing checkpoints ...")
             self.checkpoint(
                 training_options,
                 self.model,
@@ -444,9 +431,10 @@ class GradScalerTrainer(Trainer):
         torch.backends.cuda.enable_flash_sdp(True)
         torch.backends.cuda.enable_mem_efficient_sdp(True)
         torch.set_float32_matmul_precision("high")
-        #        self.model = self.model  # torch.compile(self.model, mode="reduce-overhead")
-        #        self.model = torch.compile(self.model, mode="reduce-overhead")
-        # Try to enable the fuzed model.
+        if shutil.which("cc") or shutil.which("gcc"):
+            self.model = torch.compile(self.model, dynamic=True)
+        else:
+            tqdm.write("Skipping torch.compile: no C compiler found")
         self.optimizer.fused = True
         return super().train(dataset, training_options, progress)
 

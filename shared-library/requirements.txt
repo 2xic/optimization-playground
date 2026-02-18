@@ -18,3 +18,4 @@ msgpack
 ormsgpack
 pysftp
 paramiko==3.3.1
+aiohttp-retry
