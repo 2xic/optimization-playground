@@ -314,6 +314,14 @@ class TrainingMetadata(dict):
     def total_batch_num(self, value):
         self["total_batch_num"] = value
 
+    @property
+    def epoch_batch_count(self) -> int:
+        return self.get("epoch_batch_count", 0)
+
+    @epoch_batch_count.setter
+    def epoch_batch_count(self, value):
+        self["epoch_batch_count"] = value
+
 
 @dataclass
 class Stats:

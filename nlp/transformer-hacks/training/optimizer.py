@@ -1,6 +1,6 @@
 import torch
 from torch.optim.lr_scheduler import _LRScheduler
-from torch.optim.lr_scheduler import ExponentialLR
+
 from dataclasses import dataclass
 
 import torch.optim.rmsprop
@@ -30,30 +30,38 @@ class NoamScheduler(_LRScheduler):
         return [base_lr * scale for base_lr in self.base_lrs]
 
 
-class ExponentialLR(ExponentialLR):
-    def __init__(self, gamma):
-        self.gamma = gamma
-
-    def create_scheduler(self, optimizer):
-        super(ExponentialLR, self).__init__(optimizer, gamma=self.gamma)
-
-
-class WarmupExpDecay(_LRScheduler):
-    def __init__(self, warmup_epochs=5, gamma=0.95, last_epoch=-1):
-        self.warmup_epochs = warmup_epochs
-        self.gamma = gamma
+class StepExponentialLR(_LRScheduler):
+    def __init__(self, decay_steps=10000, min_lr_ratio=0.01, last_epoch=-1):
+        self.decay_steps = decay_steps
+        self.min_lr_ratio = min_lr_ratio
         self.last_epoch = last_epoch
 
     def create_scheduler(self, optimizer):
         super().__init__(optimizer, self.last_epoch)
 
     def get_lr(self):
-        if self.last_epoch < self.warmup_epochs:
-            alpha = (self.last_epoch + 1) / self.warmup_epochs
+        gamma = self.min_lr_ratio ** (1.0 / self.decay_steps)
+        return [base_lr * (gamma ** self.last_epoch) for base_lr in self.base_lrs]
+
+
+class WarmupExpDecay(_LRScheduler):
+    def __init__(self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1):
+        self.warmup_steps = warmup_steps
+        self.decay_steps = decay_steps
+        self.min_lr_ratio = min_lr_ratio
+        self.last_epoch = last_epoch
+
+    def create_scheduler(self, optimizer):
+        super().__init__(optimizer, self.last_epoch)
+
+    def get_lr(self):
+        if self.last_epoch < self.warmup_steps:
+            alpha = (self.last_epoch + 1) / self.warmup_steps
             return [base_lr * alpha for base_lr in self.base_lrs]
         else:
-            decay_epochs = self.last_epoch - self.warmup_epochs
-            return [base_lr * (self.gamma**decay_epochs) for base_lr in self.base_lrs]
+            decay_step = self.last_epoch - self.warmup_steps
+            gamma = self.min_lr_ratio ** (1.0 / self.decay_steps)
+            return [base_lr * (gamma ** decay_step) for base_lr in self.base_lrs]
 
 
 def lr_lambda(step):

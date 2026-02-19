@@ -203,7 +203,7 @@ class WebDataloader:
         )
         timeout = aiohttp.ClientTimeout(total=self.timeout)
 
-        retry_options = ExponentialRetry(attempts=3, start_timeout=1)
+        retry_options = ExponentialRetry(attempts=5, start_timeout=2, max_timeout=30)
         async with RetryClient(
             connector=connector, timeout=timeout, retry_options=retry_options
         ) as session:
@@ -272,7 +272,6 @@ class WebDataloader:
             return result
 
         except Exception:
-            self._failed_fetches += 1
             return self._empty_batch()
 
     def _empty_batch(self):

@@ -183,18 +183,19 @@ class BaseTrainer(ABC):
         sum_loss = 0
         sum_accuracy = 0
         count_rows = 0
+        epoch_batch_count = 0
         progress = progress(loader)
         model.train()
         has_tqdm_loader = isinstance(progress, tqdm)
         self.metrics_tracker.dataset_name = loader.name
         iterator = batch_iterator(progress)
 
-        # Restore sum_loss, accuracy and rows if we match the epoch ....
         if training_options.metadata.epoch == loader.epoch:
             sum_loss = training_options.metadata.sum_loss
             sum_accuracy = training_options.metadata.sum_accuracy
             count_rows = training_options.metadata.count_rows
             self.total_batch_num = training_options.metadata.total_batch_num
+            epoch_batch_count = training_options.metadata.epoch_batch_count
 
         for _, (X, y) in enumerate(iterator):
             # print("index", index, (X.shape, y.shape))
@@ -204,7 +205,7 @@ class BaseTrainer(ABC):
 
             if has_tqdm_loader:
                 acc_pct = (sum_accuracy / count_rows * 100) if count_rows > 0 else 0
-                avg_loss = sum_loss / max(self.total_batch_num, 1)
+                avg_loss = sum_loss / max(epoch_batch_count, 1)
                 postfix = {
                     "loss": f"{avg_loss:.2f}",
                     "acc": f"{acc_pct:.1f}%",
@@ -221,7 +222,7 @@ class BaseTrainer(ABC):
                 and training_options.enable_checkpoints
             ):
                 self.checkpoint(
-                    training_options, model, sum_loss, sum_accuracy, count_rows
+                    training_options, model, sum_loss, sum_accuracy, count_rows, epoch_batch_count
                 )
 
             if self.sizer.record_step(training_options.device):
@@ -234,15 +235,15 @@ class BaseTrainer(ABC):
             sum_loss += loss.item()
             sum_accuracy += accuracy.item()
             count_rows += rows.item()
+            epoch_batch_count += 1
 
-            # Store metadata if we need to restore it later ...
             training_options.metadata.epoch = loader.epoch
             training_options.metadata.batches_consumed = loader._batches_consumed
-            # Update the loss metadata
             training_options.metadata.sum_accuracy = sum_accuracy
             training_options.metadata.sum_loss = sum_loss
             training_options.metadata.count_rows = count_rows
             training_options.metadata.total_batch_num = self.total_batch_num
+            training_options.metadata.epoch_batch_count = epoch_batch_count
 
             if self.has_timeout(training_options):
                 self.log("Hit timeout")
@@ -252,32 +253,31 @@ class BaseTrainer(ABC):
             sum_accuracy,
             sum_loss,
             count_rows,
+            epoch_batch_count,
         )
 
     def checkpoint(
-        self, training_options: TrainingOptions, model, sum_loss, sum_accuracy, sum_rows
+        self, training_options: TrainingOptions, model, sum_loss, sum_accuracy, sum_rows, batch_count=1
     ):
-        # If you are unlucky
-        if sum_rows > 0:
-            stats = Stats(
-                loss_average=(sum_loss / sum_rows),
-                accuracy_pct=(sum_accuracy / sum_rows * 100),
-                runtime_seconds=time.time() - self.start,
-                steps=self.total_batch_num,
-                dataset=self.metrics_tracker.dataset_name,
-                metadata=training_options.metadata,
+        stats = Stats(
+            loss_average=(sum_loss / max(batch_count, 1)),
+            accuracy_pct=(sum_accuracy / max(sum_rows, 1) * 100),
+            runtime_seconds=time.time() - self.start,
+            steps=self.total_batch_num,
+            dataset=self.metrics_tracker.dataset_name,
+            metadata=training_options.metadata,
+        )
+        self.checkpoints_tracker.checkpoint(
+            model,
+            self.optimizer,
+            model.config,
+            stats,
+        )
+        if training_options.checkpoint_tag is not None:
+            self.checkpoints_tracker.tag(
+                tag_name=training_options.checkpoint_tag, stats=stats
             )
-            self.checkpoints_tracker.checkpoint(
-                model,
-                self.optimizer,
-                model.config,
-                stats,
-            )
-            if training_options.checkpoint_tag is not None:
-                self.checkpoints_tracker.tag(
-                    tag_name=training_options.checkpoint_tag, stats=stats
-                )
-            self.last_checkpoint = time.time()
+        self.last_checkpoint = time.time()
 
     def forward(self, model, objective, X, y, training_options: TrainingOptions):
         X, y = (
@@ -359,17 +359,16 @@ class Trainer(BaseTrainer):
         )
 
         for epoch in range(training_options.epochs):
-            sum_epoch_accuracy, sum_epoch_loss, sum_epoch_rows = super().train(
+            sum_epoch_accuracy, sum_epoch_loss, sum_epoch_rows, epoch_batch_count = super().train(
                 self.model, self.objective, dataloader, training_options, progress
             )
             dataloader.set_epoch(epoch + 1)
-            if sum_epoch_rows > 0:
-                accuracy_pct = sum_epoch_accuracy / sum_epoch_rows * 100
-                avg_loss = sum_epoch_loss / max(sum_epoch_rows, 1)
-                self.log(f"Epoch {epoch} | acc={accuracy_pct:.2f}% loss={avg_loss:.4f}")
-                training_options.metadata.plots.record(
-                    loss=sum_epoch_loss, accuracy=accuracy_pct
-                )
+            accuracy_pct = sum_epoch_accuracy / max(sum_epoch_rows, 1) * 100
+            avg_loss = sum_epoch_loss / max(epoch_batch_count, 1)
+            self.log(f"Epoch {epoch} | acc={accuracy_pct:.2f}% loss={avg_loss:.4f}")
+            training_options.metadata.plots.record(
+                loss=avg_loss, accuracy=accuracy_pct
+            )
             if self.has_timeout(training_options):
                 self.log("Hit timeout")
                 break
@@ -381,6 +380,7 @@ class Trainer(BaseTrainer):
                 sum_epoch_loss,
                 sum_epoch_accuracy,
                 sum_epoch_rows,
+                epoch_batch_count,
             )
             self.checkpoints_tracker.flush()
 

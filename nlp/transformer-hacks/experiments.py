@@ -672,7 +672,7 @@ def long_running_training():
                 lr=3e-4,
                 max_grad_norm=1.0,
             )
-            training_options.lr_scheduler = WarmupExpDecay(warmup_epochs=3, gamma=0.96)
+            training_options.lr_scheduler = WarmupExpDecay(warmup_steps=10_000, decay_steps=800_000, min_lr_ratio=0.01)
             # Train for two full days
             # training_options.training_timeout_minutes = 60 * 24 * 2
             training_options.accumulation_steps = 1
