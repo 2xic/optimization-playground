@@ -243,6 +243,8 @@ def execute(
 ):
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
+    steps_accuracy = MinMaxAvgArray()
+    steps_loss = MinMaxAvgArray()
     for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
         # TODO: need to copy model for sampling to be correct.
         trainer = create_next_token_prediction_objective(
@@ -250,24 +252,38 @@ def execute(
             model,
             options.optimizer,
         )
-        (accuracy, loss) = trainer.train(
+        (accuracy, loss, step_acc, step_ls, epoch_at_step) = trainer.train(
             dataset,
             options,
         )
-        # assert len(accuracy) == options.epochs
-        # assert len(loss) == options.epochs
         epochs_accuracy.add(accuracy)
         epochs_loss.add(loss)
+        if step_acc:
+            steps_accuracy.add(step_acc)
+        if step_ls:
+            steps_loss.add(step_ls)
         if trainer.has_timeout(options):
             print("Hit timeout")
             break
         assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-    # dist.barrier()
-    # Close out all metrics
     trainer.metrics_tracker.close()
     return experiment_variant, Results(
         accuracy=epochs_accuracy,
         loss=epochs_loss,
+        step_accuracy=steps_accuracy,
+        step_loss=steps_loss,
+        epoch_at_step=epoch_at_step,
+    )
+
+
+def _execute_with_lazy_model(
+    dataset_name, experiment_variant, model_config, training_options
+):
+    return execute(
+        NAMED_DATASETS[dataset_name],
+        experiment_variant,
+        model_config(),
+        training_options,
     )
 
 
@@ -359,7 +375,7 @@ class ExperimentMultiProcess:
         self.experiments = {}
         self.dataset = dataset
         self.queue_runs = []
-        self.skip_thread = True
+        self.skip_thread = False
         ctx = mp.get_context("spawn")
         self.pool = ctx.Pool(processes=NUM_PROCESSES) if not self.skip_thread else None
 
@@ -377,6 +393,14 @@ class ExperimentMultiProcess:
         else:
             return self.pool.apply_async(execute, args=args)
 
+    def _execute_lazy(
+        self, dataset_name, experiment_variant, model_config, training_options
+    ):
+        return self.pool.apply_async(
+            _execute_with_lazy_model,
+            args=(dataset_name, experiment_variant, model_config, training_options),
+        )
+
     def _execute_plots(self):
         results = []
         for (
@@ -389,29 +413,46 @@ class ExperimentMultiProcess:
             while device_id is None:
                 device_id = get_best_gpu(estimate_cuda_size(model))
                 time.sleep(5)
-            # Once we have a device, just set it.
             training_options.device = torch.device(f"cuda:{device_id}")
-            args = (
-                self.dataset,
-                experiment_variant,
-                model,
-                training_options,
-            )
-            results.append(self._execute(*args))
+            del model
+            torch.cuda.empty_cache()
+            try:
+                if self.skip_thread:
+                    result = self._execute(
+                        self.dataset,
+                        experiment_variant,
+                        model_config(),
+                        training_options,
+                    )
+                else:
+                    result = self._execute_lazy(
+                        self.dataset.name,
+                        experiment_variant,
+                        model_config,
+                        training_options,
+                    )
+                results.append((experiment_variant, result))
+            except RuntimeError as e:
+                print(f"Experiment '{experiment_variant}' failed: {e}")
             if not self.skip_thread:
-                time.sleep(5)
+                time.sleep(30)
 
-        for i in results:
+        for experiment_variant, i in results:
             print(i)
-            if isinstance(i, tuple):
-                experiment_variant, results = i
-            else:
-                experiment_variant, results = i.get()
-            self.experiments[experiment_variant] = results
+            try:
+                if isinstance(i, tuple):
+                    _, result = i
+                else:
+                    _, result = i.get()
+                self.experiments[experiment_variant] = result
+            except RuntimeError as e:
+                print(f"Experiment '{experiment_variant}' failed: {e}")
+            finally:
+                torch.cuda.empty_cache()
 
     def plot(self, name: str):
         self._execute_plots()
-        plot_accuracy_loss(self.experiments, get_output_path(self.dataset, name))
+        plot_accuracy_loss(self.experiments, get_output_path(self.dataset.name, name))
 
     def plot_tag(self, name):
         self._execute_plots()
@@ -672,7 +713,9 @@ def long_running_training():
                 lr=3e-4,
                 max_grad_norm=1.0,
             )
-            training_options.lr_scheduler = WarmupExpDecay(warmup_steps=10_000, decay_steps=800_000, min_lr_ratio=0.01)
+            training_options.lr_scheduler = WarmupExpDecay(
+                warmup_steps=10_000, decay_steps=800_000, min_lr_ratio=0.01
+            )
             # Train for two full days
             # training_options.training_timeout_minutes = 60 * 24 * 2
             training_options.accumulation_steps = 1
@@ -833,9 +876,160 @@ def continue_training_from_checkpoint():
     experiment.plot_tag(f"{checkpoint_tag}.png")
 
 
+def lr_sweep():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    config = create_default_config(dataset)
+    head_dim = 64
+    raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+    config.num_attention_heads = max(1, raw_dim // head_dim)
+    config.dim_embeddings = config.num_attention_heads * head_dim
+    config.num_transformer_layers = 8
+
+    configs = [
+        (
+            "warmup_exp_decay_lr1e-4",
+            AdamConfig(lr=1e-4, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "warmup_exp_decay_lr3e-4",
+            AdamConfig(lr=3e-4, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "warmup_exp_decay_lr1e-3",
+            AdamConfig(lr=1e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "noam_lr3e-4",
+            AdamConfig(lr=3e-4, max_grad_norm=1.0),
+            NoamScheduler(d_model=config.dim_embeddings, warmup_steps=2000),
+        ),
+    ]
+
+    for name, optimizer_config, scheduler in configs:
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=15,
+            optimizer=optimizer_config,
+            lr_scheduler=scheduler,
+            record_interval_steps=100,
+        )
+        experiment.queue(
+            LazyModelConstruction(config),
+            name,
+            training_options=options,
+        )
+    experiment.plot("lr_sweep.png")
+
+
+def lr_sweep_v2():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    config = create_default_config(dataset)
+    head_dim = 64
+    raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+    config.num_attention_heads = max(1, raw_dim // head_dim)
+    config.dim_embeddings = config.num_attention_heads * head_dim
+    config.num_transformer_layers = 8
+
+    configs = [
+        (
+            "lr5e-4",
+            AdamConfig(lr=5e-4, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "lr1e-3",
+            AdamConfig(lr=1e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "lr2e-3",
+            AdamConfig(lr=2e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+    ]
+
+    for name, optimizer_config, scheduler in configs:
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=30,
+            optimizer=optimizer_config,
+            lr_scheduler=scheduler,
+            record_interval_steps=100,
+        )
+        experiment.queue(
+            LazyModelConstruction(config),
+            name,
+            training_options=options,
+        )
+    experiment.plot("lr_sweep_v2.png")
+
+
+def lr_sweep_v3():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    config = create_default_config(dataset)
+    head_dim = 64
+    raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+    config.num_attention_heads = max(1, raw_dim // head_dim)
+    config.dim_embeddings = config.num_attention_heads * head_dim
+    config.num_transformer_layers = 8
+
+    configs = [
+        (
+            "lr2e-3_warmup2k",
+            AdamConfig(lr=2e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "lr3e-3_warmup2k",
+            AdamConfig(lr=3e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "lr3e-3_warmup4k",
+            AdamConfig(lr=3e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=4000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+        (
+            "lr5e-3_warmup4k",
+            AdamConfig(lr=5e-3, max_grad_norm=1.0),
+            WarmupExpDecay(warmup_steps=4000, decay_steps=50000, min_lr_ratio=0.01),
+        ),
+    ]
+
+    for name, optimizer_config, scheduler in configs:
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=30,
+            optimizer=optimizer_config,
+            lr_scheduler=scheduler,
+            record_interval_steps=100,
+        )
+        experiment.queue(
+            LazyModelConstruction(config),
+            name,
+            training_options=options,
+        )
+    experiment.plot("lr_sweep_v3.png")
+
+
 def train():
     # residual_connections()
-    long_running_training()
+    # long_running_training()
+    # lr_sweep()
+    # lr_sweep_v2()
+    lr_sweep_v3()
     # continue_training_from_checkpoint()
     # fine_tuning()
     # benchmark()

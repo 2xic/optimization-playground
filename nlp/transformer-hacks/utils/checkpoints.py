@@ -242,17 +242,31 @@ class StorageBox(metaclass=SingletonMeta):
 class TrainingHistory:
     losses: list = field(default_factory=list)
     accuracies: list = field(default_factory=list)
+    step_losses: list = field(default_factory=list, repr=False)
+    step_accuracies: list = field(default_factory=list, repr=False)
+    epoch_at_step: list = field(default_factory=list, repr=False)
 
-    def record(self, loss, accuracy):
+    def record_epoch(self, loss, accuracy):
         self.losses.append(loss)
         self.accuracies.append(accuracy)
+        self.epoch_at_step.append(len(self.step_losses))
+
+    def record_step(self, loss, accuracy):
+        self.step_losses.append(loss)
+        self.step_accuracies.append(accuracy)
 
     def to_dict(self):
         return asdict(self)
 
     @classmethod
     def from_dict(cls, d):
-        return cls(**d)
+        return cls(
+            losses=d.get("losses", []),
+            accuracies=d.get("accuracies", []),
+            step_losses=d.get("step_losses", []),
+            step_accuracies=d.get("step_accuracies", []),
+            epoch_at_step=d.get("epoch_at_step", []),
+        )
 
 
 class TrainingMetadata(dict):

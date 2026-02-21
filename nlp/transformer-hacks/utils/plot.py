@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Dict, List
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -66,6 +66,13 @@ class MinMaxAvgArray:
 class Results:
     accuracy: MinMaxAvgArray
     loss: MinMaxAvgArray
+    step_accuracy: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
+    step_loss: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
+    epoch_at_step: List[int] = field(default_factory=list)
+
+    @property
+    def has_step_data(self):
+        return len(self.step_accuracy) > 0 or len(self.step_loss) > 0
 
 
 def running_average(data):
@@ -77,49 +84,53 @@ def running_average(data):
         yield running_avg
 
 
+def _plot_series(ax, key, color, primary: MinMaxAvgArray, epoch_markers: MinMaxAvgArray = None, epoch_positions: List[int] = None, smooth=False):
+    (lo, hi, avg) = primary.get_arrays()
+    if smooth:
+        lo = list(running_average(lo))
+        hi = list(running_average(hi))
+        avg = list(running_average(avg))
+    x = np.arange(len(avg))
+    ax.plot(x, avg, color=color, label=key, alpha=0.6)
+    ax.fill_between(x, lo, hi, color=color, alpha=0.2)
+    if epoch_markers is not None and len(epoch_markers) > 0 and epoch_positions:
+        (_, _, epoch_avg) = epoch_markers.get_arrays()
+        if smooth:
+            epoch_avg = list(running_average(epoch_avg))
+        epoch_x = np.array(epoch_positions[:len(epoch_avg)])
+        epoch_x = np.minimum(epoch_x, len(avg) - 1)
+        ax.scatter(epoch_x, epoch_avg, color=color, marker="o", s=40, zorder=5)
+
+
 def plot_accuracy_loss(results: Dict[str, Results], file_path: str):
     items = list(results.values())
-    if len(items[0].accuracy) == 1:
-        # Fallback to bar chart for single entry
+    if len(items[0].accuracy) == 1 and not items[0].has_step_data:
         plot_single_result_bar_chart(results, file_path)
         return
+
+    has_steps = any(v.has_step_data for v in results.values())
+    x_label = "Step" if has_steps else "Epoch"
     _, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 8))
-
-    # Plot Accuracy
-    ax1.set_xlabel("Epoch")
-    ax1.set_ylabel("Accuracy")
     colors = ["blue", "green", "red", "yellow", "orange", "purple"]
+
     for index, (key, value) in enumerate(results.items()):
-        (min, max, avg) = value.accuracy.get_arrays()
-        x = np.arange(len(min))
-        # avg = list(running_average(avg))
-        # min = list(running_average(min))
-        # max = list(running_average(max))
+        color = colors[index % len(colors)]
+        if value.has_step_data:
+            _plot_series(ax1, key, color, value.step_accuracy, epoch_markers=value.accuracy, epoch_positions=value.epoch_at_step)
+            _plot_series(ax2, key, color, value.step_loss, epoch_markers=value.loss, epoch_positions=value.epoch_at_step, smooth=True)
+        else:
+            _plot_series(ax1, key, color, value.accuracy)
+            _plot_series(ax2, key, color, value.loss, smooth=True)
 
-        #  print((min, max, avg))
-
-        ax1.plot(x, avg, color=colors[index], label=f"Accuracy ({key})", alpha=0.6)
-        ax1.fill_between(x, min, max, color=colors[index], alpha=0.2)
-
-    ax1.tick_params(axis="y")
-    ax1.legend(loc="lower right")
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel("Accuracy")
     ax1.set_title("Accuracy")
+    ax1.legend(loc="lower right")
 
-    # Plot Loss
-    ax2.set_xlabel("Epoch")
+    ax2.set_xlabel(x_label)
     ax2.set_ylabel("Loss")
-    for index, (key, value) in enumerate(results.items()):
-        (min, max, avg) = value.loss.get_arrays()
-        avg = list(running_average(avg))
-        min = list(running_average(min))
-        max = list(running_average(max))
-        x = np.arange(len(min))
-
-        ax2.plot(x, avg, color=colors[index], label=f"Loss ({key})", alpha=0.6)
-        ax2.fill_between(x, min, max, color=colors[index], alpha=0.2)
-    ax2.tick_params(axis="y")
-    ax2.legend(loc="upper right")
     ax2.set_title("Loss")
+    ax2.legend(loc="upper right")
 
     file_path = file_path.split(".")[0]
     print(f"Output: {file_path}.png")

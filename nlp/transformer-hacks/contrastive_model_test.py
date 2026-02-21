@@ -448,7 +448,7 @@ class ContrastiveTrainer:
                 if steps > 0:
                     final_loss = epoch_loss / steps
                     final_accuracy = epoch_correct / epoch_samples * 100
-                    self.plot.record(loss=final_loss, accuracy=final_accuracy)
+                    self.plot.record_epoch(loss=final_loss, accuracy=final_accuracy)
                     self._save_plots()
 
         finally:

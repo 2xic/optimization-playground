@@ -30,6 +30,31 @@ BETA_1 = 0.90
 BETA_2 = 0.95
 
 
+@dataclass
+class IntervalMetrics:
+    sum_loss: float = 0.0
+    sum_accuracy: float = 0.0
+    count_rows: int = 0
+    step_count: int = 0
+
+    def update(self, loss, accuracy, rows):
+        self.sum_loss += loss
+        self.sum_accuracy += accuracy
+        self.count_rows += rows
+        self.step_count += 1
+
+    def compute(self):
+        avg_loss = self.sum_loss / max(self.step_count, 1)
+        acc_pct = (self.sum_accuracy / self.count_rows * 100) if self.count_rows > 0 else 0
+        return avg_loss, acc_pct
+
+    def reset(self):
+        self.sum_loss = 0.0
+        self.sum_accuracy = 0.0
+        self.count_rows = 0
+        self.step_count = 0
+
+
 class ModelStateSaver:
     def __init__(self, name):
         self.name = name
@@ -100,6 +125,7 @@ class TrainingOptions:
     optimizer: BaseOptimizerConfig = field(default_factory=lambda: AdamConfig())
     # accumulation_steps
     accumulation_steps: int = 1
+    record_interval_steps: int = 0
     # misc
     enable_checkpoints: bool = False
     checkpoint_tag: Optional[str] = None
@@ -184,6 +210,7 @@ class BaseTrainer(ABC):
         sum_accuracy = 0
         count_rows = 0
         epoch_batch_count = 0
+        interval = IntervalMetrics()
         progress = progress(loader)
         model.train()
         has_tqdm_loader = isinstance(progress, tqdm)
@@ -236,6 +263,13 @@ class BaseTrainer(ABC):
             sum_accuracy += accuracy.item()
             count_rows += rows.item()
             epoch_batch_count += 1
+
+            if training_options.record_interval_steps > 0:
+                interval.update(loss.item(), accuracy.item(), rows.item())
+                if interval.step_count % training_options.record_interval_steps == 0:
+                    avg_loss, acc_pct = interval.compute()
+                    training_options.metadata.plots.record_step(loss=avg_loss, accuracy=acc_pct)
+                    interval.reset()
 
             training_options.metadata.epoch = loader.epoch
             training_options.metadata.batches_consumed = loader._batches_consumed
@@ -366,7 +400,7 @@ class Trainer(BaseTrainer):
             accuracy_pct = sum_epoch_accuracy / max(sum_epoch_rows, 1) * 100
             avg_loss = sum_epoch_loss / max(epoch_batch_count, 1)
             self.log(f"Epoch {epoch} | acc={accuracy_pct:.2f}% loss={avg_loss:.4f}")
-            training_options.metadata.plots.record(
+            training_options.metadata.plots.record_epoch(
                 loss=avg_loss, accuracy=accuracy_pct
             )
             if self.has_timeout(training_options):
@@ -387,6 +421,9 @@ class Trainer(BaseTrainer):
         return (
             training_options.metadata.plots.accuracies,
             training_options.metadata.plots.losses,
+            training_options.metadata.plots.step_accuracies,
+            training_options.metadata.plots.step_losses,
+            training_options.metadata.plots.epoch_at_step,
         )
 
 
