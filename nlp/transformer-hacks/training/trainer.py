@@ -468,9 +468,25 @@ class GradScalerTrainer(Trainer):
         torch.backends.cuda.enable_flash_sdp(True)
         torch.backends.cuda.enable_mem_efficient_sdp(True)
         torch.set_float32_matmul_precision("high")
-        if shutil.which("cc") or shutil.which("gcc"):
-            self.model = torch.compile(self.model, dynamic=True)
-        else:
+        can_compile = shutil.which("cc") or shutil.which("gcc")
+        if can_compile and torch.cuda.is_available():
+            capability = torch.cuda.get_device_capability(training_options.device)
+            if capability[0] >= 7:
+                try:
+                    compiled = torch.compile(self.model, dynamic=True)
+                    dummy = torch.zeros(1, self._original_model.config.sequence_length, dtype=torch.long, device=training_options.device)
+                    with torch.no_grad():
+                        compiled(dummy)
+                    del dummy
+                    self.model = compiled
+                except Exception as e:
+                    tqdm.write(f"Skipping torch.compile: {e}")
+                    del compiled
+                    torch.cuda.empty_cache()
+                    self.model = self._original_model
+            else:
+                tqdm.write(f"Skipping torch.compile: CUDA Capability {capability[0]}.{capability[1]} < 7.0")
+        elif not can_compile:
             tqdm.write("Skipping torch.compile: no C compiler found")
         self.optimizer.fused = True
         return super().train(dataset, training_options, progress)

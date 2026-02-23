@@ -241,50 +241,65 @@ def execute(
         batch_size=32,
     ),
 ):
+    import gc
+
     epochs_accuracy = MinMaxAvgArray()
     epochs_loss = MinMaxAvgArray()
     steps_accuracy = MinMaxAvgArray()
     steps_loss = MinMaxAvgArray()
-    for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
-        # TODO: need to copy model for sampling to be correct.
-        trainer = create_next_token_prediction_objective(
-            dataset,
-            model,
-            options.optimizer,
-        )
-        (accuracy, loss, step_acc, step_ls, epoch_at_step) = trainer.train(
-            dataset,
-            options,
-        )
-        epochs_accuracy.add(accuracy)
-        epochs_loss.add(loss)
-        if step_acc:
-            steps_accuracy.add(step_acc)
-        if step_ls:
-            steps_loss.add(step_ls)
-        if trainer.has_timeout(options):
-            print("Hit timeout")
-            break
-        assert len(epochs_accuracy.min_max_avg) == len(accuracy)
-    trainer.metrics_tracker.close()
-    return experiment_variant, Results(
+    trainer = None
+    try:
+        for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
+            trainer = create_next_token_prediction_objective(
+                dataset,
+                model,
+                options.optimizer,
+            )
+            (accuracy, loss, step_acc, step_ls, epoch_at_step) = trainer.train(
+                dataset,
+                options,
+            )
+            epochs_accuracy.add(accuracy)
+            epochs_loss.add(loss)
+            if step_acc:
+                steps_accuracy.add(step_acc)
+            if step_ls:
+                steps_loss.add(step_ls)
+            if trainer.has_timeout(options):
+                print("Hit timeout")
+                break
+            assert len(epochs_accuracy.min_max_avg) == len(accuracy)
+    except Exception as e:
+        print(f"Experiment '{experiment_variant}' failed during training: {e}")
+    finally:
+        if trainer is not None:
+            trainer.metrics_tracker.close()
+        model.cpu()
+        del trainer
+        del model
+        gc.collect()
+        torch.cuda.empty_cache()
+    result = Results(
         accuracy=epochs_accuracy,
         loss=epochs_loss,
         step_accuracy=steps_accuracy,
         step_loss=steps_loss,
-        epoch_at_step=epoch_at_step,
+        epoch_at_step=epoch_at_step if 'epoch_at_step' in dir() else [],
     )
+    return experiment_variant, result
 
 
 def _execute_with_lazy_model(
     dataset_name, experiment_variant, model_config, training_options
 ):
-    return execute(
+    result = execute(
         NAMED_DATASETS[dataset_name],
         experiment_variant,
         model_config(),
         training_options,
     )
+    torch.cuda.empty_cache()
+    return result
 
 
 @dataclass
@@ -438,7 +453,6 @@ class ExperimentMultiProcess:
                 time.sleep(30)
 
         for experiment_variant, i in results:
-            print(i)
             try:
                 if isinstance(i, tuple):
                     _, result = i
@@ -452,10 +466,16 @@ class ExperimentMultiProcess:
 
     def plot(self, name: str):
         self._execute_plots()
+        if self.pool is not None:
+            self.pool.terminate()
+            self.pool.join()
         plot_accuracy_loss(self.experiments, get_output_path(self.dataset.name, name))
 
     def plot_tag(self, name):
         self._execute_plots()
+        if self.pool is not None:
+            self.pool.terminate()
+            self.pool.join()
         plot_accuracy_loss(self.experiments, get_output_path("tags", name))
 
 
@@ -601,7 +621,7 @@ def test_speedups():
                         training_options=TrainingOptions(
                             epochs=EPOCHS,
                             batch_size=32,
-                            training_timeout_minutes=2,
+                            training_timeout_minutes=30,
                             optimizer=optimizer,
                             lr_scheduler=scheduler,
                             enable_checkpoints=True,
@@ -1024,12 +1044,141 @@ def lr_sweep_v3():
     experiment.plot("lr_sweep_v3.png")
 
 
+def layer_scaling():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    config = create_default_config(dataset)
+    head_dim = 64
+    raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+    config.num_attention_heads = max(1, raw_dim // head_dim)
+    config.dim_embeddings = config.num_attention_heads * head_dim
+    config.num_transformer_layers = 8
+
+    for num_layers in [2, 4, 8, 12, 16]:
+        variant_config = Config(
+            sequence_length=config.sequence_length,
+            vocab_size=config.vocab_size,
+            dim_embeddings=config.dim_embeddings,
+            num_attention_heads=config.num_attention_heads,
+            num_transformer_layers=num_layers,
+            padding_index=config.padding_index,
+            positional_embedding=config.positional_embedding,
+            transformer_layer=config.transformer_layer,
+            feed_forward_layer=config.feed_forward_layer,
+            dropout=config.dropout,
+        )
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=30,
+            optimizer=AdamConfig(lr=3e-3, max_grad_norm=1.0),
+            lr_scheduler=WarmupExpDecay(
+                warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01
+            ),
+            record_interval_steps=100,
+        )
+        experiment.queue(
+            LazyModelConstruction(variant_config),
+            f"layers_{num_layers}",
+            training_options=options,
+        )
+    experiment.plot("layer_scaling.png")
+
+
+def embedding_scaling():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    config = create_default_config(dataset)
+    head_dim = 64
+    raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+    config.num_attention_heads = max(1, raw_dim // head_dim)
+    config.dim_embeddings = config.num_attention_heads * head_dim
+    config.num_transformer_layers = 8
+
+    for num_heads, dim in [(2, 128), (4, 256), (8, 512), (12, 768)]:
+        variant_config = Config(
+            sequence_length=config.sequence_length,
+            vocab_size=config.vocab_size,
+            dim_embeddings=dim,
+            num_attention_heads=num_heads,
+            num_transformer_layers=config.num_transformer_layers,
+            padding_index=config.padding_index,
+            positional_embedding=config.positional_embedding,
+            transformer_layer=config.transformer_layer,
+            feed_forward_layer=config.feed_forward_layer,
+            dropout=config.dropout,
+        )
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=30,
+            optimizer=AdamConfig(lr=3e-3, max_grad_norm=1.0),
+            lr_scheduler=WarmupExpDecay(
+                warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01
+            ),
+            record_interval_steps=100,
+        )
+        experiment.queue(
+            LazyModelConstruction(variant_config),
+            f"embed_{dim}",
+            training_options=options,
+        )
+    experiment.plot("embedding_scaling.png")
+
+
+def ff_scaling():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    config = create_default_config(dataset)
+    head_dim = 64
+    raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+    config.num_attention_heads = max(1, raw_dim // head_dim)
+    config.dim_embeddings = config.num_attention_heads * head_dim
+    config.num_transformer_layers = 8
+
+    for ff_size in [512, 1024, 2048, 4096]:
+        variant_config = Config(
+            sequence_length=config.sequence_length,
+            vocab_size=config.vocab_size,
+            dim_embeddings=config.dim_embeddings,
+            num_attention_heads=config.num_attention_heads,
+            num_transformer_layers=config.num_transformer_layers,
+            padding_index=config.padding_index,
+            positional_embedding=config.positional_embedding,
+            transformer_layer=config.transformer_layer,
+            feed_forward_layer=ff_size,
+            dropout=config.dropout,
+        )
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=30,
+            optimizer=AdamConfig(lr=3e-3, max_grad_norm=1.0),
+            lr_scheduler=WarmupExpDecay(
+                warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01
+            ),
+            record_interval_steps=100,
+        )
+        experiment.queue(
+            LazyModelConstruction(variant_config),
+            f"ff_{ff_size}",
+            training_options=options,
+        )
+    experiment.plot("ff_scaling.png")
+
+
 def train():
     # residual_connections()
     # long_running_training()
     # lr_sweep()
     # lr_sweep_v2()
-    lr_sweep_v3()
+    # lr_sweep_v3()
+    layer_scaling()
+    embedding_scaling()
+    ff_scaling()
     # continue_training_from_checkpoint()
     # fine_tuning()
     # benchmark()
