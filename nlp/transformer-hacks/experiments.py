@@ -284,7 +284,7 @@ def execute(
         loss=epochs_loss,
         step_accuracy=steps_accuracy,
         step_loss=steps_loss,
-        epoch_at_step=epoch_at_step if 'epoch_at_step' in dir() else [],
+        epoch_at_step=epoch_at_step if "epoch_at_step" in dir() else [],
     )
     return experiment_variant, result
 
@@ -1170,15 +1170,57 @@ def ff_scaling():
     experiment.plot("ff_scaling.png")
 
 
+def long_running_training_v2():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = get_experiment_instance(dataset)
+    for transformer_layer, positional_embeddings in [
+        (TransformerLayerType.LLAMA2, PositionalEmbeddingType.NONE),
+    ]:
+        config = (
+            create_default_config(
+                dataset,
+            )
+            .with_transformer_layer(transformer_layer)
+            .with_positional_embedding(positional_embeddings)
+        )
+
+        training_options = GET_DEFAULT_TRAINING_OPTIONS()
+        training_options.enable_checkpoints = True
+        training_options.optimizer = AdamConfig(
+            lr=2e-3,
+            max_grad_norm=1.0,
+        )
+        training_options.lr_scheduler = WarmupExpDecay(
+            warmup_steps=4_000, decay_steps=800_000, min_lr_ratio=0.01
+        )
+        training_options.accumulation_steps = 1
+        training_options.batch_size = dataset.batch_size
+        training_options.record_interval_steps = 100
+
+        head_dim = 64
+        raw_dim = min(512, round(1.6 * dataset.vocab_size**0.56))
+        config.num_attention_heads = max(1, raw_dim // head_dim)
+        config.dim_embeddings = config.num_attention_heads * head_dim
+        config.num_transformer_layers = 4
+
+        experiment.queue(
+            LazyModelConstruction(config),
+            transformer_layer,
+            training_options=training_options,
+        )
+    experiment.plot("long_running_training_v2.png")
+
+
 def train():
     # residual_connections()
     # long_running_training()
     # lr_sweep()
     # lr_sweep_v2()
     # lr_sweep_v3()
-    layer_scaling()
-    embedding_scaling()
-    ff_scaling()
+    # layer_scaling()
+    # embedding_scaling()
+    # ff_scaling()
+    long_running_training_v2()
     # continue_training_from_checkpoint()
     # fine_tuning()
     # benchmark()
