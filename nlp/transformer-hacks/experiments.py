@@ -33,6 +33,8 @@ import torch
 from utils.web_dataloader import WebDataloader
 from dotenv import load_dotenv
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
+from functools import partial
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 from dataclasses import dataclass
@@ -64,15 +66,20 @@ IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
 DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP")  # .lower()
 NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 8))
 USE_GRAD_SCALER = bool(int(os.environ.get("USE_GRAD_SCALER", "1")) == "1")
-TRAINING_TIME_MINUTES = int(os.environ.get("TRAINING_TIME_MINUTES", "180"))
+TRAINING_TIME_MINUTES = int(os.environ.get("TRAINING_TIME_MINUTES", "60"))
 DEBUG = int(os.environ.get("DEBUG", "0")) == 1
+BATCH_SIZE = os.environ.get("BATCH_SIZE", None)
 
-EPOCHS = 10_000
+EPOCHS = int(os.environ.get("NUM_EPOCHS", 10_000))
 SAMPLE_SIZE = 1
 LEARNING_RATE = 3e-4
 
 rank = int(os.environ.get("RANK", 0))
 world_size = int(os.environ.get("WORLD_SIZE", 1))
+
+
+def _batch_size(default: int) -> int:
+    return int(BATCH_SIZE) if BATCH_SIZE is not None else default
 
 
 TARGET_DATASET = os.environ.get("TARGET_DATASET", "small-web").lower()
@@ -82,98 +89,98 @@ NAMED_DATASETS = {
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "satoshi-whitepaper",
-            batch_size=256,
+            batch_size=_batch_size(256),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "smedium-web-256",
-            batch_size=110,
+            batch_size=_batch_size(110),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "medium-web-256-v2",
-            batch_size=32,
+            batch_size=_batch_size(32),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "small-web-1024",
-            batch_size=8,
+            batch_size=_batch_size(8),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "small-web",
-            batch_size=256,
+            batch_size=_batch_size(256),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "medium-web",
-            batch_size=1024,
+            batch_size=_batch_size(1024),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "medium-512-web",
-            batch_size=64,
+            batch_size=_batch_size(64),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "smoltalk-256",
-            batch_size=110,
+            batch_size=_batch_size(110),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "self-oss-instruct-sc2-H4-256",
-            batch_size=110,
+            batch_size=_batch_size(110),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "everyday-conversations-256",
-            batch_size=110,
+            batch_size=_batch_size(110),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "medium-clean-web-256",
-            batch_size=32,
+            batch_size=_batch_size(32),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "large-clean-web-256",
-            batch_size=32,
+            batch_size=_batch_size(32),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "opcode-tokens-256",
-            batch_size=32,
+            batch_size=_batch_size(32),
             rank=rank,
             world_size=world_size,
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
             "fineweb-256",
-            batch_size=32,
+            batch_size=_batch_size(32),
             rank=rank,
             world_size=world_size,
         ),
@@ -347,7 +354,8 @@ class ExperimentDistributed:
             model = DDP(model, device_ids=[dist.get_rank()])
             print("Using DDP for distributed training")
         elif DISTRIBUTED_STRATEGY == "FDSP":
-            model = FSDP(model, device_ids=[dist.get_rank()])
+            wrap_policy = partial(size_based_auto_wrap_policy, min_num_params=1_000)
+            model = FSDP(model, device_id=dist.get_rank(), auto_wrap_policy=wrap_policy)
             print("Using FSDP for distributed training")
         else:
             raise Exception(f"Unknown DISTRIBUTED_STRATEGY = {DISTRIBUTED_STRATEGY}")
@@ -578,6 +586,10 @@ def residual_connections():
             (
                 "constrained hyper connection",
                 TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
+            ),
+            (
+                "identity hyper connection",
+                TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS,
             ),
         ]:
             config = create_default_config(
@@ -1212,7 +1224,7 @@ def long_running_training_v2():
 
 
 def train():
-    # residual_connections()
+    residual_connections()
     # long_running_training()
     # lr_sweep()
     # lr_sweep_v2()
@@ -1220,7 +1232,7 @@ def train():
     # layer_scaling()
     # embedding_scaling()
     # ff_scaling()
-    long_running_training_v2()
+    # long_running_training_v2()
     # continue_training_from_checkpoint()
     # fine_tuning()
     # benchmark()

@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", message="Unable to import Axes3D")
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Dict, List

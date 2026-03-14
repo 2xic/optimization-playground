@@ -39,6 +39,7 @@ class TransformerLayerType(Enum):
     OLMO = 9
     OLMO_HYPER_CONNECTIONS = 10
     OLMO_CONSTRAINED_HYPER_CONNECTIONS = 11
+    OLMO_IDENTITY_HYPER_CONNECTIONS = 12
 
 
 class NormalizationLayerType(Enum):
@@ -338,11 +339,11 @@ class SimpleAttentionAtHomeTransformerLayer(nn.Module):
 
 # https://arxiv.org/pdf/2512.24880
 # Deepseek builds on top of the hyperConnection, but adds a step to normalize
-def sinkhorn(H, iterations=20):
+def sinkhorn(H, iterations=20, eps=1e-8):
     P = torch.exp(H)
     for _ in range(iterations):
-        P = P / P.sum(dim=-1, keepdim=True)
-        P = P / P.sum(dim=-2, keepdim=True)
+        P = P / (P.sum(dim=-1, keepdim=True) + eps)
+        P = P / (P.sum(dim=-2, keepdim=True) + eps)
     return P
 
 
@@ -375,6 +376,36 @@ class mHyperConnection(nn.Module):
             "nm,bsmd->bsnd", A_r, H
         )
 
+        return out
+
+
+# https://zhuanlan.zhihu.com/p/2010852389670908320
+# https://x.com/YouJiacheng/status/2027445155587141997
+# https://x.com/unakar666/status/2027566637319393412
+# https://x.com/part_harry_/status/2007070327415902268
+class IdentityHyperConnection(nn.Module):
+    def __init__(self, n: int = 4, layer_idx: int = 0):
+        super().__init__()
+        self.n = n
+        alpha_m = torch.zeros(n, 1)
+        alpha_m[layer_idx % n, 0] = 1.0
+        self.alpha_m = nn.Parameter(alpha_m)
+        self.beta = nn.Parameter(torch.ones(n))
+        # Fixed identity for A_r (not learnable)
+        self.register_buffer("A_r", torch.eye(n))
+
+    def forward(self, H: torch.Tensor, layer_fn) -> torch.Tensor:
+        # H: (B, S, n, D)
+        # Weighted sum of copies -> layer input
+        # (B, S, D)
+        h_in = torch.einsum("bsnd,nk->bskd", H, self.alpha_m).squeeze(2)
+        h_out = layer_fn(h_in)
+        # Bound beta with sigmoid
+        beta = torch.sigmoid(self.beta)
+        # Distribute output + residual (A_r is fixed identity)
+        out = h_out.unsqueeze(2) * beta.view(1, 1, self.n, 1) + torch.einsum(
+            "nm,bsmd->bsnd", self.A_r, H
+        )
         return out
 
 
@@ -459,7 +490,13 @@ class OlmoTransformerLayer(nn.Module):
 
 
 class OlmoTransformerLayerHyperConnectivity(nn.Module):
-    def __init__(self, config: Config, layer_idx: int, use_manifold_constraint=False):
+    def __init__(
+        self,
+        config: Config,
+        layer_idx: int,
+        use_manifold_constraint=False,
+        use_identity=False,
+    ):
         super().__init__()
         self.norm_1 = nn.RMSNorm(config.dim_embeddings)
         self.rope_attention = RoPEMultiheadAttention(
@@ -471,7 +508,14 @@ class OlmoTransformerLayerHyperConnectivity(nn.Module):
         self.norm_2 = nn.RMSNorm(config.dim_embeddings)
         self.linear = OlmoFeedForward(config)
 
-        if use_manifold_constraint:
+        if use_identity:
+            self.hc_attn = IdentityHyperConnection(
+                n=config.hc_n, layer_idx=layer_idx * 2
+            )
+            self.hc_mlp = IdentityHyperConnection(
+                n=config.hc_n, layer_idx=layer_idx * 2 + 1
+            )
+        elif use_manifold_constraint:
             self.hc_attn = mHyperConnection(n=config.hc_n, layer_idx=layer_idx * 2)
             self.hc_mlp = mHyperConnection(n=config.hc_n, layer_idx=layer_idx * 2 + 1)
         else:
@@ -534,6 +578,12 @@ def get_transformer_layer(config: Config, layer_idx):
     ):
         return OlmoTransformerLayerHyperConnectivity(
             config, layer_idx, use_manifold_constraint=True
+        )
+    elif (
+        config.transformer_layer == TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS
+    ):
+        return OlmoTransformerLayerHyperConnectivity(
+            config, layer_idx, use_identity=True
         )
     else:
         raise Exception(f"unknown type {config.transformer_layer}")
@@ -658,6 +708,7 @@ class Model(nn.Module):
         if self.config.transformer_layer in [
             TransformerLayerType.OLMO_HYPER_CONNECTIONS,
             TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
+            TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS,
         ]:
             x = self.embeddings(x)
             H = x.unsqueeze(2).expand(-1, -1, self.config.hc_n, -1).contiguous()

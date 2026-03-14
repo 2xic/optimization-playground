@@ -152,3 +152,18 @@ def sinkhorn(H, iterations=20):
     return P
 ```
 
+### Response
+- There has been some threads on Twitter on the need for the manifold constraint at all.
+  - https://x.com/part_harry_/status/2007070327415902268
+  - https://x.com/YouJiacheng/status/2027445155587141997
+- We did some experiments on this also in [residual](../nlp/transformer-hacks/plots/small-web/residual_connections.png)
+
+
+## [Perplexity Cannot Always Tell Right from Wrong](https://arxiv.org/pdf/2601.22950)
+- Perplexity = How surprised is the model on some given input?
+  - https://huggingface.co/docs/transformers/perplexity
+  - $\exp\sum_{k \in C} -p_k \log q_k$
+  - $\text{pplx}_T(b) = -\frac{1}{n} \sum_{k=1}^{n} \log T(b_1 \cdots b_n | o_1 \cdots o_{k-1})(b_k)$
+- Because Perplexity is the average loss across all tokens, one failure prediction doesn't impact the loss as it should. There is an asymmetry making it so that a more confident, but less accurate model can beat a more accurate, but less confident model on the perplexity metric.
+- 
+

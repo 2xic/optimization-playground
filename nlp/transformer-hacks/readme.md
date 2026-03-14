@@ -11,6 +11,7 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 - https://www.tylerromero.com/posts/nanogpt-speedrun-worklog/#21-architectural-changes-and-training-tweaks
 - https://huggingface.co/spaces/HuggingFaceTB/smol-training-playbook#improving-stability
 - https://x.com/0xalpo/status/2004845606465122578
+- https://github.com/karpathy/nanochat/discussions/481
 
 ## Parallelism
 ### Model parallelism
@@ -18,12 +19,12 @@ Meant to be transformer version of [gan-hacks](/gan/gan-hacks)
 # Install for torch.compile
 sudo apt-get install nvidia-cuda-toolkit -y
 # Split the model 
-DISTRIBUTED_STRATEGY=FSDP torchrun --nproc_per_node=4 experiments.py
+PARALLEL_STRATEGY=FDSP torchrun --nproc_per_node=4 experiments.py
 ```
 
 ### Data parallelism
 ```bash
-DISTRIBUTED_STRATEGY=DDP torchrun --nproc_per_node=4 experiments.py
+PARALLEL_STRATEGY=DDP torchrun --nproc_per_node=4 experiments.py
 ```
 
 ## Whisper

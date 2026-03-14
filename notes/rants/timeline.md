@@ -180,5 +180,37 @@ You can also very easily see that this is a problem as none of the models does w
 - 
 
 
-
-
+### Update from 2026
+- Many things have changed over the last few months.
+  - People are predicting 
+    - https://x.com/AISafetyMemes/status/2024520911043416441
+    - https://x.com/elonmusk/status/2025124840806514916
+    - https://ai-2027.com/
+    - https://x.com/banteg/status/2026056669843669184
+    - https://x.com/potuz_eth/status/2028627381901005250
+  - Dates
+    - https://x.com/AISafetyMemes/status/2023003611459203308
+    - https://x.com/swyx/status/2023246499866673195
+    - https://x.com/fchollet/status/2022090111832535354
+    - https://x.com/ChrSzegedy/status/2022187816172892424
+    - https://x.com/tetsuoai/status/2027202820919992734
+      - Work will be optional in 10 years?
+- I'm still not so sure (at least not over the next two years)
+  - I think models are going to keep getting better
+  - They will lack human agency
+  - They will lack the ability to be more critical of the requests of the user, they will act on inputs, but probably not be as good at thinking outside the box on the input.
+- That said, I'm also thinking about the fact that predictions have been very wrong in the past
+  - https://x.com/gordic_aleksa/status/2021625792288141620
+  - https://x.com/anupam_bhoi/status/2021774474861748482
+  - https://x.com/siddharthvader_/status/2021708306050584862
+- And then also this which also shows that all the hype doesn't directly correlate to real world impact
+  - https://x.com/fchollet/status/2022063228399005931
+  - https://x.com/ChShersh/status/2020484568860484055
+  - https://x.com/imnottanmay/status/2019543570013921631
+  - https://x.com/fchollet/status/2019571942148472899
+  - https://x.com/fede_intern/status/2017604878575587421
+  - (to be seen) https://x.com/FleetmasterE/status/2014691020769001693
+  - https://x.com/joranhonig/status/2022657343574389094
+    - LLM know so much, but suck at things like Chess.
+- There is also the general [prediction power of people](https://x.com/fchollet/status/2020497629290148139) which is kinda interesting.
+- 
