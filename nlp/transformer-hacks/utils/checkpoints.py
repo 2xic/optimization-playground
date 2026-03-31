@@ -34,6 +34,8 @@ load_dotenv()
 
 INDEX_PATH = "checkpoints/index.ndjson"
 
+Path("/tmp/sftp_cache").mkdir(parents=True, exist_ok=True)
+
 
 class SingletonMeta(type):
     _instances = {}
@@ -55,7 +57,7 @@ class StorageBox(metaclass=SingletonMeta):
         self.host = host
 
         self.cache_dir = Path("/tmp/sftp_cache")
-        self.cache_dir.mkdir(exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.transport = paramiko.Transport((host, 23))
         self.transport.default_window_size = MAX_WINDOW_SIZE  # ~2GB

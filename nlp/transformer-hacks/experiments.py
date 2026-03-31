@@ -277,7 +277,9 @@ def execute(
                 break
             assert len(epochs_accuracy.min_max_avg) == len(accuracy)
     except Exception as e:
+        import traceback
         print(f"Experiment '{experiment_variant}' failed during training: {e}")
+        traceback.print_exc()
     finally:
         if trainer is not None:
             trainer.metrics_tracker.close()

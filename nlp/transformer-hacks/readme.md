@@ -27,6 +27,15 @@ PARALLEL_STRATEGY=FDSP torchrun --nproc_per_node=4 experiments.py
 PARALLEL_STRATEGY=DDP torchrun --nproc_per_node=4 experiments.py
 ```
 
+## autoparam — autonomous hyperparameter tuning
+Inspired by [karpathy/autoresearch](https://github.com/karpathy/autoresearch). Runs LLM-guided training experiments overnight to maximize accuracy + stability.
+
+Requires `OPENROUTER_API_KEY` and `WEB_DATALOADER` env vars.
+
+```bash
+TRAINING_TIME_MINUTES=20 python autoparam.py --dataset fineweb-256 --max-experiments 40
+```
+
 ## Whisper
 - https://cdn.openai.com/papers/whisper.pdf
 - https://arxiv.org/pdf/2407.03169v1

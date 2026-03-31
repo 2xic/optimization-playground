@@ -212,5 +212,6 @@ You can also very easily see that this is a problem as none of the models does w
   - (to be seen) https://x.com/FleetmasterE/status/2014691020769001693
   - https://x.com/joranhonig/status/2022657343574389094
     - LLM know so much, but suck at things like Chess.
+  - https://x.com/tomhschmidt/status/2034996100902658268
 - There is also the general [prediction power of people](https://x.com/fchollet/status/2020497629290148139) which is kinda interesting.
 - 

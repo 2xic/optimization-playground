@@ -7,9 +7,7 @@ import pynvml
 def get_true_gpu_utilization(device):
     """Get actual GPU memory usage across all processes"""
     pynvml.nvmlInit()
-    handle = pynvml.nvmlDeviceGetHandleByIndex(
-        device if isinstance(device, int) else device.index
-    )
+    handle = pynvml.nvmlDeviceGetHandleByIndex(device.index or 0)
     info = pynvml.nvmlDeviceGetMemoryInfo(handle)
     pynvml.nvmlShutdown()
     return info.used / info.total
@@ -39,7 +37,7 @@ class AdaptiveBatchSizer:
         return len(self.memory_history) >= self.memory_history.maxlen
 
     def record_step(self, device):
-        utilization = get_true_gpu_utilization(device.index)
+        utilization = get_true_gpu_utilization(device)
         self.memory_history.append(utilization)
         #       peak = torch.cuda.max_memory_allocated(device)
         #       total = torch.cuda.get_device_properties(device).total_memory
