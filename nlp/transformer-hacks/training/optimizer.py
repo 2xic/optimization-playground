@@ -44,6 +44,28 @@ class StepExponentialLR(_LRScheduler):
         return [base_lr * (gamma ** self.last_epoch) for base_lr in self.base_lrs]
 
 
+class CosineWithWarmup(_LRScheduler):
+    def __init__(self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1):
+        self.warmup_steps = warmup_steps
+        self.decay_steps = decay_steps
+        self.min_lr_ratio = min_lr_ratio
+        self.last_epoch = last_epoch
+
+    def create_scheduler(self, optimizer):
+        super().__init__(optimizer, self.last_epoch)
+
+    def get_lr(self):
+        import math
+        if self.last_epoch < self.warmup_steps:
+            alpha = (self.last_epoch + 1) / self.warmup_steps
+            return [base_lr * alpha for base_lr in self.base_lrs]
+        else:
+            progress = min(1.0, (self.last_epoch - self.warmup_steps) / self.decay_steps)
+            cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+            scale = self.min_lr_ratio + (1.0 - self.min_lr_ratio) * cosine
+            return [base_lr * scale for base_lr in self.base_lrs]
+
+
 class WarmupExpDecay(_LRScheduler):
     def __init__(self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1):
         self.warmup_steps = warmup_steps

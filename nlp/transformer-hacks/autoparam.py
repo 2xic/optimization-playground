@@ -17,11 +17,17 @@ Resume after crash (state file is loaded automatically):
 """
 
 import json
+import math
 import os
 import re
 import argparse
 import hashlib
+import signal
 import statistics
+import time
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass, asdict
 from datetime import datetime
 from typing import Optional, List
@@ -32,19 +38,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Reduce CUDA memory fragmentation so OOM on one experiment doesn't cascade into the next.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 from experiments import (
-    execute,
     create_default_config,
     NAMED_DATASETS,
     TRAINING_TIME_MINUTES,
 )
 from training.model import (
-    Model,
     TransformerLayerType,
     PositionalEmbeddingType,
     NormalizationLayerType,
 )
-from training.trainer import TrainingOptions
+from training.trainer import TrainingOptions, DistributedStrategy
 from training.optimizer import (
     AdamConfig,
     AdamWConfig,
@@ -53,13 +60,13 @@ from training.optimizer import (
     NoamScheduler,
     WarmupExpDecay,
     StepExponentialLR,
+    CosineWithWarmup,
 )
 from utils.plot import Results
 import matplotlib.pyplot as plt
 
-ACCURACY_WEIGHT = 0.70
-STABILITY_WEIGHT = 0.30
 STABILITY_TAIL_FRACTION = 0.25
+STEPS_TO_ACCURACY_THRESHOLD = 30.0  # percent — convergence speed marker
 
 LLM_MODEL = "anthropic/claude-opus-4-5"
 LLM_MAX_TOKENS = 1024
@@ -70,11 +77,11 @@ SEARCH_SPACE_DESCRIPTION = """
 Searchable hyperparameter space (use ONLY the values listed):
 
 Model config:
-  dim_embeddings:          [128, 256, 384, 512, 768]
-  num_attention_heads:     [4, 8, 12, 16]   ← dim_embeddings MUST be divisible by this
-  num_transformer_layers:  [2, 4, 6, 8, 12]
+  dim_embeddings:          [128, 256, 384, 512, 768, 1024]
+  num_attention_heads:     [4, 8, 12, 16, 32]   ← dim_embeddings MUST be divisible by this
+  num_transformer_layers:  [2, 4, 6, 8, 12, 16, 24]
   dropout:                 [0.0, 0.05, 0.1, 0.2]
-  feed_forward_layer:      [512, 1024, 2048, 4096]
+  feed_forward_layer:      [512, 1024, 2048, 4096, 8192]
   bias:                    [true, false]
   hc_n:                    [2, 4, 8]   ← only relevant for OLMO_HYPER_CONNECTIONS variants
 
@@ -82,12 +89,12 @@ Architecture (exact enum names):
   transformer_layer:       SIMPLE | GPT2 | LLAMA2 | LLAMA3 | DEEPSEEK | OLMO |
                            OLMO_HYPER_CONNECTIONS | OLMO_CONSTRAINED_HYPER_CONNECTIONS |
                            OLMO_IDENTITY_HYPER_CONNECTIONS | SIMPLE_NO_ATTENTION |
-                           BERT | SIMPLE_ATTENTION_AT_HOME
+                           SIMPLE_ATTENTION_AT_HOME
   positional_embedding:    NN_EMBEDDING | SINUSOIDAL | ROTARY_POSITION_ENCODING | NONE
   normalization_layer:     LAYER_NORM | DyT
 
 Optimizer:
-  optimizer_type:          adam | adamw | rmsprop | muon
+  optimizer_type:          adam | adamw | rmsprop
   lr:                      float in [0.0001, 0.002]
   weight_decay:            [0, 0.01, 0.1]
   max_grad_norm:           [0, 0.5, 1.0, 5.0]   ← 0 = disabled; controls gradient clipping
@@ -97,10 +104,10 @@ Optimizer:
   momentum:                [0, 0.1, 0.9]           (rmsprop only)
 
 Scheduler:
-  scheduler_type:          none | noam | warmup_exp_decay | step_exp
+  scheduler_type:          none | noam | warmup_exp_decay | step_exp | cosine
   warmup_steps:            [500, 1000, 2000, 4000]
   decay_steps:             [10000, 50000, 100000]
-  min_lr_ratio:            [0.01, 0.05, 0.1]   ← floor as fraction of initial lr (warmup_exp_decay/step_exp only)
+  min_lr_ratio:            [0.01, 0.05, 0.1]   ← floor as fraction of initial lr (warmup_exp_decay/step_exp/cosine only)
 
 Training:
   batch_size:              [16, 32, 64, 128]
@@ -119,6 +126,11 @@ Hard constraints:
 - All enum values must match exactly (case-sensitive)
 - lr must be between 0.0001 and 0.002
 - Do not repeat a configuration nearly identical to one that already failed
+
+Exploration strategy:
+- If recent scores are clustered within ~2% of each other, break out — try a fundamentally \
+different architecture, optimizer, or scale rather than incremental tweaks.
+- Prefer bold jumps over small perturbations when the search appears stuck.
 
 You will receive the experiment history and must respond with a single valid JSON object.
 No markdown, no prose outside the JSON.
@@ -162,7 +174,12 @@ class ConfigSerializer:
             d["momentum"] = opt.momentum
 
         sched = opts.lr_scheduler
-        if isinstance(sched, WarmupExpDecay):
+        if isinstance(sched, CosineWithWarmup):
+            d["scheduler_type"] = "cosine"
+            d["warmup_steps"] = sched.warmup_steps
+            d["decay_steps"] = sched.decay_steps
+            d["min_lr_ratio"] = sched.min_lr_ratio
+        elif isinstance(sched, WarmupExpDecay):
             d["scheduler_type"] = "warmup_exp_decay"
             d["warmup_steps"] = sched.warmup_steps
             d["decay_steps"] = sched.decay_steps
@@ -194,7 +211,7 @@ class ConfigSerializer:
         return cls._validate_and_repair(config)
 
     @classmethod
-    def dict_to_training_options(cls, d: dict, timeout_minutes: int) -> TrainingOptions:
+    def dict_to_training_options(cls, d: dict, timeout_minutes: int, distributed_strategy: DistributedStrategy = DistributedStrategy.FSDP, device: Optional[torch.device] = None) -> TrainingOptions:
         opt_type = d.get("optimizer_type", "adamw")
         lr = float(d.get("lr", 3e-4))
         wd = float(d.get("weight_decay", 0.01))
@@ -237,15 +254,25 @@ class ConfigSerializer:
                 decay_steps=int(d.get("decay_steps", 50000)),
                 min_lr_ratio=min_lr_ratio,
             )
+        elif sched_type == "cosine":
+            scheduler = CosineWithWarmup(
+                warmup_steps=int(d.get("warmup_steps", 1000)),
+                decay_steps=int(d.get("decay_steps", 50000)),
+                min_lr_ratio=min_lr_ratio,
+            )
 
-        return TrainingOptions(
+        opts = TrainingOptions(
             batch_size=int(d.get("batch_size", 32)),
             accumulation_steps=int(d.get("accumulation_steps", 1)),
             training_timeout_minutes=timeout_minutes,
             optimizer=optimizer,
             lr_scheduler=scheduler,
             record_interval_steps=50,
+            distributed_strategy=distributed_strategy,
         )
+        if device is not None:
+            opts.device = device
+        return opts
 
     @staticmethod
     def _validate_and_repair(config):
@@ -270,24 +297,67 @@ class StabilityMetric:
         else:
             return {
                 "final_accuracy": 0.0,
+                "final_loss": float("inf"),
+                "perplexity": float("inf"),
                 "stability_score": 0.0,
-                "combined_score": 0.0,
                 "raw_variance": float("inf"),
+                "accuracy_slope": 0.0,
+                "steps_to_threshold": -1,
             }
 
         tail = avg[-max(1, int(len(avg) * STABILITY_TAIL_FRACTION)) :]
         final_accuracy = statistics.mean(tail)
         variance = statistics.variance(tail) if len(tail) > 1 else 0.0
         stability_score = 1.0 / (1.0 + variance**0.5)
-        combined_score = (
-            ACCURACY_WEIGHT * (final_accuracy / 100.0)
-            + STABILITY_WEIGHT * stability_score
-        )
+
+        # Slope of accuracy over the tail (per step) — positive means still learning
+        n = len(tail)
+        if n > 1:
+            x_mean = (n - 1) / 2.0
+            y_mean = statistics.mean(tail)
+            num = sum((i - x_mean) * (tail[i] - y_mean) for i in range(n))
+            den = sum((i - x_mean) ** 2 for i in range(n))
+            accuracy_slope = num / den if den > 0 else 0.0
+        else:
+            accuracy_slope = 0.0
+
+        # Steps to reach the accuracy threshold
+        steps_to_threshold = -1
+        for i, acc in enumerate(avg):
+            if acc >= STEPS_TO_ACCURACY_THRESHOLD:
+                steps_to_threshold = i
+                break
+
+        # Loss / perplexity
+        if len(results.step_loss.min_max_avg) > 4:
+            _, _, loss_avg = results.step_loss.get_arrays()
+        elif len(results.loss.min_max_avg) > 0:
+            _, _, loss_avg = results.loss.get_arrays()
+        else:
+            loss_avg = []
+
+        if loss_avg:
+            loss_tail = loss_avg[
+                -max(1, int(len(loss_avg) * STABILITY_TAIL_FRACTION)) :
+            ]
+            final_loss = statistics.mean(loss_tail)
+            perplexity = math.exp(min(final_loss, 20))  # cap to avoid overflow
+        else:
+            final_loss = float("inf")
+            perplexity = float("inf")
+
         return {
             "final_accuracy": round(final_accuracy, 4),
+            "final_loss": round(final_loss, 4)
+            if math.isfinite(final_loss)
+            else final_loss,
+            "perplexity": round(perplexity, 2)
+            if math.isfinite(perplexity)
+            else perplexity,
             "stability_score": round(stability_score, 4),
-            "combined_score": round(combined_score, 4),
             "raw_variance": round(variance, 6),
+            "accuracy_slope": round(accuracy_slope, 6),
+            "steps_to_threshold": steps_to_threshold,
         }
 
 
@@ -353,7 +423,7 @@ class AutoparamState:
     def add_experiment(self, record: ExperimentRecord):
         self.experiments.append(record)
         if record.status == "success":
-            score = record.score.get("combined_score", -1.0)
+            score = record.score.get("final_accuracy", -1.0)
             if score > self.best_score:
                 self.best_score = score
                 self.best_experiment_id = record.experiment_id
@@ -373,6 +443,82 @@ class AutoparamState:
 
     def recent_experiments(self, n: int = HISTORY_WINDOW) -> List[ExperimentRecord]:
         return self.experiments[-n:]
+
+
+RANDOM_EXPLORE_EVERY = 5  # force a random config every N experiments
+
+
+def random_config_dict() -> dict:
+    import random
+
+    dim = random.choice([128, 256, 384, 512, 768, 1024])
+    heads = random.choice([h for h in [4, 8, 12, 16, 32] if dim % h == 0])
+    return {
+        "reasoning": "forced random exploration",
+        "dim_embeddings": dim,
+        "num_attention_heads": heads,
+        "num_transformer_layers": random.choice([2, 4, 6, 8, 12, 16, 24]),
+        "dropout": random.choice([0.0, 0.05, 0.1, 0.2]),
+        "feed_forward_layer": random.choice([512, 1024, 2048, 4096, 8192]),
+        "bias": random.choice([True, False]),
+        "hc_n": random.choice([2, 4, 8]),
+        "transformer_layer": random.choice(
+            [
+                "SIMPLE",
+                "GPT2",
+                "LLAMA2",
+                "LLAMA3",
+                "DEEPSEEK",
+                "OLMO",
+                "OLMO_HYPER_CONNECTIONS",
+                "OLMO_CONSTRAINED_HYPER_CONNECTIONS",
+                "OLMO_IDENTITY_HYPER_CONNECTIONS",
+                "SIMPLE_ATTENTION_AT_HOME",
+            ]
+        ),
+        "positional_embedding": random.choice(
+            [
+                "NN_EMBEDDING",
+                "SINUSOIDAL",
+                "ROTARY_POSITION_ENCODING",
+                "NONE",
+            ]
+        ),
+        "normalization_layer": random.choice(["LAYER_NORM", "DyT"]),
+        "optimizer_type": random.choice(["adam", "adamw", "rmsprop"]),
+        "lr": random.choice([0.0001, 0.0003, 0.001, 0.002]),
+        "beta1": random.choice([0.85, 0.9, 0.95]),
+        "beta2": random.choice([0.9, 0.95, 0.999]),
+        "weight_decay": random.choice([0, 0.01, 0.1]),
+        "max_grad_norm": random.choice([0, 0.5, 1.0, 5.0]),
+        "alpha": random.choice([0.9, 0.95, 0.99]),
+        "momentum": random.choice([0, 0.1, 0.9]),
+        "scheduler_type": random.choice(
+            ["none", "noam", "warmup_exp_decay", "step_exp", "cosine"]
+        ),
+        "warmup_steps": random.choice([500, 1000, 2000, 4000]),
+        "decay_steps": random.choice([10000, 50000, 100000]),
+        "min_lr_ratio": random.choice([0.01, 0.05, 0.1]),
+        "batch_size": random.choice([16, 32, 64, 128]),
+        "accumulation_steps": random.choice([1, 2, 4, 8]),
+    }
+
+
+def fetch_openrouter_daily_usage() -> float:
+    """Return today's USD spend for the current OpenRouter API key, or -1 on failure."""
+    import urllib.request
+
+    api_key = os.environ.get("OPENROUTER_API_KEY", "")
+    req = urllib.request.Request(
+        f"{OPENROUTER_BASE_URL}/auth/key",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())["data"]
+            return float(data.get("usage_daily", 0.0))
+    except Exception:
+        return -1.0
 
 
 class LLMProposer:
@@ -395,6 +541,7 @@ class LLMProposer:
                 },
             ],
             max_tokens=LLM_MAX_TOKENS,
+            temperature=1.2,
             response_format={"type": "json_object"},
         )
         return self._parse_json(response.choices[0].message.content)
@@ -406,10 +553,14 @@ class LLMProposer:
         for exp in recent:
             if exp.status == "success":
                 s = exp.score
+                steps = s.get("steps_to_threshold", -1)
+                steps_str = f"{steps}" if steps >= 0 else "never"
                 history_lines.append(
                     f"  #{exp.experiment_id} [ok] acc={s.get('final_accuracy', 0):.2f}% "
-                    f"stability={s.get('stability_score', 0):.3f} "
-                    f"combined={s.get('combined_score', 0):.4f} | "
+                    f"ppl={s.get('perplexity', 0):.1f} "
+                    f"slope={s.get('accuracy_slope', 0):.4f} "
+                    f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={steps_str} "
+                    f"stability={s.get('stability_score', 0):.3f} | "
                     f"model={json.dumps(exp.model_config)} | "
                     f"training={json.dumps(exp.training_config)}"
                 )
@@ -422,8 +573,12 @@ class LLMProposer:
         best = state.best_record
         best_section = "No successful experiments yet — explore freely."
         if best:
+            bs = best.score
             best_section = (
-                f"Best: #{best.experiment_id} combined={best.score.get('combined_score', 0):.4f}\n"
+                f"Best: #{best.experiment_id} acc={bs.get('final_accuracy', 0):.2f}%  "
+                f"ppl={bs.get('perplexity', 0):.1f}  "
+                f"slope={bs.get('accuracy_slope', 0):.4f}  "
+                f"stability={bs.get('stability_score', 0):.3f}\n"
                 f"  model={json.dumps(best.model_config)}\n"
                 f"  training={json.dumps(best.training_config)}"
             )
@@ -475,22 +630,34 @@ def plot_progress(state: AutoparamState, output_path: str):
 
     ids = [e.experiment_id for e in successes]
     accuracy = [e.score["final_accuracy"] for e in successes]
-    stability = [e.score["stability_score"] * 100 for e in successes]
-    combined = [e.score["combined_score"] * 100 for e in successes]
+    loss_vals = [
+        e.score["final_loss"]
+        for e in successes
+        if math.isfinite(e.score.get("final_loss", float("inf")))
+    ]
+    loss_ids = [
+        e.experiment_id
+        for e in successes
+        if math.isfinite(e.score.get("final_loss", float("inf")))
+    ]
 
     _, ax = plt.subplots(figsize=(14, 6))
     ax.plot(ids, accuracy, "b-o", label="Accuracy (%)", markersize=5)
-    ax.plot(ids, combined, "g-o", label="Combined score (×100)", markersize=5)
-    ax.plot(
-        ids,
-        stability,
-        "orange",
-        linestyle="--",
-        marker="s",
-        label="Stability (×100)",
-        markersize=4,
-        alpha=0.7,
-    )
+
+    if loss_ids:
+        ax2 = ax.twinx()
+        ax2.plot(
+            loss_ids,
+            loss_vals,
+            "r--",
+            marker="^",
+            label="Loss",
+            markersize=4,
+            alpha=0.6,
+        )
+        ax2.set_ylabel("Loss", color="red")
+        ax2.tick_params(axis="y", labelcolor="red")
+        ax2.legend(loc="upper right")
 
     best = state.best_record
     if best:
@@ -503,7 +670,7 @@ def plot_progress(state: AutoparamState, output_path: str):
         )
 
     ax.set_xlabel("Experiment #")
-    ax.set_ylabel("Score")
+    ax.set_ylabel("Accuracy (%)")
     ax.set_title("Autoparam: optimization progress over time")
     ax.legend(loc="lower right")
     ax.grid(True, alpha=0.3)
@@ -518,11 +685,19 @@ class AutoparamLoop:
         self,
         dataset_name: str,
         max_experiments: int = 40,
-        experiment_timeout_minutes: int = 20,
-        state_path: str = "autoparam_state.json",
+        experiment_timeout_minutes: int = 40,
+        state_path: Optional[str] = None,
         llm_model: str = LLM_MODEL,
+        budget_usd: Optional[float] = None,
+        distributed_strategy: DistributedStrategy = DistributedStrategy.FSDP,
+        nproc_per_node: int = 1,
     ):
+        if state_path is None:
+            state_path = f"autoparam_state_{dataset_name}.json"
         self.max_experiments = max_experiments
+        self.budget_usd = budget_usd
+        self.distributed_strategy = distributed_strategy
+        self.nproc_per_node = nproc_per_node
         self.log_path = state_path.replace(".json", ".log")
         self.timeout = experiment_timeout_minutes
         self.state = AutoparamState(state_path)
@@ -533,7 +708,8 @@ class AutoparamLoop:
 
         baseline_config = create_default_config(self.dataset)
         baseline_opts = TrainingOptions(
-            batch_size=32, training_timeout_minutes=experiment_timeout_minutes
+            batch_size=32,
+            training_timeout_minutes=experiment_timeout_minutes,
         )
         self.baseline_dict = {
             **ConfigSerializer.config_to_dict(baseline_config),
@@ -555,23 +731,50 @@ class AutoparamLoop:
 
     def run(self):
         start_id = len(self.state.experiments)
+        budget_msg = f"  Budget: ${self.budget_usd:.2f}" if self.budget_usd else ""
         print(
-            f"[autoparam] Starting from experiment {start_id}. Target: {self.max_experiments}. Timeout: {self.timeout}min each."
+            f"[autoparam] Starting from experiment {start_id}. Target: {self.max_experiments}. Timeout: {self.timeout}min each.{budget_msg}"
         )
+        if self.budget_usd:
+            self._daily_spend_at_start = fetch_openrouter_daily_usage()
+            if self._daily_spend_at_start >= 0:
+                self._log(
+                    f"OpenRouter daily spend at start: ${self._daily_spend_at_start:.4f}"
+                )
         consecutive_failures = 0
         MAX_CONSECUTIVE_FAILURES = 5
 
         for exp_id in range(start_id, self.max_experiments):
             self._log(f"=== Experiment {exp_id + 1}/{self.max_experiments} ===")
 
-            try:
-                proposed = self.proposer.propose(self.state, self.baseline_dict)
-                reasoning = proposed.pop("reasoning", "(no reasoning provided)")
-                self._log(f"Reasoning: {reasoning}")
-            except Exception as e:
-                self._log(f"LLM proposal failed ({e}), using baseline.")
-                proposed = dict(self.baseline_dict)
-                reasoning = f"LLM failed: {e}"
+            if self.budget_usd:
+                daily = fetch_openrouter_daily_usage()
+                if daily >= 0:
+                    spent = daily - self._daily_spend_at_start
+                    self._log(
+                        f"OpenRouter spend this session: ${spent:.4f} / ${self.budget_usd:.2f}"
+                    )
+                    if spent >= self.budget_usd:
+                        self._log(
+                            f"Budget ${self.budget_usd:.2f} reached (${spent:.4f} spent). Stopping."
+                        )
+                        break
+
+            if exp_id % RANDOM_EXPLORE_EVERY == 0:
+                proposed = random_config_dict()
+                reasoning = proposed.pop("reasoning")
+                self._log(
+                    f"Random exploration (every {RANDOM_EXPLORE_EVERY} experiments)"
+                )
+            else:
+                try:
+                    proposed = self.proposer.propose(self.state, self.baseline_dict)
+                    reasoning = proposed.pop("reasoning", "(no reasoning provided)")
+                    self._log(f"Reasoning: {reasoning}")
+                except Exception as e:
+                    self._log(f"LLM proposal failed ({e}), using baseline.")
+                    proposed = dict(self.baseline_dict)
+                    reasoning = f"LLM failed: {e}"
 
             try:
                 config = ConfigSerializer.dict_to_config(proposed, self.dataset)
@@ -583,6 +786,8 @@ class AutoparamLoop:
                     training_options
                 )
             except Exception as e:
+                import traceback
+                self._log(f"Config error: {e}\n{traceback.format_exc()}")
                 self._record(
                     exp_id,
                     proposed,
@@ -615,41 +820,83 @@ class AutoparamLoop:
             timestamp_start = datetime.now().isoformat()
             score, status, error_message = {}, "failed", None
 
+            config_data = {
+                "dataset_name": self.dataset.name,
+                "exp_name": exp_name,
+                "timeout_minutes": self.timeout,
+                "model_config": model_dict,
+                "training_config": training_dict,
+                "distributed_strategy": self.distributed_strategy.name,
+            }
+            config_path = None
+            result_path = None
             try:
-                _, results = execute(
-                    self.dataset, exp_name, Model(config), training_options
-                )
-                score = StabilityMetric.compute(results)
-                no_data = (
-                    len(results.accuracy.min_max_avg) == 0
-                    and len(results.step_accuracy.min_max_avg) == 0
-                )
-                if no_data:
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False, dir="/tmp"
+                ) as f:
+                    json.dump(config_data, f)
+                    config_path = f.name
+                result_path = config_path.replace(".json", "_result.json")
+
+                executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), "autoparam_executor.py")
+                cmd = [
+                    "torchrun",
+                    f"--nproc_per_node={self.nproc_per_node}",
+                    "--standalone",
+                    executor,
+                    "--config", config_path,
+                    "--result", result_path,
+                ]
+                proc = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr, start_new_session=True)
+                try:
+                    proc.wait(timeout=(self.timeout + 5) * 60)
+                except subprocess.TimeoutExpired:
+                    print(f"Experiment subprocess timed out after {self.timeout + 5} minutes, killing")
+                except KeyboardInterrupt:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    proc.wait()
+                    raise
+                finally:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    time.sleep(3)
+
+                if os.path.exists(result_path):
+                    with open(result_path) as f:
+                        result_data = json.load(f)
+                    score = result_data.get("score", {})
+                    status = result_data.get("status", "failed")
+                    error_message = result_data.get("error_message")
+                else:
                     status = "failed"
-                    error_message = (
-                        "No training data collected (dataloader may be failing)"
-                    )
+                    error_message = f"Executor exited with code {proc.returncode}, no result written"
+
+                if status == "failed":
                     self._log(f"Training failed: {error_message}")
-                    torch.cuda.empty_cache()
                     consecutive_failures += 1
                 else:
-                    status = "success"
+                    steps = score.get("steps_to_threshold", -1)
                     self._log(
                         f"Result: accuracy={score['final_accuracy']:.2f}%  "
-                        f"stability={score['stability_score']:.3f}  "
-                        f"combined={score['combined_score']:.4f}"
+                        f"ppl={score.get('perplexity', 0):.1f}  "
+                        f"slope={score.get('accuracy_slope', 0):.4f}  "
+                        f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
+                        f"stability={score['stability_score']:.3f}"
                     )
-            except torch.cuda.OutOfMemoryError as e:
-                error_message = f"CUDA out of memory: {e}"
-                self._log(f"Training failed (OOM — clearing CUDA cache): {error_message}")
-                torch.cuda.empty_cache()
-                consecutive_failures += 1
             except Exception as e:
                 import traceback
-
                 error_message = str(e)
-                self._log(f"Training failed: {e}\n{traceback.format_exc()}")
+                self._log(f"Failed to launch executor: {e}\n{traceback.format_exc()}")
                 consecutive_failures += 1
+            finally:
+                for p in [config_path, result_path]:
+                    if p and os.path.exists(p):
+                        try:
+                            os.unlink(p)
+                        except OSError:
+                            pass
 
             if status == "success":
                 consecutive_failures = 0
@@ -680,8 +927,9 @@ class AutoparamLoop:
             if best:
                 self._log(
                     f"Best so far: #{best.experiment_id}  "
-                    f"combined={best.score.get('combined_score', 0):.4f}  "
-                    f"acc={best.score.get('final_accuracy', 0):.2f}%"
+                    f"acc={best.score.get('final_accuracy', 0):.2f}%  "
+                    f"ppl={best.score.get('perplexity', 0):.1f}  "
+                    f"slope={best.score.get('accuracy_slope', 0):.4f}"
                 )
 
         self._print_summary()
@@ -719,13 +967,19 @@ class AutoparamLoop:
             return
 
         top = sorted(
-            successes, key=lambda e: e.score.get("combined_score", 0), reverse=True
+            successes, key=lambda e: e.score.get("final_accuracy", 0), reverse=True
         )[:5]
         print(f"\n── Top {len(top)} ──")
         for rank, e in enumerate(top, 1):
             s = e.score
+            steps = s.get("steps_to_threshold", -1)
             print(
-                f"  #{rank}  exp={e.experiment_id:03d}  combined={s.get('combined_score', 0):.4f}  acc={s.get('final_accuracy', 0):.2f}%  stability={s.get('stability_score', 0):.3f}"
+                f"  #{rank}  exp={e.experiment_id:03d}  "
+                f"acc={s.get('final_accuracy', 0):.2f}%  "
+                f"ppl={s.get('perplexity', 0):.1f}  "
+                f"slope={s.get('accuracy_slope', 0):.4f}  "
+                f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
+                f"stability={s.get('stability_score', 0):.3f}"
             )
             print(f"       model    : {json.dumps(e.model_config)}")
             print(f"       training : {json.dumps(e.training_config)}")
@@ -739,15 +993,48 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset", default=os.environ.get("TARGET_DATASET", "fineweb-256")
     )
-    parser.add_argument("--max-experiments", type=int, default=40)
+    parser.add_argument("--max-experiments", type=int, default=1_000)
     parser.add_argument(
         "--timeout-minutes",
         type=int,
         default=int(os.environ.get("TRAINING_TIME_MINUTES", TRAINING_TIME_MINUTES)),
     )
-    parser.add_argument("--state", default="autoparam_state.json")
+    parser.add_argument(
+        "--check-spend",
+        action="store_true",
+        help="Print today's OpenRouter spend and exit",
+    )
+    parser.add_argument("--state", default=None)
+    parser.add_argument(
+        "--distributed-strategy",
+        default="fsdp",
+        choices=["none", "ddp", "fsdp"],
+    )
+    parser.add_argument(
+        "--nproc-per-node",
+        type=int,
+        default=max(1, torch.cuda.device_count()),
+        help="Number of GPUs per node for the executor (default: all available GPUs)",
+    )
     parser.add_argument("--llm-model", default=LLM_MODEL)
+    parser.add_argument(
+        "--budget",
+        type=float,
+        default="5.00",
+        metavar="USD",
+        help="Stop when OpenRouter daily spend exceeds this amount (in USD)",
+    )
     args = parser.parse_args()
+
+    if args.check_spend:
+        daily = fetch_openrouter_daily_usage()
+        if daily < 0:
+            print("Failed to fetch OpenRouter usage (check OPENROUTER_API_KEY).")
+        else:
+            print(f"OpenRouter spend today: ${daily:.4f}")
+        exit(0)
+
+    strategy = DistributedStrategy[args.distributed_strategy.upper()]
 
     AutoparamLoop(
         dataset_name=args.dataset,
@@ -755,4 +1042,7 @@ if __name__ == "__main__":
         experiment_timeout_minutes=args.timeout_minutes,
         state_path=args.state,
         llm_model=args.llm_model,
+        budget_usd=args.budget,
+        distributed_strategy=strategy,
+        nproc_per_node=args.nproc_per_node,
     ).run()

@@ -221,7 +221,7 @@ class DeepSeekLikeTransformerLayer(nn.Module):
         self.attention = MultiHeadLatentAttention(
             config.dim_embeddings,
             config.num_attention_heads,
-            config.sequence_length,
+            config.dim_embeddings // 4,
             num_groups=None,
         )
         self.norm_2 = nn.RMSNorm(config.dim_embeddings)
@@ -229,7 +229,7 @@ class DeepSeekLikeTransformerLayer(nn.Module):
 
     def forward(self, X, mask):
         X_norm = self.norm_1(X)
-        first_half = self.attention(X_norm, X_norm, X_norm, mask)
+        first_half, _ = self.attention(X_norm, X_norm, X_norm, mask)
         first_half += X
         second_half = self.linear(self.norm_2(first_half))
         second_half += first_half
@@ -266,17 +266,17 @@ class GptTransformerLayer(nn.Module):
         )
         self.dropout = nn.Dropout(p=self.configs.dropout)
         self.linear = nn.Sequential(
-            nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings * 4),
+            nn.Linear(self.configs.dim_embeddings, self.configs.feed_forward_layer),
             nn.GELU(),
-            nn.Linear(self.configs.dim_embeddings * 4, self.configs.dim_embeddings),
+            nn.Linear(self.configs.feed_forward_layer, self.configs.dim_embeddings),
         )
         self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
         self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
 
     def forward(self, X, mask):
-        attn_output = self.get_attention_output(X, mask)
-        first_half = self.layer_norm_in(X + self.dropout(attn_output))
-        second_half = self.dropout(self.layer_norm_out(self.linear(first_half)))
+        attn_output = self.get_attention_output(self.layer_norm_in(X), mask)
+        first_half = X + self.dropout(attn_output)
+        second_half = self.dropout(self.linear(self.layer_norm_out(first_half)))
         return first_half + second_half
 
     def get_attention_output(self, X, mask):
@@ -294,16 +294,18 @@ class SimpleTransformerLayer(nn.Module):
         )
         self.module = nn.Sequential(
             *[
-                nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings),
+                nn.Linear(self.configs.dim_embeddings, self.configs.feed_forward_layer),
                 nn.ReLU(),
+                nn.Linear(self.configs.feed_forward_layer, self.configs.dim_embeddings),
             ]
         )
         self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
         self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
 
     def forward(self, X, mask):
-        attn_output = self.get_attention_output(X, mask)
-        return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
+        attn_output = self.get_attention_output(self.layer_norm_in(X), mask)
+        first_half = X + attn_output
+        return first_half + self.module(self.layer_norm_out(first_half))
 
     def get_attention_output(self, X: torch.Tensor, mask):
         if self.configs.transformer_layer == TransformerLayerType.SIMPLE:
@@ -325,16 +327,19 @@ class SimpleAttentionAtHomeTransformerLayer(nn.Module):
         )
         self.module = nn.Sequential(
             *[
-                nn.Linear(self.configs.dim_embeddings, self.configs.dim_embeddings),
+                nn.Linear(self.configs.dim_embeddings, self.configs.feed_forward_layer),
                 nn.ReLU(),
+                nn.Linear(self.configs.feed_forward_layer, self.configs.dim_embeddings),
             ]
         )
         self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
         self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
 
     def forward(self, X, mask):
-        attn_output = self.self_attention(X, X, X, mask)
-        return self.layer_norm_out(self.module(self.layer_norm_in(X + attn_output)))
+        X_norm = self.layer_norm_in(X)
+        attn_output = self.self_attention(X_norm, X_norm, X_norm, mask)
+        first_half = X + attn_output
+        return first_half + self.module(self.layer_norm_out(first_half))
 
 
 # https://arxiv.org/pdf/2512.24880
@@ -667,11 +672,12 @@ class Model(nn.Module):
             bias=False,
         )
 
+        self.apply(self._init_weights)
+
         # Weight Tying
         # https://paperswithcode.com/method/weight-tying
         # Found using minigpt
         self.embeddings.weight = self.output_layer.weight
-        self.apply(self._init_weights)
 
         # Attention mask
         if self.config.masked_order == MaskOrder.TRIU:

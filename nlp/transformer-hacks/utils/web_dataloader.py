@@ -180,8 +180,6 @@ class WebDataloader:
                     self._batches_consumed += 1
                     return batch
 
-                self._failed_fetches += 1
-
         except queue.Empty:
             logger.warning("Timeout waiting for batch")
             raise StopIteration
@@ -193,6 +191,7 @@ class WebDataloader:
             loop.run_until_complete(self._fetch_all_batches())
         except Exception:
             logger.exception("Error in async fetch loop")
+            self.batch_queue.put(None)
         finally:
             loop.close()
 
@@ -217,9 +216,13 @@ class WebDataloader:
             total = self.total_batches
 
             while queued < total and not self.shutdown_event.is_set():
-                while len(tasks) < self.prefetch_factor and next_to_launch < start + total:
-                    tasks.add(asyncio.ensure_future(self._fetch_batch(session, next_to_launch)))
+                while len(tasks) < self.prefetch_factor and next_to_launch < start + total + self._failed_fetches:
+                    actual_idx = next_to_launch % total
+                    tasks.add(asyncio.ensure_future(self._fetch_batch(session, actual_idx)))
                     next_to_launch += 1
+
+                if not tasks:
+                    break
 
                 done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
@@ -227,9 +230,15 @@ class WebDataloader:
                         result = task.result()
                     except Exception:
                         self._failed_fetches += 1
-                        result = self._empty_batch()
+                        continue
 
-                    if result is not None and not self.shutdown_event.is_set():
+                    if result is None or self.shutdown_event.is_set():
+                        continue
+
+                    is_empty = not any(torch.is_tensor(v) and v.numel() > 0 for v in result.values())
+                    if is_empty:
+                        self._failed_fetches += 1
+                    else:
                         self.batch_queue.put(result)
                         queued += 1
 

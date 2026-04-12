@@ -33,7 +33,7 @@ class NextTokenPrediction(BaseObjective):
 
     def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         return torch.nn.functional.cross_entropy(
-            y_predicted.view(-1, self.vocab_size),
+            y_predicted.view(-1, self.vocab_size).float(),
             y.view(-1),
             ignore_index=self.padding_index,
         )

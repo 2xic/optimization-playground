@@ -22,7 +22,7 @@ from training.optimizer import (
     WarmupExpDecay,
 )
 from typing import Callable
-from training.trainer import TrainingOptions
+from training.trainer import TrainingOptions, DistributedStrategy
 from optimization_playground_shared.nlp.utils.sampling import (
     temperature_sampling,
     argmax_sampling,
@@ -32,10 +32,6 @@ import torch.multiprocessing as mp
 import torch
 from utils.web_dataloader import WebDataloader
 from dotenv import load_dotenv
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp.wrap import size_based_auto_wrap_policy
-from functools import partial
-from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 from dataclasses import dataclass
 import torch
@@ -53,7 +49,9 @@ from utils.mixture_dataloader import WebDataloaderMixture
 # os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 # os.environ["TORCH_USE_CUDA_DSA"] = "1"
 
-torch.autograd.set_detect_anomaly(True)
+DEBUG = int(os.environ.get("DEBUG", "0")) == 1
+if DEBUG:
+    torch.autograd.set_detect_anomaly(True)
 torch.set_float32_matmul_precision("high")
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -65,9 +63,8 @@ load_dotenv()
 IS_RUNNING_DISTRIBUTED = "MASTER_ADDR" in os.environ
 DISTRIBUTED_STRATEGY = os.environ.get("PARALLEL_STRATEGY", "DDP")  # .lower()
 NUM_PROCESSES = int(os.environ.get("NUM_PROCESS", 8))
-USE_GRAD_SCALER = bool(int(os.environ.get("USE_GRAD_SCALER", "1")) == "1")
+USE_GRAD_SCALER = os.environ.get("USE_GRAD_SCALER", "1") == "1"
 TRAINING_TIME_MINUTES = int(os.environ.get("TRAINING_TIME_MINUTES", "60"))
-DEBUG = int(os.environ.get("DEBUG", "0")) == 1
 BATCH_SIZE = os.environ.get("BATCH_SIZE", None)
 
 EPOCHS = int(os.environ.get("NUM_EPOCHS", 10_000))
@@ -218,15 +215,17 @@ def create_default_config(dataset):
 
 
 def create_next_token_prediction_objective(
-    dataset, model: Model, optimizer_config=AdamWConfig()
+    dataset, model: Model, optimizer_config=AdamWConfig(), lr_scheduler=None
 ):
-    # TODO: move this.
     sampler = (
         temperature_sampling
         if model.config.sampling_method == SamplingMethod.TEMPERATURE
         else argmax_sampling
     )
-    trainer_class = Trainer if USE_GRAD_SCALER else GradScalerTrainer
+    trainer_class = GradScalerTrainer if USE_GRAD_SCALER else Trainer
+    optimizer = optimizer_config.create_optimizer(model.parameters())
+    if lr_scheduler is not None:
+        lr_scheduler.create_scheduler(optimizer)
     trainer = trainer_class(
         model,
         NextTokenPrediction(
@@ -234,7 +233,8 @@ def create_next_token_prediction_objective(
             vocab_size=dataset.vocab_size,
             sampler=sampler,
         ),
-        optimizer_config.create_optimizer(model.parameters()),
+        optimizer,
+        lr_scheduler=lr_scheduler,
     )
     return trainer
 
@@ -261,6 +261,7 @@ def execute(
                 dataset,
                 model,
                 options.optimizer,
+                options.lr_scheduler,
             )
             (accuracy, loss, step_acc, step_ls, epoch_at_step) = trainer.train(
                 dataset,
@@ -283,7 +284,8 @@ def execute(
     finally:
         if trainer is not None:
             trainer.metrics_tracker.close()
-        model.cpu()
+        if not (dist.is_initialized() and options.distributed_strategy == DistributedStrategy.FSDP):
+            model.cpu()
         del trainer
         del model
         gc.collect()
@@ -345,25 +347,9 @@ class ExperimentDistributed:
             optimizer=AdamConfig(),
         ),
     ):
-        model = model_config()
-        device = torch.device(f"cuda:{dist.get_rank()}")
-        model: Model = model.to(device)
-        #       print(model)
-        #        exit(0)
-        training_options.device = device
-
-        if DISTRIBUTED_STRATEGY == "DDP":
-            model = DDP(model, device_ids=[dist.get_rank()])
-            print("Using DDP for distributed training")
-        elif DISTRIBUTED_STRATEGY == "FDSP":
-            wrap_policy = partial(size_based_auto_wrap_policy, min_num_params=1_000)
-            model = FSDP(model, device_id=dist.get_rank(), auto_wrap_policy=wrap_policy)
-            print("Using FSDP for distributed training")
-        else:
-            raise Exception(f"Unknown DISTRIBUTED_STRATEGY = {DISTRIBUTED_STRATEGY}")
-        model.config = model_config.config
+        training_options.device = torch.device(f"cuda:{dist.get_rank()}")
         experiment_variant, results = execute(
-            self.dataset, experiment_variant, model, training_options
+            self.dataset, experiment_variant, model_config(), training_options
         )
         self.experiments[experiment_variant] = results
         return self

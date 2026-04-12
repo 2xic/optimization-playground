@@ -5,8 +5,15 @@ import pynvml
 
 
 def get_true_gpu_utilization(device):
-    """Get actual GPU memory usage across all processes"""
     pynvml.nvmlInit()
+    if dist.is_initialized():
+        max_util = 0.0
+        for i in range(pynvml.nvmlDeviceGetCount()):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            max_util = max(max_util, info.used / info.total)
+        pynvml.nvmlShutdown()
+        return max_util
     handle = pynvml.nvmlDeviceGetHandleByIndex(device.index or 0)
     info = pynvml.nvmlDeviceGetMemoryInfo(handle)
     pynvml.nvmlShutdown()
@@ -20,8 +27,8 @@ class AdaptiveBatchSizer:
         min_batch=8,
         max_batch=512,
         window_size=10,
-        target_utilization=0.9,
-        safety_margin=0.05,
+        target_utilization=0.75,
+        safety_margin=0.1,
     ):
         self.current_batch = initial_batch
         self.min_batch = min_batch

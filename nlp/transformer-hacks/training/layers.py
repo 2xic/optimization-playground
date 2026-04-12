@@ -12,6 +12,7 @@ class SimpleMultiHeadAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
 
     def forward(self, query, key, value, attn_mask=None):
         # eq: 1 https://arxiv.org/pdf/1706.03762
@@ -28,7 +29,7 @@ class SimpleMultiHeadAttention(nn.Module):
         attn = attn + attn_mask_tensor
         attn = torch.softmax(attn, dim=-1)
         context = attn @ value
-        return context
+        return self.out_proj(context)
 
 
 # Read more
@@ -238,7 +239,7 @@ class MultiHeadLatentAttention(nn.Module):
 
         # Reshape and apply output projection
         out = out.transpose(1, 2).contiguous().view(batch_size, seq_len, self.embed_dim)
-        return self.out_proj(out)
+        return self.out_proj(out), None
 
 
 class BidirectionalAttention(MultiheadAttention):

@@ -1,24 +1,26 @@
 from .model import Config, TransformerLayerType
 import torch
-from typing import Callable, Tuple, Optional
+import torch.distributed as dist
+from contextlib import nullcontext
+from torch.amp import autocast, GradScaler
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
+from torch.nn.parallel import DistributedDataParallel as DDP
+from typing import Callable, Tuple, Optional, List
 from tqdm import tqdm
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 import os
 import time
+import shutil
+from abc import ABC
 from utils.performance_benchmarker import Timer
 from .objectives import BaseObjective
-import torch.distributed as dist
-from torch.amp import autocast, GradScaler
-from abc import ABC
 from .optimizer import BaseOptimizerConfig, AdamConfig, Scheduler
-from dataclasses import dataclass, field
 from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
 from utils.web_dataloader import WebDataloader
-from typing import List
-import shutil
 
 torch.backends.cudnn.benchmark = True
 
@@ -110,6 +112,17 @@ class BatchData:
     model: torch.nn.Module
 
 
+class DistributedStrategy(Enum):
+    NONE = "none"
+    DDP = "ddp"
+    FSDP = "fsdp"
+
+    @staticmethod
+    def from_env() -> "DistributedStrategy":
+        val = os.environ.get("PARALLEL_STRATEGY", "NONE").upper()
+        return DistributedStrategy[val] if val in DistributedStrategy.__members__ else DistributedStrategy.NONE
+
+
 @dataclass
 class TrainingOptions:
     batch_size: Optional[int] = None
@@ -129,6 +142,8 @@ class TrainingOptions:
     # misc
     enable_checkpoints: bool = False
     checkpoint_tag: Optional[str] = None
+    enable_metrics: bool = False
+    distributed_strategy: DistributedStrategy = field(default_factory=DistributedStrategy.from_env)
 
     @property
     def sampling_timeout_minutes(self):
@@ -172,22 +187,13 @@ class BaseTrainer(ABC):
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.total_batch_num = 0
-        run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.metrics_tracker = MetricsTracker(
-            run_id=run_id,
-            dataset_name=None,
-            rank=dist.get_rank() if dist.is_initialized() else 0,
-        )
-        self.checkpoints_tracker = StorageBoxCheckpoint(
-            run_id=run_id,
-            host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
-            username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
-            password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
-        )
+        self._run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.metrics_tracker = MetricsTracker(run_id=self._run_id, enabled=False)
+        self.checkpoints_tracker = None
         self.sizer = AdaptiveBatchSizer(
             initial_batch=None,
-            target_utilization=0.90,
-            safety_margin=0.10,
+            target_utilization=0.75,
+            safety_margin=0.15,
             window_size=128,
         )
         # Do a checkpoint each hour.
@@ -205,6 +211,21 @@ class BaseTrainer(ABC):
     ):
         if dist.is_initialized() and dist.get_rank() != 0:
             progress = lambda x: x  # noqa: E731
+
+        rank = dist.get_rank() if dist.is_initialized() else 0
+        if training_options.enable_metrics:
+            self.metrics_tracker = MetricsTracker(
+                run_id=self._run_id,
+                dataset_name=loader.name,
+                rank=rank,
+            )
+        if training_options.enable_checkpoints and self.checkpoints_tracker is None:
+            self.checkpoints_tracker = StorageBoxCheckpoint(
+                run_id=self._run_id,
+                host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+                username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+                password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+            )
 
         sum_loss = 0
         sum_accuracy = 0
@@ -224,8 +245,20 @@ class BaseTrainer(ABC):
             self.total_batch_num = training_options.metadata.total_batch_num
             epoch_batch_count = training_options.metadata.epoch_batch_count
 
-        for _, (X, y) in enumerate(iterator):
-            # print("index", index, (X.shape, y.shape))
+        while True:
+            try:
+                X, y = next(iterator)
+                local_has_data = 1
+            except StopIteration:
+                X, y = None, None
+                local_has_data = 0
+            if dist.is_initialized():
+                flag = torch.tensor(local_has_data, device=training_options.device)
+                dist.all_reduce(flag, op=dist.ReduceOp.MIN)
+                if flag.item() == 0:
+                    break
+            elif not local_has_data:
+                break
             loss, accuracy, rows = self.forward(
                 model, objective, X, y, training_options
             )
@@ -279,7 +312,12 @@ class BaseTrainer(ABC):
             training_options.metadata.total_batch_num = self.total_batch_num
             training_options.metadata.epoch_batch_count = epoch_batch_count
 
-            if self.has_timeout(training_options):
+            timeout = int(self.has_timeout(training_options))
+            if dist.is_initialized():
+                t = torch.tensor(timeout, device=training_options.device)
+                dist.all_reduce(t, op=dist.ReduceOp.MAX)
+                timeout = t.item()
+            if timeout:
                 self.log("Hit timeout")
                 break
 
@@ -324,12 +362,15 @@ class BaseTrainer(ABC):
         y_predicted = model(X)
         loss = objective(y_predicted, y)
 
-        loss.backward()
+        (loss / training_options.accumulation_steps).backward()
         if (self.total_batch_num + 1) % training_options.accumulation_steps == 0:
+            max_grad_norm = getattr(training_options.optimizer, "max_grad_norm", 0)
+            if max_grad_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
             self.optimizer.step()
             self.optimizer.zero_grad(set_to_none=True)
-        if self.lr_scheduler is not None:
-            self.lr_scheduler.step()
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step()
 
         self.total_batch_num += 1
         # Report metrics.
@@ -381,6 +422,12 @@ class Trainer(BaseTrainer):
     ):
         self.log(f"Training on {training_options.device}")
         self.model.to(training_options.device)
+        if training_options.distributed_strategy == DistributedStrategy.DDP and dist.is_initialized():
+            self.model = DDP(self.model, device_ids=[dist.get_rank()])
+        elif training_options.distributed_strategy == DistributedStrategy.FSDP and dist.is_initialized():
+            mp_dtype = torch.bfloat16 if check_bf16_support() else torch.float16
+            mp_policy = MixedPrecision(param_dtype=mp_dtype, reduce_dtype=mp_dtype, buffer_dtype=mp_dtype)
+            self.model = FSDP(self.model, device_id=dist.get_rank(), mixed_precision=mp_policy, use_orig_params=True)
         for state in self.optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
@@ -403,7 +450,12 @@ class Trainer(BaseTrainer):
             training_options.metadata.plots.record_epoch(
                 loss=avg_loss, accuracy=accuracy_pct
             )
-            if self.has_timeout(training_options):
+            timeout = int(self.has_timeout(training_options))
+            if dist.is_initialized():
+                t = torch.tensor(timeout, device=training_options.device)
+                dist.all_reduce(t, op=dist.ReduceOp.MAX)
+                timeout = t.item()
+            if timeout:
                 self.log("Hit timeout")
                 break
         if training_options.enable_checkpoints:
@@ -457,6 +509,15 @@ class GradScalerTrainer(Trainer):
         self.scaler = GradScaler("cuda")
         self.type = torch.bfloat16 if check_bf16_support() else torch.float16
         self.last_time = None
+        self._training_options: Optional[TrainingOptions] = None
+
+    @property
+    def use_fsdp(self) -> bool:
+        return (
+            self._training_options is not None
+            and self._training_options.distributed_strategy == DistributedStrategy.FSDP
+            and dist.is_initialized()
+        )
 
     def train(
         self,
@@ -464,12 +525,16 @@ class GradScalerTrainer(Trainer):
         training_options: TrainingOptions,
         progress=lambda x: tqdm(x, mininterval=1),
     ):
-        self._original_model.to(training_options.device)
+        self._training_options = training_options
+        if self.use_fsdp:
+            self._original_model.to(training_options.device)
+        else:
+            self._original_model.to(training_options.device).to(self.type)
         torch.backends.cuda.enable_flash_sdp(True)
         torch.backends.cuda.enable_mem_efficient_sdp(True)
         torch.set_float32_matmul_precision("high")
         can_compile = shutil.which("cc") or shutil.which("gcc")
-        if can_compile and torch.cuda.is_available():
+        if not self.use_fsdp and can_compile and torch.cuda.is_available():
             capability = torch.cuda.get_device_capability(training_options.device)
             if capability[0] >= 7:
                 try:
@@ -488,14 +553,13 @@ class GradScalerTrainer(Trainer):
                 tqdm.write(f"Skipping torch.compile: CUDA Capability {capability[0]}.{capability[1]} < 7.0")
         elif not can_compile:
             tqdm.write("Skipping torch.compile: no C compiler found")
-        self.optimizer.fused = True
         return super().train(dataset, training_options, progress)
 
     def forward(
         self, model, objective, X, y, training_options: TrainingOptions
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         now = time.time()
-        with autocast("cuda", dtype=self.type):
+        with nullcontext() if self.use_fsdp else autocast("cuda", dtype=self.type):
             with self.metrics_tracker.span("to_device"):
                 X, y = (
                     X.to(training_options.device, non_blocking=True),
@@ -512,16 +576,27 @@ class GradScalerTrainer(Trainer):
                     y,
                 )
             with self.metrics_tracker.span("optimize"):
-                self.scaler.scale(loss).backward()
+                if self.use_fsdp:
+                    (loss / training_options.accumulation_steps).backward()
+                else:
+                    self.scaler.scale(loss / training_options.accumulation_steps).backward()
                 if (
                     self.total_batch_num + 1
                 ) % training_options.accumulation_steps == 0:
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
+                    max_grad_norm = getattr(training_options.optimizer, "max_grad_norm", 0)
+                    if self.use_fsdp:
+                        if max_grad_norm > 0:
+                            model.clip_grad_norm_(max_grad_norm)
+                        self.optimizer.step()
+                    else:
+                        if max_grad_norm > 0:
+                            self.scaler.unscale_(self.optimizer)
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                        self.scaler.step(self.optimizer)
+                        self.scaler.update()
                     self.optimizer.zero_grad(set_to_none=True)
-
-            if self.lr_scheduler is not None:
-                self.lr_scheduler.step()
+                    if self.lr_scheduler is not None:
+                        self.lr_scheduler.step()
 
             self.total_batch_num += 1
 
@@ -530,18 +605,19 @@ class GradScalerTrainer(Trainer):
                     (accuracy, rows) = objective.evaluator(y_predicted, y)
 
                 if dist.is_initialized():
-                    accuracy_tensor = torch.tensor(
-                        [accuracy], device=training_options.device, dtype=torch.float32
-                    )
-                    rows_tensor = torch.tensor(
-                        [rows], device=training_options.device, dtype=torch.float32
-                    )
+                    if not torch.isfinite(loss).all():
+                        raise RuntimeError(f"non-finite loss: {loss.item()}")
+                    accuracy_tensor = accuracy.detach().float().reshape(1)
+                    rows_tensor = rows.detach().float().reshape(1)
+                    loss_tensor = loss.detach().float().reshape(1)
 
                     dist.all_reduce(accuracy_tensor, op=dist.ReduceOp.SUM)
                     dist.all_reduce(rows_tensor, op=dist.ReduceOp.SUM)
+                    dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
 
                     accuracy = accuracy_tensor
                     rows = rows_tensor
+                    loss = loss_tensor / dist.get_world_size()
 
                 metrics = {
                     "loss": loss,

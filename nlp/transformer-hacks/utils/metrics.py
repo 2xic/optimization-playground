@@ -24,9 +24,9 @@ from prometheus_client.exposition import basic_auth_handler
 
 
 class MetricsTracker:
-    def __init__(self, run_id, dataset_name=None, rank=0, system_metrics_interval=30):
+    def __init__(self, run_id, dataset_name=None, rank=0, system_metrics_interval=30, enabled=True):
         load_dotenv()
-        self.enabled = rank == 0
+        self.enabled = enabled and rank == 0
         self.shutdown = False
 
         if not self.enabled:
