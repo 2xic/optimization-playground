@@ -8,8 +8,10 @@ Usage (not called directly):
 
 import json
 import os
+import sys
 import argparse
 import traceback
+import time
 from datetime import timedelta
 
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -25,7 +27,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from experiments import execute, NAMED_DATASETS
-from training.model import Model
+from training.model import Model, SamplingMethod
 from training.trainer import DistributedStrategy
 from autoparam import ConfigSerializer, StabilityMetric
 
@@ -59,10 +61,15 @@ def main():
 
     dataset = NAMED_DATASETS[dataset_name]
     config = ConfigSerializer.dict_to_config(model_dict, dataset)
+    config.sampling_method = SamplingMethod.ARGMAX
     device = torch.device(f"cuda:{rank}")
     training_options = ConfigSerializer.dict_to_training_options(
         training_dict, timeout_minutes, strategy, device
     )
+
+    def _dist_log(msg):
+        ts = time.strftime("%H:%M:%S")
+        print(f"[rank{rank}][{ts}][dist] {msg}", flush=True)
 
     score, status, error_message = {}, "failed", None
     try:
@@ -79,25 +86,29 @@ def main():
             status = "success"
     except torch.cuda.OutOfMemoryError as e:
         error_message = f"CUDA out of memory: {e}"
-        traceback.print_exc()
+        _dist_log(f"exception caught:\n{traceback.format_exc()}")
     except Exception as e:
         error_message = str(e)
-        traceback.print_exc()
+        _dist_log(f"exception caught:\n{traceback.format_exc()}")
     finally:
+        _dist_log(f"finally block entered | status={status} | error={error_message}")
         if dist.is_initialized():
+            _dist_log("calling dist.barrier()")
             try:
                 dist.barrier()
-            except Exception:
-                pass
+                _dist_log("dist.barrier() succeeded")
+            except Exception as barrier_exc:
+                _dist_log(f"dist.barrier() FAILED: {barrier_exc}")
+            _dist_log("calling dist.destroy_process_group()")
             dist.destroy_process_group()
-
+            _dist_log("dist.destroy_process_group() returned")
     if rank == 0:
         with open(args.result, "w") as f:
             json.dump(
                 {"score": score, "status": status, "error_message": error_message}, f
             )
 
-    os._exit(0)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

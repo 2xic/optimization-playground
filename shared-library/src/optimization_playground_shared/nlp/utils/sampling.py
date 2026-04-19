@@ -18,6 +18,7 @@ def simple_sampling(logits: torch.Tensor) -> torch.Tensor:
 
 
 def temperature_sampling(logits, temperature=0.95, top_k=10, top_p=0.6):
+    logits = torch.nan_to_num(logits, nan=0.0, posinf=1e4, neginf=-1e4)
     logits = logits.float()
     _, vocab_size = logits.shape
     if temperature == 0:

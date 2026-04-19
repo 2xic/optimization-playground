@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import torch.optim.rmsprop
 from abc import ABC, abstractmethod
 from typing import Optional, Dict
+from muon_fsdp2 import Muon as MuonWithAuxAdam
 
 
 class Scheduler(ABC):
@@ -41,11 +42,13 @@ class StepExponentialLR(_LRScheduler):
 
     def get_lr(self):
         gamma = self.min_lr_ratio ** (1.0 / self.decay_steps)
-        return [base_lr * (gamma ** self.last_epoch) for base_lr in self.base_lrs]
+        return [base_lr * (gamma**self.last_epoch) for base_lr in self.base_lrs]
 
 
 class CosineWithWarmup(_LRScheduler):
-    def __init__(self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1):
+    def __init__(
+        self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1
+    ):
         self.warmup_steps = warmup_steps
         self.decay_steps = decay_steps
         self.min_lr_ratio = min_lr_ratio
@@ -56,18 +59,23 @@ class CosineWithWarmup(_LRScheduler):
 
     def get_lr(self):
         import math
+
         if self.last_epoch < self.warmup_steps:
             alpha = (self.last_epoch + 1) / self.warmup_steps
             return [base_lr * alpha for base_lr in self.base_lrs]
         else:
-            progress = min(1.0, (self.last_epoch - self.warmup_steps) / self.decay_steps)
+            progress = min(
+                1.0, (self.last_epoch - self.warmup_steps) / self.decay_steps
+            )
             cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
             scale = self.min_lr_ratio + (1.0 - self.min_lr_ratio) * cosine
             return [base_lr * scale for base_lr in self.base_lrs]
 
 
 class WarmupExpDecay(_LRScheduler):
-    def __init__(self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1):
+    def __init__(
+        self, warmup_steps=2000, decay_steps=100000, min_lr_ratio=0.1, last_epoch=-1
+    ):
         self.warmup_steps = warmup_steps
         self.decay_steps = decay_steps
         self.min_lr_ratio = min_lr_ratio
@@ -83,7 +91,38 @@ class WarmupExpDecay(_LRScheduler):
         else:
             decay_step = self.last_epoch - self.warmup_steps
             gamma = self.min_lr_ratio ** (1.0 / self.decay_steps)
-            return [base_lr * (gamma ** decay_step) for base_lr in self.base_lrs]
+            return [base_lr * (gamma**decay_step) for base_lr in self.base_lrs]
+
+
+class TrapezoidalLR(_LRScheduler):
+    def __init__(
+        self,
+        warmup_steps=500,
+        flat_steps=5000,
+        decay_steps=2000,
+        min_lr_ratio=0.1,
+        last_epoch=-1,
+    ):
+        self.warmup_steps = warmup_steps
+        self.flat_steps = flat_steps
+        self.decay_steps = decay_steps
+        self.min_lr_ratio = min_lr_ratio
+        self.last_epoch = last_epoch
+
+    def create_scheduler(self, optimizer):
+        super().__init__(optimizer, self.last_epoch)
+
+    def get_lr(self):
+        step = self.last_epoch
+        if step < self.warmup_steps:
+            alpha = (step + 1) / self.warmup_steps
+        elif step < self.warmup_steps + self.flat_steps:
+            alpha = 1.0
+        else:
+            decay_step = step - self.warmup_steps - self.flat_steps
+            progress = min(1.0, decay_step / max(1, self.decay_steps))
+            alpha = 1.0 - (1.0 - self.min_lr_ratio) * progress
+        return [base_lr * alpha for base_lr in self.base_lrs]
 
 
 def lr_lambda(step):
@@ -114,39 +153,30 @@ class BaseOptimizerConfig:
 @dataclass
 class MuonConfig(BaseOptimizerConfig):
     lr: float = 3e-4
+    hybrid: bool = False
+
+    def create_optimizer_named(self, named_params):
+        named_params = list(named_params)
+
+        skip = {"embeddings.weight", "output_layer.weight"} if self.hybrid else set()
+        param_groups = [
+            dict(
+                params=[p for n, p in named_params if p.ndim >= 2 and n not in skip],
+                use_muon=True,
+                lr=self.lr,
+                weight_decay=0.01,
+            ),
+            dict(
+                params=[p for n, p in named_params if p.ndim < 2 or n in skip],
+                use_muon=False,
+                lr=self.lr,
+                weight_decay=0.01,
+            ),
+        ]
+        return MuonWithAuxAdam(param_groups)
 
     def create_optimizer(self, params):
-        try:
-            return torch.optim.Muon(
-                params,
-                lr=self.lr,
-            )
-        except Exception as e:
-            print(e)
-            # pip install git+https://github.com/KellerJordan/Muon
-            from muon import SingleDeviceMuon
-
-            params = list(params)
-
-            hidden_weights = [
-                dict(
-                    params=[p for p in params if p.ndim >= 2],
-                    use_muon=True,
-                    lr=0.02,
-                    weight_decay=0.01,
-                ),
-                # dict(
-                #    params=[p for p in params if p.ndim < 2],
-                #    use_muon=False,
-                #    lr=0.02,
-                #    weight_decay=0.01,
-                # ),
-            ]
-
-            return SingleDeviceMuon(
-                hidden_weights,
-                lr=self.lr,
-            )
+        return self.create_optimizer_named((("", p) for p in params))
 
 
 @dataclass

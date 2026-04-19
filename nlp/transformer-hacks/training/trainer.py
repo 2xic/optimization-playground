@@ -4,6 +4,12 @@ import torch.distributed as dist
 from contextlib import nullcontext
 from torch.amp import autocast, GradScaler
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
+try:
+    from torch.distributed._composable.fsdp import fully_shard
+    from torch.distributed._composable.fsdp import MixedPrecisionPolicy as FSDP2MixedPrecision
+    _FSDP2_AVAILABLE = True
+except ImportError:
+    _FSDP2_AVAILABLE = False
 from torch.nn.parallel import DistributedDataParallel as DDP
 from typing import Callable, Tuple, Optional, List
 from tqdm import tqdm
@@ -425,9 +431,15 @@ class Trainer(BaseTrainer):
         if training_options.distributed_strategy == DistributedStrategy.DDP and dist.is_initialized():
             self.model = DDP(self.model, device_ids=[dist.get_rank()])
         elif training_options.distributed_strategy == DistributedStrategy.FSDP and dist.is_initialized():
-            mp_dtype = torch.bfloat16 if check_bf16_support() else torch.float16
-            mp_policy = MixedPrecision(param_dtype=mp_dtype, reduce_dtype=mp_dtype, buffer_dtype=mp_dtype)
-            self.model = FSDP(self.model, device_id=dist.get_rank(), mixed_precision=mp_policy, use_orig_params=True)
+            bf16 = check_bf16_support()
+            mp_dtype = torch.bfloat16 if bf16 else torch.float16
+            if _FSDP2_AVAILABLE:
+                mp_policy = FSDP2MixedPrecision(param_dtype=mp_dtype if bf16 else None, reduce_dtype=mp_dtype)
+                fully_shard(self.model, mp_policy=mp_policy)
+                self.optimizer = training_options.optimizer.create_optimizer(self.model.parameters())
+            else:
+                mp_policy = MixedPrecision(param_dtype=mp_dtype, reduce_dtype=mp_dtype, buffer_dtype=mp_dtype)
+                self.model = FSDP(self.model, device_id=dist.get_rank(), mixed_precision=mp_policy, use_orig_params=True)
         for state in self.optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):

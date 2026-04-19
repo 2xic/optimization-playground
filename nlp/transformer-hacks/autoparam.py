@@ -33,6 +33,7 @@ from datetime import datetime
 from typing import Optional, List
 
 import torch
+import pynvml
 
 from dotenv import load_dotenv
 
@@ -50,6 +51,7 @@ from training.model import (
     TransformerLayerType,
     PositionalEmbeddingType,
     NormalizationLayerType,
+    AttentionType,
 )
 from training.trainer import TrainingOptions, DistributedStrategy
 from training.optimizer import (
@@ -61,12 +63,48 @@ from training.optimizer import (
     WarmupExpDecay,
     StepExponentialLR,
     CosineWithWarmup,
+    TrapezoidalLR,
 )
 from utils.plot import Results
 import matplotlib.pyplot as plt
 
 STABILITY_TAIL_FRACTION = 0.25
-STEPS_TO_ACCURACY_THRESHOLD = 30.0  # percent — convergence speed marker
+STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
+
+
+_GPU_MEMORY_HEADROOM = 0.75
+
+
+def _total_gpu_memory_gb() -> float:
+    try:
+        pynvml.nvmlInit()
+        count = pynvml.nvmlDeviceGetCount()
+        per_gpu = min(
+            pynvml.nvmlDeviceGetMemoryInfo(pynvml.nvmlDeviceGetHandleByIndex(i)).total
+            for i in range(count)
+        )
+        pynvml.nvmlShutdown()
+        return (per_gpu / (1024 ** 3)) * _GPU_MEMORY_HEADROOM
+    except Exception:
+        return 16.0 * _GPU_MEMORY_HEADROOM
+
+
+def _estimate_model_gb(config, num_gpus: int = 1) -> float:
+    padded_vocab = math.ceil(config.vocab_size / 128) * 128
+    num_params = (
+        padded_vocab * config.dim_embeddings
+        + config.num_transformer_layers * (
+            4 * config.dim_embeddings ** 2
+            + 2 * config.dim_embeddings * config.feed_forward_layer
+        )
+    )
+    bytes_per_param = 4
+    optimizer_multiplier = 3
+    param_gb = num_params * bytes_per_param * optimizer_multiplier / (1024 ** 3) / max(1, num_gpus)
+    max_batch = 128
+    seq_len = getattr(config, "sequence_length", 256)
+    activation_gb = max_batch * seq_len * config.dim_embeddings * config.num_transformer_layers * 4 * 4 / (1024 ** 3)
+    return param_gb + activation_gb
 
 LLM_MODEL = "anthropic/claude-opus-4-5"
 LLM_MAX_TOKENS = 1024
@@ -91,10 +129,14 @@ Architecture (exact enum names):
                            OLMO_IDENTITY_HYPER_CONNECTIONS | SIMPLE_NO_ATTENTION |
                            SIMPLE_ATTENTION_AT_HOME
   positional_embedding:    NN_EMBEDDING | SINUSOIDAL | ROTARY_POSITION_ENCODING | NONE
-  normalization_layer:     LAYER_NORM | DyT
+                           (LLAMA2/LLAMA3/OLMO* use ROTARY_POSITION_ENCODING for in-attention RoPE; set NONE to disable; other values add positional encoding at input instead)
+  normalization_layer:     LAYER_NORM | DyT | RMS_NORM
+  attention_type:          DEFAULT | MHA | GQA | MLA
+                           (DEFAULT = architecture's native attention: DEEPSEEK→MLA, LLAMA3→GQA, others→MHA)
+  qk_norm:                 [true, false]   ← apply RMSNorm to Q and K after projection (improves stability)
 
 Optimizer:
-  optimizer_type:          adam | adamw | rmsprop
+  optimizer_type:          adam | adamw | rmsprop | muon | muon_hybrid
   lr:                      float in [0.0001, 0.002]
   weight_decay:            [0, 0.01, 0.1]
   max_grad_norm:           [0, 0.5, 1.0, 5.0]   ← 0 = disabled; controls gradient clipping
@@ -102,12 +144,15 @@ Optimizer:
   beta2:                   float in [0.90, 0.999]  (adam/adamw only)
   alpha:                   [0.9, 0.95, 0.99]       (rmsprop only)
   momentum:                [0, 0.1, 0.9]           (rmsprop only)
+  Note: muon/muon_hybrid ignore beta1/beta2/alpha/momentum — only lr/weight_decay apply
+  Note: muon_hybrid uses Muon for hidden Linear weights, AdamW for embeddings/lm_head (best of both)
 
 Scheduler:
-  scheduler_type:          none | noam | warmup_exp_decay | step_exp | cosine
+  scheduler_type:          none | noam | warmup_exp_decay | step_exp | cosine | trapezoidal
   warmup_steps:            [500, 1000, 2000, 4000]
+  flat_steps:              [1000, 5000, 10000, 20000]   (trapezoidal only)
   decay_steps:             [10000, 50000, 100000]
-  min_lr_ratio:            [0.01, 0.05, 0.1]   ← floor as fraction of initial lr (warmup_exp_decay/step_exp/cosine only)
+  min_lr_ratio:            [0.01, 0.05, 0.1]   ← floor as fraction of initial lr
 
 Training:
   batch_size:              [16, 32, 64, 128]
@@ -151,12 +196,16 @@ class ConfigSerializer:
             "transformer_layer": config.transformer_layer.name,
             "positional_embedding": config.positional_embedding.name,
             "normalization_layer": config.normalization_layer.name,
+            "attention_type": config.attention_type.name,
+            "qk_norm": config.qk_norm,
         }
 
     @staticmethod
     def training_options_to_dict(opts: TrainingOptions) -> dict:
         opt = opts.optimizer
         opt_type = type(opt).__name__.lower().replace("config", "")
+        if opt_type == "muon" and getattr(opt, "hybrid", False):
+            opt_type = "muon_hybrid"
         d = {
             "optimizer_type": opt_type,
             "lr": getattr(opt, "lr", 3e-4),
@@ -187,8 +236,15 @@ class ConfigSerializer:
         elif isinstance(sched, NoamScheduler):
             d["scheduler_type"] = "noam"
             d["warmup_steps"] = sched.warmup_steps
+            d["d_model"] = sched.d_model
         elif isinstance(sched, StepExponentialLR):
             d["scheduler_type"] = "step_exp"
+            d["decay_steps"] = sched.decay_steps
+            d["min_lr_ratio"] = sched.min_lr_ratio
+        elif isinstance(sched, TrapezoidalLR):
+            d["scheduler_type"] = "trapezoidal"
+            d["warmup_steps"] = sched.warmup_steps
+            d["flat_steps"] = sched.flat_steps
             d["decay_steps"] = sched.decay_steps
             d["min_lr_ratio"] = sched.min_lr_ratio
         else:
@@ -208,6 +264,8 @@ class ConfigSerializer:
         config.transformer_layer = TransformerLayerType[d["transformer_layer"]]
         config.positional_embedding = PositionalEmbeddingType[d["positional_embedding"]]
         config.normalization_layer = NormalizationLayerType[d["normalization_layer"]]
+        config.attention_type = AttentionType[d.get("attention_type", "DEFAULT")]
+        config.qk_norm = bool(d.get("qk_norm", False))
         return cls._validate_and_repair(config)
 
     @classmethod
@@ -232,6 +290,8 @@ class ConfigSerializer:
                 weight_decay=wd,
                 momentum=float(d.get("momentum", 0)),
             )
+        elif opt_type == "muon_hybrid":
+            optimizer = MuonConfig(lr=lr, hybrid=True)
         else:
             optimizer = MuonConfig(lr=lr)
 
@@ -246,7 +306,7 @@ class ConfigSerializer:
             )
         elif sched_type == "noam":
             scheduler = NoamScheduler(
-                d_model=int(d.get("dim_embeddings", 256)),
+                d_model=int(d.get("d_model", d.get("dim_embeddings", 256))),
                 warmup_steps=int(d.get("warmup_steps", 1000)),
             )
         elif sched_type == "step_exp":
@@ -258,6 +318,13 @@ class ConfigSerializer:
             scheduler = CosineWithWarmup(
                 warmup_steps=int(d.get("warmup_steps", 1000)),
                 decay_steps=int(d.get("decay_steps", 50000)),
+                min_lr_ratio=min_lr_ratio,
+            )
+        elif sched_type == "trapezoidal":
+            scheduler = TrapezoidalLR(
+                warmup_steps=int(d.get("warmup_steps", 500)),
+                flat_steps=int(d.get("flat_steps", 5000)),
+                decay_steps=int(d.get("decay_steps", 2000)),
                 min_lr_ratio=min_lr_ratio,
             )
 
@@ -284,6 +351,22 @@ class ConfigSerializer:
         config.dropout = max(0.0, min(float(config.dropout), 0.5))
         config.num_transformer_layers = max(1, min(config.num_transformer_layers, 24))
         config.dim_embeddings = max(64, config.dim_embeddings)
+
+        available_gb = _total_gpu_memory_gb()
+        num_gpus = max(1, torch.cuda.device_count())
+        while _estimate_model_gb(config, num_gpus) > available_gb and config.num_transformer_layers > 2:
+            config.num_transformer_layers -= 1
+
+        rope_layers = {
+            TransformerLayerType.LLAMA2, TransformerLayerType.LLAMA3,
+            TransformerLayerType.DEEPSEEK, TransformerLayerType.OLMO,
+            TransformerLayerType.OLMO_HYPER_CONNECTIONS,
+            TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
+            TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS,
+        }
+        if config.transformer_layer in rope_layers:
+            if config.normalization_layer == NormalizationLayerType.LAYER_NORM:
+                config.normalization_layer = NormalizationLayerType.RMS_NORM
         return config
 
 
@@ -423,7 +506,9 @@ class AutoparamState:
     def add_experiment(self, record: ExperimentRecord):
         self.experiments.append(record)
         if record.status == "success":
-            score = record.score.get("final_accuracy", -1.0)
+            acc = record.score.get("final_accuracy", -1.0)
+            slope = record.score.get("accuracy_slope", 0.0)
+            score = acc + 0.5 * max(0.0, slope * 500)
             if score > self.best_score:
                 self.best_score = score
                 self.best_experiment_id = record.experiment_id
@@ -484,8 +569,10 @@ def random_config_dict() -> dict:
                 "NONE",
             ]
         ),
-        "normalization_layer": random.choice(["LAYER_NORM", "DyT"]),
-        "optimizer_type": random.choice(["adam", "adamw", "rmsprop"]),
+        "normalization_layer": random.choice(["LAYER_NORM", "DyT", "RMS_NORM"]),
+        "attention_type": random.choice(["DEFAULT", "MHA", "GQA", "MLA"]),
+        "qk_norm": random.choice([True, False]),
+        "optimizer_type": random.choice(["adam", "adamw", "rmsprop", "muon", "muon_hybrid"]),
         "lr": random.choice([0.0001, 0.0003, 0.001, 0.002]),
         "beta1": random.choice([0.85, 0.9, 0.95]),
         "beta2": random.choice([0.9, 0.95, 0.999]),
@@ -494,14 +581,35 @@ def random_config_dict() -> dict:
         "alpha": random.choice([0.9, 0.95, 0.99]),
         "momentum": random.choice([0, 0.1, 0.9]),
         "scheduler_type": random.choice(
-            ["none", "noam", "warmup_exp_decay", "step_exp", "cosine"]
+            ["none", "noam", "warmup_exp_decay", "step_exp", "cosine", "trapezoidal"]
         ),
         "warmup_steps": random.choice([500, 1000, 2000, 4000]),
+        "flat_steps": random.choice([1000, 5000, 10000, 20000]),
         "decay_steps": random.choice([10000, 50000, 100000]),
         "min_lr_ratio": random.choice([0.01, 0.05, 0.1]),
         "batch_size": random.choice([16, 32, 64, 128]),
         "accumulation_steps": random.choice([1, 2, 4, 8]),
     }
+
+
+def _gpus_are_stuck() -> bool:
+    try:
+        pynvml.nvmlInit()
+        count = pynvml.nvmlDeviceGetCount()
+        stuck = False
+        for i in range(count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
+            if util.gpu < 50:
+                continue
+            procs = pynvml.nvmlDeviceGetComputeRunningProcesses(handle)
+            if not procs:
+                stuck = True
+                break
+        pynvml.nvmlShutdown()
+        return stuck
+    except Exception:
+        return False
 
 
 def fetch_openrouter_daily_usage() -> float:
@@ -593,18 +701,22 @@ class LLMProposer:
 {best_section}
 
 ## Task
-Propose the next experiment. Use the history to guide exploration — try promising \
-directions, avoid repeating failures, and reason about what has worked so far.
+Accuracy is currently plateaued near 30%. The goal is to break past this ceiling. \
+Prioritize configurations likely to exceed 30%: larger models (dim>=512, layers>=8), \
+muon_hybrid optimizer (Muon for hidden layers + AdamW for embeddings — strongest option), \
+LLAMA3/DEEPSEEK architectures with ROTARY_POSITION_ENCODING, and \
+trapezoidal scheduler (warmup→flat→decay). Avoid incremental tweaks to configs \
+already stuck at 30%. Reason about what fundamentally changes the learning dynamics.
 
 Respond with JSON matching this schema exactly:
 {{
   "reasoning": "<your explanation>",
   "dim_embeddings": <int>, "num_attention_heads": <int>, "num_transformer_layers": <int>,
   "dropout": <float>, "feed_forward_layer": <int>, "bias": <bool>, "hc_n": <int>,
-  "transformer_layer": "<string>", "positional_embedding": "<string>", "normalization_layer": "<string>",
+  "transformer_layer": "<string>", "positional_embedding": "<string>", "normalization_layer": "<string>", "attention_type": "<string>", "qk_norm": <bool>,
   "optimizer_type": "<string>", "lr": <float>, "beta1": <float>, "beta2": <float>,
   "weight_decay": <float>, "max_grad_norm": <float>, "alpha": <float>, "momentum": <float>,
-  "scheduler_type": "<string>", "warmup_steps": <int>, "decay_steps": <int>, "min_lr_ratio": <float>,
+  "scheduler_type": "<string>", "warmup_steps": <int>, "flat_steps": <int>, "decay_steps": <int>, "min_lr_ratio": <float>,
   "batch_size": <int>, "accumulation_steps": <int>
 }}"""
 
@@ -691,6 +803,7 @@ class AutoparamLoop:
         budget_usd: Optional[float] = None,
         distributed_strategy: DistributedStrategy = DistributedStrategy.FSDP,
         nproc_per_node: int = 1,
+        max_consecutive_failures: int = 5,
     ):
         if state_path is None:
             state_path = f"autoparam_state_{dataset_name}.json"
@@ -698,6 +811,7 @@ class AutoparamLoop:
         self.budget_usd = budget_usd
         self.distributed_strategy = distributed_strategy
         self.nproc_per_node = nproc_per_node
+        self.max_consecutive_failures = max_consecutive_failures
         self.log_path = state_path.replace(".json", ".log")
         self.timeout = experiment_timeout_minutes
         self.state = AutoparamState(state_path)
@@ -705,6 +819,11 @@ class AutoparamLoop:
         self.dataset = NAMED_DATASETS[dataset_name]
         self.plot_path = os.path.join("plots", dataset_name, "autoparam_progress.png")
         os.makedirs(os.path.dirname(self.plot_path), exist_ok=True)
+        self._active_proc = None
+        self._active_pgid = None
+        import atexit
+        atexit.register(self._kill_active_proc)
+        signal.signal(signal.SIGTERM, self._signal_handler)
 
         baseline_config = create_default_config(self.dataset)
         baseline_opts = TrainingOptions(
@@ -715,6 +834,19 @@ class AutoparamLoop:
             **ConfigSerializer.config_to_dict(baseline_config),
             **ConfigSerializer.training_options_to_dict(baseline_opts),
         }
+
+    def _kill_active_proc(self):
+        pgid = self._active_pgid
+        if pgid is None:
+            return
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except OSError:
+            pass
+
+    def _signal_handler(self, signum, frame):
+        self._kill_active_proc()
+        sys.exit(1)
 
     @staticmethod
     def _config_hash(model_dict: dict, training_dict: dict) -> str:
@@ -742,9 +874,11 @@ class AutoparamLoop:
                     f"OpenRouter daily spend at start: ${self._daily_spend_at_start:.4f}"
                 )
         consecutive_failures = 0
-        MAX_CONSECUTIVE_FAILURES = 5
 
         for exp_id in range(start_id, self.max_experiments):
+            if _gpus_are_stuck():
+                self._log("ERROR: GPUs show high utilization but no running processes — likely a zombie GPU context. Reboot required. Aborting.")
+                break
             self._log(f"=== Experiment {exp_id + 1}/{self.max_experiments} ===")
 
             if self.budget_usd:
@@ -797,6 +931,9 @@ class AutoparamLoop:
                     f"Config error: {e}",
                 )
                 consecutive_failures += 1
+                if consecutive_failures >= self.max_consecutive_failures:
+                    self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
+                    return
                 continue
 
             if self._already_run(model_dict, training_dict):
@@ -810,6 +947,9 @@ class AutoparamLoop:
                     "Duplicate config",
                 )
                 consecutive_failures += 1
+                if consecutive_failures >= self.max_consecutive_failures:
+                    self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
+                    return
                 continue
 
             self._log(
@@ -847,20 +987,29 @@ class AutoparamLoop:
                     "--config", config_path,
                     "--result", result_path,
                 ]
-                proc = subprocess.Popen(cmd, stdout=sys.stdout, stderr=sys.stderr, start_new_session=True)
+                log_path = result_path.replace("_result.json", "_run.log")
+                log_file = open(log_path, "w")
+                print(f"[autoparam] subprocess log: {log_path}", flush=True)
+                proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True)
+                log_file.close()
+                self._active_proc = proc
+                pgid = os.getpgid(proc.pid)
+                self._active_pgid = pgid
                 try:
                     proc.wait(timeout=(self.timeout + 5) * 60)
                 except subprocess.TimeoutExpired:
                     print(f"Experiment subprocess timed out after {self.timeout + 5} minutes, killing")
                 except KeyboardInterrupt:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    os.killpg(pgid, signal.SIGKILL)
                     proc.wait()
                     raise
                 finally:
                     try:
-                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                    except ProcessLookupError:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except OSError:
                         pass
+                    self._active_proc = None
+                    self._active_pgid = None
                     time.sleep(3)
 
                 if os.path.exists(result_path):
@@ -901,7 +1050,7 @@ class AutoparamLoop:
             if status == "success":
                 consecutive_failures = 0
 
-            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+            if consecutive_failures >= self.max_consecutive_failures:
                 self._log(
                     f"Stopping early: {consecutive_failures} consecutive failures."
                 )
@@ -1016,6 +1165,7 @@ if __name__ == "__main__":
         default=max(1, torch.cuda.device_count()),
         help="Number of GPUs per node for the executor (default: all available GPUs)",
     )
+    parser.add_argument("--max-consecutive-failures", type=int, default=5)
     parser.add_argument("--llm-model", default=LLM_MODEL)
     parser.add_argument(
         "--budget",
@@ -1045,4 +1195,5 @@ if __name__ == "__main__":
         budget_usd=args.budget,
         distributed_strategy=strategy,
         nproc_per_node=args.nproc_per_node,
+        max_consecutive_failures=args.max_consecutive_failures,
     ).run()

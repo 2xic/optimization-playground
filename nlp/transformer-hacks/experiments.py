@@ -222,8 +222,11 @@ def create_next_token_prediction_objective(
         if model.config.sampling_method == SamplingMethod.TEMPERATURE
         else argmax_sampling
     )
-    trainer_class = GradScalerTrainer if USE_GRAD_SCALER else Trainer
-    optimizer = optimizer_config.create_optimizer(model.parameters())
+    trainer_class = GradScalerTrainer if (USE_GRAD_SCALER and not isinstance(optimizer_config, MuonConfig)) else Trainer
+    if isinstance(optimizer_config, MuonConfig):
+        optimizer = optimizer_config.create_optimizer_named(model.named_parameters())
+    else:
+        optimizer = optimizer_config.create_optimizer(model.parameters())
     if lr_scheduler is not None:
         lr_scheduler.create_scheduler(optimizer)
     trainer = trainer_class(
@@ -281,6 +284,7 @@ def execute(
         import traceback
         print(f"Experiment '{experiment_variant}' failed during training: {e}")
         traceback.print_exc()
+        raise
     finally:
         if trainer is not None:
             trainer.metrics_tracker.close()

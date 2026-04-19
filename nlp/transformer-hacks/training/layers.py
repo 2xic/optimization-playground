@@ -13,6 +13,7 @@ class SimpleMultiHeadAttention(nn.Module):
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj._is_residual_proj = True
 
     def forward(self, query, key, value, attn_mask=None):
         # eq: 1 https://arxiv.org/pdf/1706.03762
@@ -37,7 +38,7 @@ class SimpleMultiHeadAttention(nn.Module):
 # - https://pytorch.org/blog/flexattention/
 class MultiheadAttention(nn.Module):
     def __init__(
-        self, embed_dim, num_query_heads, num_groups=None, dropout_p=0.0, rope=None
+        self, embed_dim, num_query_heads, num_groups=None, dropout_p=0.0, rope=None, qk_norm=False
     ):
         super().__init__()
 
@@ -53,7 +54,13 @@ class MultiheadAttention(nn.Module):
         self.k_proj = nn.Linear(embed_dim, self.num_groups * self.head_dim)
         self.v_proj = nn.Linear(embed_dim, self.num_groups * self.head_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj._is_residual_proj = True
         self.enable_gqa = num_groups is not None
+        if qk_norm:
+            self.q_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
+            self.k_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
+        else:
+            self.q_norm = self.k_norm = None
 
     def forward(self, query, key, value, attn_mask=None, is_causal=False):
         batch_size, seq_len, _ = query.size()
@@ -77,6 +84,10 @@ class MultiheadAttention(nn.Module):
         if self.rope is not None:
             q = self.rope(q)
             k = self.rope(k)
+
+        if self.q_norm is not None:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
 
         out = F.scaled_dot_product_attention(
             q,
@@ -144,11 +155,12 @@ class SimpleGQA(MultiheadAttention):
 
 # QK- NORM https://magazine.sebastianraschka.com/i/168650848/qk-norm
 class SimpleGQKV(SimpleGQA):
-    def __init__(self, embed_dim, num_query_heads, num_groups):
+    def __init__(self, embed_dim, num_query_heads, num_groups, rope=None):
         super().__init__(
             embed_dim,
             num_query_heads,
             num_groups,
+            rope=rope,
         )
         self.q_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
         self.k_norm = nn.RMSNorm(self.head_dim, eps=1e-6)
@@ -203,6 +215,7 @@ class MultiHeadLatentAttention(nn.Module):
 
         # Output projection
         self.out_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj._is_residual_proj = True
         self.enable_gqa = num_groups is not None
 
     def forward(self, query, key, value, attn_mask=None, is_causal=False):

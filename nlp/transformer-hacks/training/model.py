@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 import torch.nn as nn
 import torch
 from optimization_playground_shared.nlp.PositionalEncoding import (
@@ -9,13 +10,14 @@ from enum import Enum
 import torch.nn.functional as F
 from .layers import (
     SimpleGQA,
+    SimpleGQKV,
     MultiheadAttention,
     DyT,
     MultiHeadLatentAttention,
     BidirectionalAttention,
     SimpleMultiHeadAttention,
 )
-from dataclasses import dataclass, asdict, fields
+from dataclasses import dataclass, asdict, fields, replace
 
 
 class PositionalEmbeddingType(Enum):
@@ -45,6 +47,19 @@ class TransformerLayerType(Enum):
 class NormalizationLayerType(Enum):
     LAYER_NORM = 0
     DyT = 1
+    RMS_NORM = 2
+
+
+class AttentionType(Enum):
+    DEFAULT = 0
+    MHA = 1
+    GQA = 2
+    MLA = 3
+
+
+class ReLUSquared(nn.Module):
+    def forward(self, x):
+        return F.relu(x).pow(2)
 
 
 class MaskOrder(Enum):
@@ -77,6 +92,8 @@ class Config:
     feed_forward_layer: int = 2048
     bias: bool = False
     hc_n: int = 4
+    attention_type: AttentionType = AttentionType.DEFAULT
+    qk_norm: bool = False
 
     def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
         self.positional_embedding = positional_embedding
@@ -118,6 +135,8 @@ class NormalizationLayer(nn.Module):
 
         if self.config.normalization_layer == NormalizationLayerType.DyT:
             self.norm = DyT(size)
+        elif self.config.normalization_layer == NormalizationLayerType.RMS_NORM:
+            self.norm = nn.RMSNorm(size)
         elif self.config.normalization_layer == NormalizationLayerType.LAYER_NORM:
             self.norm = nn.LayerNorm(size, bias=config.bias)
         else:
@@ -140,6 +159,7 @@ class LlamaFeedForward(nn.Module):
             config.dim_embeddings,
             bias=config.bias,
         )
+        self.l2._is_residual_proj = True
         self.gate = nn.Linear(
             config.dim_embeddings,
             config.feed_forward_layer,
@@ -152,19 +172,53 @@ class LlamaFeedForward(nn.Module):
 
 # https://github.com/meta-llama/llama/blob/v2/llama/model.py#L132-L304
 class RoPEMultiheadAttention(nn.Module):
-    def __init__(self, embed_dim, num_heads, max_len, gqa):
+    def __init__(self, embed_dim, num_heads, max_len, gqa, qk_norm=False):
         super().__init__()
         head_dim = embed_dim // num_heads
         rope = RotaryPositionalEncoding(d_model=head_dim, max_len=max_len)
 
         if gqa:
-            self.mha = SimpleGQA(
+            cls = SimpleGQKV if qk_norm else SimpleGQA
+            self.mha = cls(
                 embed_dim=embed_dim, num_query_heads=num_heads, num_groups=1, rope=rope
             )
         else:
             self.mha = MultiheadAttention(
-                embed_dim=embed_dim, num_query_heads=num_heads, rope=rope
+                embed_dim=embed_dim, num_query_heads=num_heads, rope=rope, qk_norm=qk_norm
             )
+
+    def forward(self, x, mask):
+        attn_output, _ = self.mha(x, x, x, attn_mask=mask)
+        return attn_output
+
+
+def _build_attention(config: "Config", gqa: bool = False):
+    resolved = config.attention_type if config.attention_type != AttentionType.DEFAULT else (AttentionType.GQA if gqa else AttentionType.MHA)
+    if resolved == AttentionType.MLA:
+        return _PlainAttentionWrapper(
+            MultiHeadLatentAttention(config.dim_embeddings, config.num_attention_heads, config.dim_embeddings // 4)
+        )
+    use_rope = config.positional_embedding == PositionalEmbeddingType.ROTARY_POSITION_ENCODING
+    effective_gqa = resolved == AttentionType.GQA
+    qk_norm = config.qk_norm
+    if use_rope:
+        return RoPEMultiheadAttention(
+            config.dim_embeddings, config.num_attention_heads, config.sequence_length, gqa=effective_gqa, qk_norm=qk_norm
+        )
+    if effective_gqa:
+        cls = SimpleGQKV if qk_norm else SimpleGQA
+        return _PlainAttentionWrapper(
+            cls(embed_dim=config.dim_embeddings, num_query_heads=config.num_attention_heads, num_groups=1)
+        )
+    return _PlainAttentionWrapper(
+        MultiheadAttention(embed_dim=config.dim_embeddings, num_query_heads=config.num_attention_heads, qk_norm=qk_norm)
+    )
+
+
+class _PlainAttentionWrapper(nn.Module):
+    def __init__(self, mha):
+        super().__init__()
+        self.mha = mha
 
     def forward(self, x, mask):
         attn_output, _ = self.mha(x, x, x, attn_mask=mask)
@@ -175,14 +229,9 @@ class RoPEMultiheadAttention(nn.Module):
 class Llama2TransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
-        self.rope_attention = RoPEMultiheadAttention(
-            config.dim_embeddings,
-            config.num_attention_heads,
-            config.sequence_length,
-            gqa=False,
-        )
-        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.rope_attention = _build_attention(config, gqa=False)
+        self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
@@ -196,14 +245,9 @@ class Llama2TransformerLayer(nn.Module):
 class Llama3TransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
-        self.rope_attention = RoPEMultiheadAttention(
-            config.dim_embeddings,
-            config.num_attention_heads,
-            config.sequence_length,
-            gqa=True,
-        )
-        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.rope_attention = _build_attention(config, gqa=True)
+        self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
@@ -217,19 +261,15 @@ class Llama3TransformerLayer(nn.Module):
 class DeepSeekLikeTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
-        self.attention = MultiHeadLatentAttention(
-            config.dim_embeddings,
-            config.num_attention_heads,
-            config.dim_embeddings // 4,
-            num_groups=None,
-        )
-        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        effective_attention = AttentionType.MLA if config.attention_type == AttentionType.DEFAULT else config.attention_type
+        self.attention = _build_attention(replace(config, attention_type=effective_attention), gqa=False)
+        self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
         X_norm = self.norm_1(X)
-        first_half, _ = self.attention(X_norm, X_norm, X_norm, mask)
+        first_half = self.attention(X_norm, mask)
         first_half += X
         second_half = self.linear(self.norm_2(first_half))
         second_half += first_half
@@ -239,12 +279,12 @@ class DeepSeekLikeTransformerLayer(nn.Module):
 class BertLikeTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
         self.attention = BidirectionalAttention(
             config.dim_embeddings,
             config.num_attention_heads,
         )
-        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
@@ -267,9 +307,10 @@ class GptTransformerLayer(nn.Module):
         self.dropout = nn.Dropout(p=self.configs.dropout)
         self.linear = nn.Sequential(
             nn.Linear(self.configs.dim_embeddings, self.configs.feed_forward_layer),
-            nn.GELU(),
+            ReLUSquared(),
             nn.Linear(self.configs.feed_forward_layer, self.configs.dim_embeddings),
         )
+        self.linear[2]._is_residual_proj = True
         self.layer_norm_in = NormalizationLayer(config, config.dim_embeddings)
         self.layer_norm_out = NormalizationLayer(config, config.dim_embeddings)
 
@@ -463,6 +504,7 @@ class OlmoFeedForward(nn.Module):
             config.dim_embeddings,
             bias=False,
         )
+        self.l2._is_residual_proj = True
         self.gate = nn.Linear(
             config.dim_embeddings,
             config.feed_forward_layer,
@@ -476,14 +518,9 @@ class OlmoFeedForward(nn.Module):
 class OlmoTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
-        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
-        self.rope_attention = RoPEMultiheadAttention(
-            config.dim_embeddings,
-            config.num_attention_heads,
-            config.sequence_length,
-            gqa=False,
-        )
-        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.rope_attention = _build_attention(config, gqa=False)
+        self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
         self.linear = OlmoFeedForward(config)
 
     def forward(self, X, mask):
@@ -503,14 +540,9 @@ class OlmoTransformerLayerHyperConnectivity(nn.Module):
         use_identity=False,
     ):
         super().__init__()
-        self.norm_1 = nn.RMSNorm(config.dim_embeddings)
-        self.rope_attention = RoPEMultiheadAttention(
-            config.dim_embeddings,
-            config.num_attention_heads,
-            config.sequence_length,
-            gqa=False,
-        )
-        self.norm_2 = nn.RMSNorm(config.dim_embeddings)
+        self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.rope_attention = _build_attention(config, gqa=False)
+        self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
         self.linear = OlmoFeedForward(config)
 
         if use_identity:
@@ -648,8 +680,9 @@ class Model(nn.Module):
             2. Transformer layer
             3. Dense layer
         """
+        padded_vocab = math.ceil(self.config.vocab_size / 128) * 128
         self.embeddings = nn.Embedding(
-            self.config.vocab_size,
+            padded_vocab,
             self.config.dim_embeddings,
             padding_idx=config.padding_index,
         )
@@ -668,7 +701,7 @@ class Model(nn.Module):
         self.layer_norm = NormalizationLayer(config, self.config.dim_embeddings)
         self.output_layer = nn.Linear(
             self.config.dim_embeddings,
-            self.config.vocab_size,
+            padded_vocab,
             bias=False,
         )
 
@@ -703,7 +736,10 @@ class Model(nn.Module):
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if getattr(module, '_is_residual_proj', False):
+                torch.nn.init.zeros_(module.weight)
+            else:
+                torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
