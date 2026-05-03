@@ -71,6 +71,9 @@ class Results:
     step_accuracy: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
     step_loss: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
     epoch_at_step: List[int] = field(default_factory=list)
+    step_val_accuracy: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
+    step_val_loss: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
+    val_at_step: List[int] = field(default_factory=list)
 
     @property
     def has_step_data(self):

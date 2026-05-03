@@ -25,18 +25,20 @@ class NextTokenPrediction(BaseObjective):
         padding_index: int,
         vocab_size: int,
         sampler: Optional[Callable[[torch.Tensor], torch.Tensor]],
+        label_smoothing: float = 0.0,
     ):
         super().__init__()
         self.padding_index = padding_index
         self.vocab_size = vocab_size
         self.sampler = sampler
+        self.label_smoothing = label_smoothing
 
     def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         flat_pred = y_predicted.view(-1, y_predicted.shape[-1])[..., :self.vocab_size]
         flat_y = y.view(-1)
         chunk_size = 2048
         if flat_pred.shape[0] <= chunk_size:
-            return torch.nn.functional.cross_entropy(flat_pred.float(), flat_y, ignore_index=self.padding_index)
+            return torch.nn.functional.cross_entropy(flat_pred.float(), flat_y, ignore_index=self.padding_index, label_smoothing=self.label_smoothing)
         total_loss = y_predicted.new_zeros((), dtype=torch.float32)
         total_valid = 0
         for i in range(0, flat_pred.shape[0], chunk_size):
@@ -45,7 +47,7 @@ class NextTokenPrediction(BaseObjective):
             valid = int((chunk_y != self.padding_index).sum())
             if valid > 0:
                 total_loss = total_loss + torch.nn.functional.cross_entropy(
-                    chunk_pred, chunk_y, ignore_index=self.padding_index, reduction='sum'
+                    chunk_pred, chunk_y, ignore_index=self.padding_index, reduction='sum', label_smoothing=self.label_smoothing
                 )
                 total_valid += valid
         return total_loss / max(1, total_valid)

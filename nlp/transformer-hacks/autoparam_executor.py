@@ -43,7 +43,7 @@ def main():
 
     rank = int(os.environ.get("RANK", "0"))
     try:
-        dist.init_process_group("nccl", timeout=timedelta(seconds=1800))
+        dist.init_process_group("nccl", timeout=timedelta(seconds=120))
         rank = dist.get_rank()
         torch.cuda.set_device(rank)
     except Exception as e:
@@ -73,8 +73,42 @@ def main():
 
     score, status, error_message = {}, "failed", None
     try:
-        _, results = execute(dataset, exp_name, Model(config), training_options)
+        model = Model(config)
+        params_count = sum(p.numel() for p in model.parameters())
+        torch.cuda.reset_peak_memory_stats()
+        _, results = execute(dataset, exp_name, model, training_options)
         score = StabilityMetric.compute(results)
+        score["params_count"] = params_count
+        try:
+            score["peak_memory_gb"] = torch.cuda.max_memory_allocated() / 1e9
+        except Exception:
+            pass
+        try:
+            steps_run = len(results.step_loss.min_max_avg) or len(results.loss.min_max_avg)
+            score["steps_run"] = steps_run
+            seq_len = getattr(config, "sequence_length", 0) or getattr(config, "context_length", 0) or 0
+            bs = getattr(training_options, "batch_size", 0) or 0
+            accum = getattr(training_options, "accumulation_steps", 1) or 1
+            world = int(os.environ.get("WORLD_SIZE", "1"))
+            score["tokens_seen"] = int(steps_run * bs * accum * seq_len * world)
+        except Exception:
+            pass
+        try:
+            val_losses = [c.mean for c in results.step_val_loss.min_max_avg]
+            val_accs = [c.mean for c in results.step_val_accuracy.min_max_avg]
+            if val_losses:
+                score["val_loss"] = float(val_losses[-1])
+            if val_accs:
+                score["val_accuracy"] = float(val_accs[-1])
+                score["overfit_gap"] = float(score.get("final_accuracy", 0.0) - val_accs[-1])
+        except Exception:
+            pass
+        score["knobs"] = {
+            "model_config": model_dict,
+            "training_config": training_dict,
+            "distributed_strategy": cfg.get("distributed_strategy", "FSDP"),
+            "world_size": int(os.environ.get("WORLD_SIZE", "1")),
+        }
         no_data = (
             len(results.accuracy.min_max_avg) == 0
             and len(results.step_accuracy.min_max_avg) == 0
@@ -93,15 +127,27 @@ def main():
     finally:
         _dist_log(f"finally block entered | status={status} | error={error_message}")
         if dist.is_initialized():
-            _dist_log("calling dist.barrier()")
-            try:
-                dist.barrier()
-                _dist_log("dist.barrier() succeeded")
-            except Exception as barrier_exc:
-                _dist_log(f"dist.barrier() FAILED: {barrier_exc}")
+            if error_message is None:
+                _dist_log("calling dist.barrier()")
+                try:
+                    dist.barrier()
+                    _dist_log("dist.barrier() succeeded")
+                except Exception as barrier_exc:
+                    _dist_log(f"dist.barrier() FAILED: {barrier_exc}")
+            torch.cuda.empty_cache()
             _dist_log("calling dist.destroy_process_group()")
-            dist.destroy_process_group()
-            _dist_log("dist.destroy_process_group() returned")
+            try:
+                dist.destroy_process_group()
+                _dist_log("dist.destroy_process_group() returned")
+            except Exception as destroy_exc:
+                _dist_log(f"dist.destroy_process_group() FAILED: {destroy_exc}")
+        if error_message is not None:
+            if rank == 0:
+                with open(args.result, "w") as f:
+                    json.dump(
+                        {"score": score, "status": status, "error_message": error_message}, f
+                    )
+            os._exit(1)
     if rank == 0:
         with open(args.result, "w") as f:
             json.dump(

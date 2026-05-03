@@ -94,6 +94,9 @@ class Config:
     hc_n: int = 4
     attention_type: AttentionType = AttentionType.DEFAULT
     qk_norm: bool = False
+    label_smoothing: float = 0.0
+    tie_embeddings: bool = True
+    init_std: float = 0.02
 
     def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
         self.positional_embedding = positional_embedding
@@ -710,7 +713,8 @@ class Model(nn.Module):
         # Weight Tying
         # https://paperswithcode.com/method/weight-tying
         # Found using minigpt
-        self.embeddings.weight = self.output_layer.weight
+        if self.config.tie_embeddings:
+            self.embeddings.weight = self.output_layer.weight
 
         # Attention mask
         if self.config.masked_order == MaskOrder.TRIU:
@@ -735,15 +739,16 @@ class Model(nn.Module):
             self.register_buffer("mask", None, persistent=False)
 
     def _init_weights(self, module):
+        std = self.config.init_std
         if isinstance(module, nn.Linear):
             if getattr(module, '_is_residual_proj', False):
                 torch.nn.init.zeros_(module.weight)
             else:
-                torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+                torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
 
     def forward(self, x: torch.Tensor):
         assert len(x.shape) == 2, f"X = {x.shape}"

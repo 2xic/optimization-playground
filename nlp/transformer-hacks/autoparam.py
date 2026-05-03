@@ -52,6 +52,7 @@ from training.model import (
     PositionalEmbeddingType,
     NormalizationLayerType,
     AttentionType,
+    Model,
 )
 from training.trainer import TrainingOptions, DistributedStrategy
 from training.optimizer import (
@@ -72,7 +73,7 @@ STABILITY_TAIL_FRACTION = 0.25
 STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
 
 
-_GPU_MEMORY_HEADROOM = 0.75
+_GPU_MEMORY_HEADROOM = 0.6
 
 
 def _total_gpu_memory_gb() -> float:
@@ -106,6 +107,34 @@ def _estimate_model_gb(config, num_gpus: int = 1) -> float:
     activation_gb = max_batch * seq_len * config.dim_embeddings * config.num_transformer_layers * 4 * 4 / (1024 ** 3)
     return param_gb + activation_gb
 
+
+def _estimate_footprint_gb_meta(config, batch_size: int, num_gpus: int = 1) -> tuple[float, int]:
+    """Build Model on meta device, count params, return (estimated_gb, num_params)."""
+    with torch.device("meta"):
+        model = Model(config)
+    num_params = sum(p.numel() for p in model.parameters())
+    seq_len = getattr(config, "sequence_length", 256) or getattr(config, "context_length", 256) or 256
+    D = config.dim_embeddings
+    L = config.num_transformer_layers
+    H = config.num_attention_heads
+    F = config.feed_forward_layer
+    B = batch_size
+    S = seq_len
+    GB = 1024 ** 3
+
+    param_gb = num_params * 4 / GB / max(1, num_gpus)
+    optimizer_gb = 2 * num_params * 4 / GB / max(1, num_gpus)
+    grad_gb = num_params * 4 / GB / max(1, num_gpus)
+
+    bytes_per_act = 4
+    attn_scores = B * H * S * S * bytes_per_act
+    attn_qkv = 4 * B * S * D * bytes_per_act
+    ffn_hidden = 3 * B * S * F * bytes_per_act
+    residual = 4 * B * S * D * bytes_per_act
+    per_layer = attn_scores + attn_qkv + ffn_hidden + residual
+    activation_gb = (L * per_layer + 2 * B * S * config.vocab_size * bytes_per_act) / GB
+    return param_gb + optimizer_gb + grad_gb + activation_gb, num_params
+
 LLM_MODEL = "anthropic/claude-opus-4-5"
 LLM_MAX_TOKENS = 1024
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -116,7 +145,7 @@ Searchable hyperparameter space (use ONLY the values listed):
 
 Model config:
   dim_embeddings:          [128, 256, 384, 512, 768, 1024]
-  num_attention_heads:     [4, 8, 12, 16, 32]   ← dim_embeddings MUST be divisible by this
+  num_attention_heads:     [4, 6, 8, 12, 16, 24, 32]   ← dim_embeddings MUST be divisible by this
   num_transformer_layers:  [2, 4, 6, 8, 12, 16, 24]
   dropout:                 [0.0, 0.05, 0.1, 0.2]
   feed_forward_layer:      [512, 1024, 2048, 4096, 8192]
@@ -134,29 +163,36 @@ Architecture (exact enum names):
   attention_type:          DEFAULT | MHA | GQA | MLA
                            (DEFAULT = architecture's native attention: DEEPSEEK→MLA, LLAMA3→GQA, others→MHA)
   qk_norm:                 [true, false]   ← apply RMSNorm to Q and K after projection (improves stability)
+  label_smoothing:         [0.0, 0.05, 0.1]   ← cross-entropy label smoothing
+  tie_embeddings:          [true, false]   ← share input embedding ↔ lm_head weights
+  init_std:                [0.006, 0.01, 0.02, 0.04]   ← std of normal init for linears/embeddings
+  ffn_ratio:               [2.0, 2.67, 4.0, 8.0]   ← optional alias: feed_forward_layer = round(dim_embeddings * ffn_ratio); set EITHER ffn_ratio OR feed_forward_layer
+  head_dim:                [32, 64, 128]   ← optional alias: num_attention_heads = dim_embeddings // head_dim; set EITHER head_dim OR num_attention_heads
 
 Optimizer:
   optimizer_type:          adam | adamw | rmsprop | muon | muon_hybrid
-  lr:                      float in [0.0001, 0.002]
-  weight_decay:            [0, 0.01, 0.1]
+  lr:                      float in [0.0001, 0.01]
+  weight_decay:            [0, 0.01, 0.05, 0.1, 0.2]
+  eps:                     [1e-8, 1e-10, 1e-12]   (adam/adamw only)
   max_grad_norm:           [0, 0.5, 1.0, 5.0]   ← 0 = disabled; controls gradient clipping
   beta1:                   float in [0.85, 0.95]   (adam/adamw only)
   beta2:                   float in [0.90, 0.999]  (adam/adamw only)
   alpha:                   [0.9, 0.95, 0.99]       (rmsprop only)
   momentum:                [0, 0.1, 0.9]           (rmsprop only)
-  Note: muon/muon_hybrid ignore beta1/beta2/alpha/momentum — only lr/weight_decay apply
+  Note: muon/muon_hybrid ignore beta1/beta2/alpha/momentum/eps — only lr/weight_decay apply
   Note: muon_hybrid uses Muon for hidden Linear weights, AdamW for embeddings/lm_head (best of both)
 
 Scheduler:
   scheduler_type:          none | noam | warmup_exp_decay | step_exp | cosine | trapezoidal
-  warmup_steps:            [500, 1000, 2000, 4000]
+  warmup_steps:            [100, 250, 500, 1000, 2000, 4000]
   flat_steps:              [1000, 5000, 10000, 20000]   (trapezoidal only)
-  decay_steps:             [10000, 50000, 100000]
+  decay_steps:             [10000, 50000, 100000, 200000]
   min_lr_ratio:            [0.01, 0.05, 0.1]   ← floor as fraction of initial lr
 
 Training:
   batch_size:              [16, 32, 64, 128]
-  accumulation_steps:      [1, 2, 4, 8]
+  accumulation_steps:      [1, 2, 4, 8, 16]
+  training_minutes:        [5, 15, 30, 60, 120, 360]   ← wall-clock budget per experiment; capped by --timeout-minutes
 """
 
 _SYSTEM_PROMPT = f"""You are an expert ML researcher running autonomous hyperparameter optimization \
@@ -169,7 +205,7 @@ Your goal: find configurations that maximize accuracy AND training stability.
 Hard constraints:
 - dim_embeddings MUST be divisible by num_attention_heads
 - All enum values must match exactly (case-sensitive)
-- lr must be between 0.0001 and 0.002
+- lr must be between 0.0001 and 0.01
 - Do not repeat a configuration nearly identical to one that already failed
 
 Exploration strategy:
@@ -198,6 +234,9 @@ class ConfigSerializer:
             "normalization_layer": config.normalization_layer.name,
             "attention_type": config.attention_type.name,
             "qk_norm": config.qk_norm,
+            "label_smoothing": config.label_smoothing,
+            "tie_embeddings": config.tie_embeddings,
+            "init_std": config.init_std,
         }
 
     @staticmethod
@@ -211,8 +250,10 @@ class ConfigSerializer:
             "lr": getattr(opt, "lr", 3e-4),
             "weight_decay": getattr(opt, "weight_decay", 0),
             "max_grad_norm": getattr(opt, "max_grad_norm", 0),
+            "eps": getattr(opt, "eps", 1e-8),
             "batch_size": opts.batch_size,
             "accumulation_steps": opts.accumulation_steps,
+            "training_minutes": opts.training_timeout_minutes,
         }
         if hasattr(opt, "betas"):
             d["beta1"] = opt.betas[0]
@@ -255,10 +296,16 @@ class ConfigSerializer:
     def dict_to_config(cls, d: dict, dataset):
         config = create_default_config(dataset)
         config.dim_embeddings = int(d["dim_embeddings"])
-        config.num_attention_heads = int(d["num_attention_heads"])
+        if "head_dim" in d and "num_attention_heads" not in d:
+            config.num_attention_heads = max(1, config.dim_embeddings // int(d["head_dim"]))
+        else:
+            config.num_attention_heads = int(d["num_attention_heads"])
         config.num_transformer_layers = int(d["num_transformer_layers"])
         config.dropout = float(d["dropout"])
-        config.feed_forward_layer = int(d["feed_forward_layer"])
+        if "ffn_ratio" in d and "feed_forward_layer" not in d:
+            config.feed_forward_layer = int(round(config.dim_embeddings * float(d["ffn_ratio"])))
+        else:
+            config.feed_forward_layer = int(d["feed_forward_layer"])
         config.bias = bool(d.get("bias", False))
         config.hc_n = int(d.get("hc_n", 4))
         config.transformer_layer = TransformerLayerType[d["transformer_layer"]]
@@ -266,6 +313,9 @@ class ConfigSerializer:
         config.normalization_layer = NormalizationLayerType[d["normalization_layer"]]
         config.attention_type = AttentionType[d.get("attention_type", "DEFAULT")]
         config.qk_norm = bool(d.get("qk_norm", False))
+        config.label_smoothing = float(d.get("label_smoothing", 0.0))
+        config.tie_embeddings = bool(d.get("tie_embeddings", True))
+        config.init_std = float(d.get("init_std", 0.02))
         return cls._validate_and_repair(config)
 
     @classmethod
@@ -275,6 +325,7 @@ class ConfigSerializer:
         wd = float(d.get("weight_decay", 0.01))
 
         max_grad_norm = float(d.get("max_grad_norm", 0))
+        eps = float(d.get("eps", 1e-8))
         if opt_type in ("adam", "adamw"):
             opt_cls = AdamConfig if opt_type == "adam" else AdamWConfig
             optimizer = opt_cls(
@@ -282,6 +333,7 @@ class ConfigSerializer:
                 betas=(float(d.get("beta1", 0.90)), float(d.get("beta2", 0.95))),
                 weight_decay=wd,
                 max_grad_norm=max_grad_norm,
+                eps=eps,
             )
         elif opt_type == "rmsprop":
             optimizer = RMSpropConfig(
@@ -289,11 +341,12 @@ class ConfigSerializer:
                 alpha=float(d.get("alpha", 0.99)),
                 weight_decay=wd,
                 momentum=float(d.get("momentum", 0)),
+                max_grad_norm=max_grad_norm,
             )
         elif opt_type == "muon_hybrid":
-            optimizer = MuonConfig(lr=lr, hybrid=True)
+            optimizer = MuonConfig(lr=lr, hybrid=True, weight_decay=wd, max_grad_norm=max_grad_norm)
         else:
-            optimizer = MuonConfig(lr=lr)
+            optimizer = MuonConfig(lr=lr, weight_decay=wd, max_grad_norm=max_grad_norm)
 
         sched_type = d.get("scheduler_type", "none")
         min_lr_ratio = float(d.get("min_lr_ratio", 0.1))
@@ -331,10 +384,12 @@ class ConfigSerializer:
         opts = TrainingOptions(
             batch_size=int(d.get("batch_size", 32)),
             accumulation_steps=int(d.get("accumulation_steps", 1)),
-            training_timeout_minutes=timeout_minutes,
+            training_timeout_minutes=min(int(d.get("training_minutes", timeout_minutes)), timeout_minutes),
             optimizer=optimizer,
             lr_scheduler=scheduler,
             record_interval_steps=50,
+            val_interval_steps=int(d.get("val_interval_steps", 250)),
+            val_max_batches=int(d.get("val_max_batches", 50)),
             distributed_strategy=distributed_strategy,
         )
         if device is not None:
@@ -531,6 +586,8 @@ class AutoparamState:
 
 
 RANDOM_EXPLORE_EVERY = 5  # force a random config every N experiments
+MUTATE_PROB = 0.5  # within non-LLM route, probability to mutate a top run vs. fresh random
+MUTATE_TOP_K = 5
 
 
 def random_config_dict() -> dict:
@@ -572,6 +629,9 @@ def random_config_dict() -> dict:
         "normalization_layer": random.choice(["LAYER_NORM", "DyT", "RMS_NORM"]),
         "attention_type": random.choice(["DEFAULT", "MHA", "GQA", "MLA"]),
         "qk_norm": random.choice([True, False]),
+        "label_smoothing": random.choice([0.0, 0.05, 0.1]),
+        "tie_embeddings": random.choice([True, False]),
+        "init_std": random.choice([0.006, 0.01, 0.02, 0.04]),
         "optimizer_type": random.choice(["adam", "adamw", "rmsprop", "muon", "muon_hybrid"]),
         "lr": random.choice([0.0001, 0.0003, 0.001, 0.002]),
         "beta1": random.choice([0.85, 0.9, 0.95]),
@@ -589,7 +649,129 @@ def random_config_dict() -> dict:
         "min_lr_ratio": random.choice([0.01, 0.05, 0.1]),
         "batch_size": random.choice([16, 32, 64, 128]),
         "accumulation_steps": random.choice([1, 2, 4, 8]),
+        "training_minutes": random.choice([5, 15, 30, 60, 120, 360]),
     }
+
+
+def mutate_config_dict(parent: dict) -> dict:
+    """Mutate a known-good config: tweak 1-3 knobs to nearby values."""
+    import random
+
+    cfg = dict(parent)
+    cfg.pop("reasoning", None)
+
+    nearby = {
+        "dim_embeddings": [128, 256, 384, 512, 768, 1024],
+        "num_attention_heads": [4, 6, 8, 12, 16, 24, 32],
+        "num_transformer_layers": [2, 4, 6, 8, 12, 16, 24],
+        "dropout": [0.0, 0.05, 0.1, 0.2],
+        "feed_forward_layer": [512, 1024, 2048, 4096, 8192],
+        "warmup_steps": [100, 250, 500, 1000, 2000, 4000],
+        "decay_steps": [10000, 50000, 100000, 200000],
+        "min_lr_ratio": [0.01, 0.05, 0.1],
+        "batch_size": [16, 32, 64, 128],
+        "accumulation_steps": [1, 2, 4, 8, 16],
+        "training_minutes": [5, 15, 30, 60, 120, 360],
+        "weight_decay": [0, 0.01, 0.05, 0.1, 0.2],
+        "max_grad_norm": [0, 0.5, 1.0, 5.0],
+        "label_smoothing": [0.0, 0.05, 0.1],
+        "init_std": [0.006, 0.01, 0.02, 0.04],
+    }
+
+    def step_along(key):
+        if key not in cfg or key not in nearby:
+            return
+        vals = nearby[key]
+        try:
+            i = vals.index(cfg[key])
+        except ValueError:
+            cfg[key] = random.choice(vals)
+            return
+        delta = random.choice([-1, 1])
+        cfg[key] = vals[max(0, min(len(vals) - 1, i + delta))]
+
+    mutation_pool = [
+        ("scale_lr", lambda: cfg.update(lr=max(1e-5, min(0.01, cfg.get("lr", 1e-3) * random.choice([0.5, 0.7, 1.5, 2.0]))))),
+        ("longer_train", lambda: cfg.update(training_minutes=min(360, int(cfg.get("training_minutes", 15) * 2)))),
+        ("step_dim", lambda: step_along("dim_embeddings")),
+        ("step_layers", lambda: step_along("num_transformer_layers")),
+        ("step_ffn", lambda: step_along("feed_forward_layer")),
+        ("step_dropout", lambda: step_along("dropout")),
+        ("step_warmup", lambda: step_along("warmup_steps")),
+        ("step_decay", lambda: step_along("decay_steps")),
+        ("step_batch", lambda: step_along("batch_size")),
+        ("step_accum", lambda: step_along("accumulation_steps")),
+        ("step_wd", lambda: step_along("weight_decay")),
+        ("step_grad_clip", lambda: step_along("max_grad_norm")),
+        ("step_label_smooth", lambda: step_along("label_smoothing")),
+        ("swap_scheduler", lambda: cfg.update(scheduler_type=random.choice(
+            ["noam", "warmup_exp_decay", "step_exp", "cosine", "trapezoidal"]))),
+        ("toggle_qk_norm", lambda: cfg.update(qk_norm=not cfg.get("qk_norm", False))),
+        ("toggle_tie_emb", lambda: cfg.update(tie_embeddings=not cfg.get("tie_embeddings", False))),
+    ]
+
+    n_mutations = random.randint(1, 3)
+    chosen = random.sample(mutation_pool, k=min(n_mutations, len(mutation_pool)))
+    applied = []
+    for name, fn in chosen:
+        fn()
+        applied.append(name)
+
+    if cfg.get("dim_embeddings") and cfg.get("num_attention_heads"):
+        if cfg["dim_embeddings"] % cfg["num_attention_heads"] != 0:
+            valid = [h for h in [4, 6, 8, 12, 16, 24, 32] if cfg["dim_embeddings"] % h == 0]
+            cfg["num_attention_heads"] = random.choice(valid) if valid else 4
+
+    cfg["reasoning"] = f"mutated parent: {', '.join(applied)}"
+    return cfg
+
+
+def _pick_mutation_parent(state) -> Optional[dict]:
+    import random
+
+    successes = [e for e in state.experiments if e.status == "success"]
+    if not successes:
+        return None
+    successes.sort(key=lambda e: e.score.get("final_accuracy", 0.0), reverse=True)
+    pool = successes[:MUTATE_TOP_K]
+    parent = random.choice(pool)
+    return {**parent.model_config, **parent.training_config}
+
+
+TRAINING_TIME_LADDER = [15, 60, 120, 360]
+
+
+def _config_signature_no_time(model_cfg: dict, training_cfg: dict) -> str:
+    t = {k: v for k, v in training_cfg.items() if k != "training_minutes"}
+    return json.dumps([model_cfg, t], sort_keys=True)
+
+
+def _pick_extension_candidate(state) -> Optional[dict]:
+    """Find a top-K success whose config hasn't been tried at the next rung of TRAINING_TIME_LADDER."""
+    successes = [e for e in state.experiments if e.status == "success"]
+    if not successes:
+        return None
+    successes.sort(key=lambda e: e.score.get("final_accuracy", 0.0), reverse=True)
+    pool = successes[:MUTATE_TOP_K]
+
+    max_minutes_by_sig: dict = {}
+    for e in state.experiments:
+        sig = _config_signature_no_time(e.model_config, e.training_config)
+        m = e.training_config.get("training_minutes", 0) or 0
+        if m > max_minutes_by_sig.get(sig, -1):
+            max_minutes_by_sig[sig] = m
+
+    for parent in pool:
+        sig = _config_signature_no_time(parent.model_config, parent.training_config)
+        cur_max = max_minutes_by_sig.get(sig, 0)
+        next_rung = next((t for t in TRAINING_TIME_LADDER if t > cur_max), None)
+        if next_rung is None:
+            continue
+        cfg = {**parent.model_config, **parent.training_config}
+        cfg["training_minutes"] = next_rung
+        cfg["reasoning"] = f"extend top run #{parent.experiment_id} ({cur_max}min -> {next_rung}min)"
+        return cfg
+    return None
 
 
 def _gpus_are_stuck() -> bool:
@@ -680,8 +862,10 @@ class LLMProposer:
 
         best = state.best_record
         best_section = "No successful experiments yet — explore freely."
+        best_acc = 0.0
         if best:
             bs = best.score
+            best_acc = bs.get("final_accuracy", 0.0)
             best_section = (
                 f"Best: #{best.experiment_id} acc={bs.get('final_accuracy', 0):.2f}%  "
                 f"ppl={bs.get('perplexity', 0):.1f}  "
@@ -691,6 +875,44 @@ class LLMProposer:
                 f"  training={json.dumps(best.training_config)}"
             )
 
+        target_acc = max(30.0, (int(best_acc / 5) + 1) * 5)
+
+        successful = state.successful_experiments()
+        recent_successful = successful[-10:]
+        stagnation_note = ""
+        if len(recent_successful) >= 6:
+            accs = [e.score.get("final_accuracy", 0.0) for e in recent_successful]
+            top = max(accs)
+            within = sum(1 for a in accs if top - a <= 1.0)
+            if within >= 5:
+                stagnation_note = (
+                    f"\n\n## STAGNATION DETECTED\n"
+                    f"{within} of last {len(accs)} successful runs are within 1% of {top:.2f}%. "
+                    f"The search is stuck. Propose something FUNDAMENTALLY different: "
+                    f"try a much larger or smaller scale, a different optimizer family, "
+                    f"a different attention type, or a different schedule. "
+                    f"Do NOT submit another minor variation of the current best."
+                )
+
+        if best_acc < 35.0:
+            task_section = (
+                f"Accuracy is currently near {best_acc:.1f}%. The goal is to break past {target_acc:.0f}%. "
+                f"Prioritize configurations likely to exceed {target_acc:.0f}%: larger models (dim>=512, layers>=8), "
+                f"muon_hybrid optimizer (Muon for hidden layers + AdamW for embeddings — strongest option), "
+                f"LLAMA3/DEEPSEEK architectures with ROTARY_POSITION_ENCODING, and "
+                f"trapezoidal scheduler (warmup→flat→decay). Avoid incremental tweaks to configs "
+                f"already stuck near {best_acc:.0f}%. Reason about what fundamentally changes the learning dynamics."
+            )
+        else:
+            task_section = (
+                f"Current best is {best_acc:.2f}%. Goal: push past {target_acc:.0f}%. "
+                f"You are no longer in the early-discovery phase — do NOT anchor to any single architecture, "
+                f"optimizer, or schedule family. Consider: scaling up (more dims/layers/FFN, longer training), "
+                f"scaling down with better hyperparameters, alternative attention types, alternative optimizers, "
+                f"alternative position encodings, alternative normalizations. "
+                f"Reason about what concrete bottleneck is preventing further gains and target it directly."
+            )
+
         return f"""## Baseline configuration
 {json.dumps(baseline_dict, indent=2)}
 
@@ -698,26 +920,21 @@ class LLMProposer:
 {chr(10).join(history_lines) if history_lines else "  (none yet)"}
 
 ## Current best
-{best_section}
+{best_section}{stagnation_note}
 
 ## Task
-Accuracy is currently plateaued near 30%. The goal is to break past this ceiling. \
-Prioritize configurations likely to exceed 30%: larger models (dim>=512, layers>=8), \
-muon_hybrid optimizer (Muon for hidden layers + AdamW for embeddings — strongest option), \
-LLAMA3/DEEPSEEK architectures with ROTARY_POSITION_ENCODING, and \
-trapezoidal scheduler (warmup→flat→decay). Avoid incremental tweaks to configs \
-already stuck at 30%. Reason about what fundamentally changes the learning dynamics.
+{task_section}
 
 Respond with JSON matching this schema exactly:
 {{
   "reasoning": "<your explanation>",
   "dim_embeddings": <int>, "num_attention_heads": <int>, "num_transformer_layers": <int>,
   "dropout": <float>, "feed_forward_layer": <int>, "bias": <bool>, "hc_n": <int>,
-  "transformer_layer": "<string>", "positional_embedding": "<string>", "normalization_layer": "<string>", "attention_type": "<string>", "qk_norm": <bool>,
+  "transformer_layer": "<string>", "positional_embedding": "<string>", "normalization_layer": "<string>", "attention_type": "<string>", "qk_norm": <bool>, "label_smoothing": <float>, "tie_embeddings": <bool>, "init_std": <float>,
   "optimizer_type": "<string>", "lr": <float>, "beta1": <float>, "beta2": <float>,
   "weight_decay": <float>, "max_grad_norm": <float>, "alpha": <float>, "momentum": <float>,
   "scheduler_type": "<string>", "warmup_steps": <int>, "flat_steps": <int>, "decay_steps": <int>, "min_lr_ratio": <float>,
-  "batch_size": <int>, "accumulation_steps": <int>
+  "batch_size": <int>, "accumulation_steps": <int>, "training_minutes": <int>
 }}"""
 
     @staticmethod
@@ -740,7 +957,8 @@ def plot_progress(state: AutoparamState, output_path: str):
     if not successes:
         return
 
-    ids = [e.experiment_id for e in successes]
+    id_to_pos = {e.experiment_id: i for i, e in enumerate(successes)}
+    ids = list(range(len(successes)))
     accuracy = [e.score["final_accuracy"] for e in successes]
     loss_vals = [
         e.score["final_loss"]
@@ -748,44 +966,121 @@ def plot_progress(state: AutoparamState, output_path: str):
         if math.isfinite(e.score.get("final_loss", float("inf")))
     ]
     loss_ids = [
-        e.experiment_id
+        id_to_pos[e.experiment_id]
         for e in successes
         if math.isfinite(e.score.get("final_loss", float("inf")))
     ]
 
-    _, ax = plt.subplots(figsize=(14, 6))
-    ax.plot(ids, accuracy, "b-o", label="Accuracy (%)", markersize=5)
-
-    if loss_ids:
-        ax2 = ax.twinx()
-        ax2.plot(
-            loss_ids,
-            loss_vals,
-            "r--",
-            marker="^",
-            label="Loss",
-            markersize=4,
-            alpha=0.6,
-        )
-        ax2.set_ylabel("Loss", color="red")
-        ax2.tick_params(axis="y", labelcolor="red")
-        ax2.legend(loc="upper right")
+    def _elapsed_min(e):
+        try:
+            t0 = datetime.fromisoformat(e.timestamp_start)
+            t1 = datetime.fromisoformat(e.timestamp_end) if e.timestamp_end else None
+            if t1 is None:
+                return None
+            return (t1 - t0).total_seconds() / 60.0
+        except Exception:
+            return None
 
     best = state.best_record
-    if best:
-        ax.axvline(
-            x=best.experiment_id,
-            color="red",
-            linestyle=":",
-            alpha=0.6,
-            label=f"Best (#{best.experiment_id})",
-        )
 
-    ax.set_xlabel("Experiment #")
-    ax.set_ylabel("Accuracy (%)")
-    ax.set_title("Autoparam: optimization progress over time")
-    ax.legend(loc="lower right")
-    ax.grid(True, alpha=0.3)
+    val_loss_pts = [
+        (id_to_pos[e.experiment_id], e.score["val_loss"])
+        for e in successes
+        if math.isfinite(e.score.get("val_loss", float("inf")))
+    ]
+    val_acc_pts = [
+        (id_to_pos[e.experiment_id], e.score["val_accuracy"])
+        for e in successes
+        if "val_accuracy" in e.score
+    ]
+    params_pts = [
+        (e.score.get("params_count", 0) / 1e6, e.score["final_accuracy"], id_to_pos[e.experiment_id])
+        for e in successes
+        if e.score.get("params_count", 0) > 0
+    ]
+    time_pts = [
+        (_elapsed_min(e), e.score["final_accuracy"], id_to_pos[e.experiment_id])
+        for e in successes
+    ]
+    time_pts = [p for p in time_pts if p[0] is not None]
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 11))
+    ax_acc, ax_val, ax_params, ax_time = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
+
+    ax_acc.plot(ids, accuracy, "b-o", label="Train Accuracy (%)", markersize=5)
+    if loss_ids:
+        ax_acc2 = ax_acc.twinx()
+        ax_acc2.plot(loss_ids, loss_vals, "r--", marker="^", label="Train Loss",
+                     markersize=4, alpha=0.6)
+        ax_acc2.set_ylabel("Loss", color="red")
+        ax_acc2.tick_params(axis="y", labelcolor="red")
+        ax_acc2.legend(loc="upper right")
+    if best and best.experiment_id in id_to_pos:
+        ax_acc.axvline(x=id_to_pos[best.experiment_id], color="red", linestyle=":", alpha=0.6,
+                       label=f"Best (#{best.experiment_id})")
+    ax_acc.set_xlabel("Successful experiment #")
+    ax_acc.set_ylabel("Accuracy (%)")
+    ax_acc.set_title("Train accuracy & loss over experiments")
+    ax_acc.legend(loc="lower right")
+    ax_acc.grid(True, alpha=0.3)
+
+    if val_acc_pts:
+        xs, ys = zip(*val_acc_pts)
+        ax_val.plot(xs, ys, "g-o", label="Val Accuracy (%)", markersize=5)
+    if val_loss_pts:
+        ax_val2 = ax_val.twinx()
+        xs, ys = zip(*val_loss_pts)
+        ax_val2.plot(xs, ys, "m--", marker="^", label="Val Loss",
+                     markersize=4, alpha=0.6)
+        ax_val2.set_ylabel("Val Loss", color="magenta")
+        ax_val2.tick_params(axis="y", labelcolor="magenta")
+        ax_val2.legend(loc="upper right")
+    ax_val.set_xlabel("Successful experiment #")
+    ax_val.set_ylabel("Val Accuracy (%)")
+    ax_val.set_title("Validation curves over experiments")
+    ax_val.legend(loc="lower right")
+    ax_val.grid(True, alpha=0.3)
+
+    if params_pts:
+        xs = [p[0] for p in params_pts]
+        ys = [p[1] for p in params_pts]
+        cs = [p[2] for p in params_pts]
+        sc_p = ax_params.scatter(xs, ys, c=cs, cmap="viridis", s=40, alpha=0.8)
+        plt.colorbar(sc_p, ax=ax_params, label="Experiment #")
+        top_idx = max(range(len(params_pts)), key=lambda i: params_pts[i][1])
+        tx, ty, tid = params_pts[top_idx]
+        ax_params.scatter([tx], [ty], s=160, facecolors="none", edgecolors="red",
+                          linewidths=2, label=f"Top accuracy (#{tid})")
+        ax_params.legend(loc="lower right")
+        ax_params.set_xscale("log")
+    ax_params.set_xlabel("Params (M, log)")
+    ax_params.set_ylabel("Accuracy (%)")
+    ax_params.set_title("Accuracy vs. parameter count")
+    ax_params.grid(True, alpha=0.3, which="both")
+
+    if time_pts:
+        xs = [p[0] for p in time_pts]
+        ys = [p[1] for p in time_pts]
+        cs = [p[2] for p in time_pts]
+        sc_t = ax_time.scatter(xs, ys, c=cs, cmap="viridis", s=40, alpha=0.8)
+        plt.colorbar(sc_t, ax=ax_time, label="Experiment #")
+        top_idx = max(range(len(time_pts)), key=lambda i: time_pts[i][1])
+        tx, ty, tid = time_pts[top_idx]
+        ax_time.scatter([tx], [ty], s=160, facecolors="none", edgecolors="red",
+                        linewidths=2, label=f"Top accuracy (#{tid})")
+        if best is not None and best.experiment_id in id_to_pos:
+            be = _elapsed_min(best)
+            if be is not None:
+                ax_time.scatter([be], [best.score["final_accuracy"]],
+                                s=160, facecolors="none", edgecolors="orange",
+                                linewidths=2, linestyle="--",
+                                label=f"Best composite (#{id_to_pos[best.experiment_id]})")
+        ax_time.legend(loc="lower right")
+    ax_time.set_xlabel("Training time (min)")
+    ax_time.set_ylabel("Accuracy (%)")
+    ax_time.set_title("Accuracy vs. training time")
+    ax_time.grid(True, alpha=0.3)
+
     plt.tight_layout()
     plt.savefig(output_path)
     plt.close("all")
@@ -804,6 +1099,7 @@ class AutoparamLoop:
         distributed_strategy: DistributedStrategy = DistributedStrategy.FSDP,
         nproc_per_node: int = 1,
         max_consecutive_failures: int = 5,
+        random_only: bool = False,
     ):
         if state_path is None:
             state_path = f"autoparam_state_{dataset_name}.json"
@@ -815,7 +1111,8 @@ class AutoparamLoop:
         self.log_path = state_path.replace(".json", ".log")
         self.timeout = experiment_timeout_minutes
         self.state = AutoparamState(state_path)
-        self.proposer = LLMProposer(model=llm_model)
+        self._llm_disabled = random_only
+        self.proposer = None if random_only else LLMProposer(model=llm_model)
         self.dataset = NAMED_DATASETS[dataset_name]
         self.plot_path = os.path.join("plots", dataset_name, "autoparam_progress.png")
         os.makedirs(os.path.dirname(self.plot_path), exist_ok=True)
@@ -827,7 +1124,7 @@ class AutoparamLoop:
 
         baseline_config = create_default_config(self.dataset)
         baseline_opts = TrainingOptions(
-            batch_size=32,
+            batch_size=1,
             training_timeout_minutes=experiment_timeout_minutes,
         )
         self.baseline_dict = {
@@ -867,7 +1164,7 @@ class AutoparamLoop:
         print(
             f"[autoparam] Starting from experiment {start_id}. Target: {self.max_experiments}. Timeout: {self.timeout}min each.{budget_msg}"
         )
-        if self.budget_usd:
+        if self.budget_usd and not self._llm_disabled:
             self._daily_spend_at_start = fetch_openrouter_daily_usage()
             if self._daily_spend_at_start >= 0:
                 self._log(
@@ -881,7 +1178,7 @@ class AutoparamLoop:
                 break
             self._log(f"=== Experiment {exp_id + 1}/{self.max_experiments} ===")
 
-            if self.budget_usd:
+            if self.budget_usd and not self._llm_disabled:
                 daily = fetch_openrouter_daily_usage()
                 if daily >= 0:
                     spent = daily - self._daily_spend_at_start
@@ -894,63 +1191,122 @@ class AutoparamLoop:
                         )
                         break
 
-            if exp_id % RANDOM_EXPLORE_EVERY == 0:
-                proposed = random_config_dict()
-                reasoning = proposed.pop("reasoning")
-                self._log(
-                    f"Random exploration (every {RANDOM_EXPLORE_EVERY} experiments)"
-                )
-            else:
+            import random as _random
+            MAX_DEDUP_ATTEMPTS = 20
+            proposed = None
+            reasoning = None
+            model_dict = None
+            training_dict = None
+            config = None
+            training_options = None
+            config_error = None
+
+            for attempt in range(MAX_DEDUP_ATTEMPTS):
+                if self._llm_disabled or exp_id % RANDOM_EXPLORE_EVERY == 0:
+                    extension = _pick_extension_candidate(self.state) if attempt == 0 else None
+                    parent = _pick_mutation_parent(self.state)
+                    if extension is not None:
+                        cand = extension
+                        cand_reason = cand.pop("reasoning")
+                        src = f"Extending top run: {cand_reason}"
+                    elif parent is not None and _random.random() < MUTATE_PROB:
+                        cand = mutate_config_dict(parent)
+                        cand_reason = cand.pop("reasoning")
+                        src = f"Mutated top run: {cand_reason}"
+                    else:
+                        cand = random_config_dict()
+                        cand_reason = cand.pop("reasoning")
+                        src = (
+                            "Random exploration (LLM disabled)"
+                            if self._llm_disabled
+                            else f"Random exploration (every {RANDOM_EXPLORE_EVERY} experiments)"
+                        )
+                else:
+                    try:
+                        cand = self.proposer.propose(self.state, self.baseline_dict)
+                        cand_reason = cand.pop("reasoning", "(no reasoning provided)")
+                        src = f"Reasoning: {cand_reason}"
+                    except Exception as e:
+                        msg = str(e)
+                        if "402" in msg or "insufficient" in msg.lower() or "credit" in msg.lower():
+                            self._llm_disabled = True
+                            self._log(f"LLM credits exhausted ({e}). Switching to random-only mode.")
+                        else:
+                            self._log(f"LLM proposal failed ({e}), using random fallback.")
+                        cand = random_config_dict()
+                        cand_reason = cand.pop("reasoning", f"LLM failed: {e}")
+                        src = f"Reasoning: {cand_reason}"
+
                 try:
-                    proposed = self.proposer.propose(self.state, self.baseline_dict)
-                    reasoning = proposed.pop("reasoning", "(no reasoning provided)")
-                    self._log(f"Reasoning: {reasoning}")
+                    cfg_obj = ConfigSerializer.dict_to_config(cand, self.dataset)
+                    to_obj = ConfigSerializer.dict_to_training_options(cand, self.timeout)
+                    m_dict = ConfigSerializer.config_to_dict(cfg_obj)
+                    t_dict = ConfigSerializer.training_options_to_dict(to_obj)
                 except Exception as e:
-                    self._log(f"LLM proposal failed ({e}), using baseline.")
-                    proposed = dict(self.baseline_dict)
-                    reasoning = f"LLM failed: {e}"
+                    config_error = e
+                    proposed = cand
+                    reasoning = cand_reason
+                    break
+
+                if self._already_run(m_dict, t_dict):
+                    self._log(f"Duplicate config (attempt {attempt + 1}/{MAX_DEDUP_ATTEMPTS}), retrying.")
+                    continue
+
+                proposed = cand
+                reasoning = cand_reason
+                config = cfg_obj
+                training_options = to_obj
+                model_dict = m_dict
+                training_dict = t_dict
+                config_error = None
+                self._log(src)
+                break
+            else:
+                self._log(f"Could not find non-duplicate config after {MAX_DEDUP_ATTEMPTS} attempts; skipping experiment.")
+                continue
+
+            if config_error is not None:
+                import traceback
+                self._log(f"Config error: {config_error}\n{traceback.format_exc()}")
+                self._record(
+                    exp_id,
+                    proposed,
+                    proposed,
+                    reasoning,
+                    "failed",
+                    f"Config error: {config_error}",
+                )
+                consecutive_failures += 1
+                if consecutive_failures >= self.max_consecutive_failures:
+                    self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
+                    return
+                continue
 
             try:
-                config = ConfigSerializer.dict_to_config(proposed, self.dataset)
-                training_options = ConfigSerializer.dict_to_training_options(
-                    proposed, self.timeout
-                )
-                model_dict = ConfigSerializer.config_to_dict(config)
-                training_dict = ConfigSerializer.training_options_to_dict(
-                    training_options
-                )
+                num_gpus = max(1, self.nproc_per_node)
+                bs = getattr(training_options, "batch_size", 1) or 1
+                est_gb, n_params = _estimate_footprint_gb_meta(config, bs, num_gpus)
+                budget_gb = _total_gpu_memory_gb()
+                if est_gb > budget_gb:
+                    self._log(
+                        f"Skipping: estimated {est_gb:.2f} GB > budget {budget_gb:.2f} GB "
+                        f"(params={n_params/1e6:.1f}M, bs={bs}, gpus={num_gpus})"
+                    )
+                    self._record(
+                        exp_id,
+                        model_dict,
+                        training_dict,
+                        reasoning,
+                        "failed",
+                        f"Model too large: estimated {est_gb:.2f} GB > {budget_gb:.2f} GB budget",
+                    )
+                    consecutive_failures += 1
+                    if consecutive_failures >= self.max_consecutive_failures:
+                        self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
+                        return
+                    continue
             except Exception as e:
-                import traceback
-                self._log(f"Config error: {e}\n{traceback.format_exc()}")
-                self._record(
-                    exp_id,
-                    proposed,
-                    proposed,
-                    reasoning,
-                    "failed",
-                    f"Config error: {e}",
-                )
-                consecutive_failures += 1
-                if consecutive_failures >= self.max_consecutive_failures:
-                    self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
-                    return
-                continue
-
-            if self._already_run(model_dict, training_dict):
-                self._log("Skipping duplicate config.")
-                self._record(
-                    exp_id,
-                    model_dict,
-                    training_dict,
-                    reasoning,
-                    "failed",
-                    "Duplicate config",
-                )
-                consecutive_failures += 1
-                if consecutive_failures >= self.max_consecutive_failures:
-                    self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
-                    return
-                continue
+                self._log(f"Meta-device size estimate failed (continuing anyway): {e}")
 
             self._log(
                 f"Config: {json.dumps(model_dict)}  training: {json.dumps(training_dict)}"
@@ -963,7 +1319,7 @@ class AutoparamLoop:
             config_data = {
                 "dataset_name": self.dataset.name,
                 "exp_name": exp_name,
-                "timeout_minutes": self.timeout,
+                "timeout_minutes": training_options.training_timeout_minutes,
                 "model_config": model_dict,
                 "training_config": training_dict,
                 "distributed_strategy": self.distributed_strategy.name,
@@ -983,6 +1339,8 @@ class AutoparamLoop:
                     "torchrun",
                     f"--nproc_per_node={self.nproc_per_node}",
                     "--standalone",
+                    "--max-restarts=0",
+                    "--monitor-interval=5",
                     executor,
                     "--config", config_path,
                     "--result", result_path,
@@ -990,15 +1348,20 @@ class AutoparamLoop:
                 log_path = result_path.replace("_result.json", "_run.log")
                 log_file = open(log_path, "w")
                 print(f"[autoparam] subprocess log: {log_path}", flush=True)
-                proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True)
+                env = os.environ.copy()
+                env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+                env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
+                env.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
+                env.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+                proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True, env=env)
                 log_file.close()
                 self._active_proc = proc
                 pgid = os.getpgid(proc.pid)
                 self._active_pgid = pgid
                 try:
-                    proc.wait(timeout=(self.timeout + 5) * 60)
+                    proc.wait(timeout=(training_options.training_timeout_minutes + 5) * 60)
                 except subprocess.TimeoutExpired:
-                    print(f"Experiment subprocess timed out after {self.timeout + 5} minutes, killing")
+                    print(f"Experiment subprocess timed out after {training_options.training_timeout_minutes + 5} minutes, killing")
                 except KeyboardInterrupt:
                     os.killpg(pgid, signal.SIGKILL)
                     proc.wait()
@@ -1008,9 +1371,13 @@ class AutoparamLoop:
                         os.killpg(pgid, signal.SIGKILL)
                     except OSError:
                         pass
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        pass
                     self._active_proc = None
                     self._active_pgid = None
-                    time.sleep(3)
+                    time.sleep(15)
 
                 if os.path.exists(result_path):
                     with open(result_path) as f:
@@ -1027,12 +1394,19 @@ class AutoparamLoop:
                     consecutive_failures += 1
                 else:
                     steps = score.get("steps_to_threshold", -1)
+                    params_m = score.get("params_count", 0) / 1e6
+                    pmem = score.get("peak_memory_gb", 0)
+                    tokens = score.get("tokens_seen", 0)
                     self._log(
                         f"Result: accuracy={score['final_accuracy']:.2f}%  "
                         f"ppl={score.get('perplexity', 0):.1f}  "
                         f"slope={score.get('accuracy_slope', 0):.4f}  "
                         f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
-                        f"stability={score['stability_score']:.3f}"
+                        f"stability={score['stability_score']:.3f}  "
+                        f"params={params_m:.1f}M  peak_mem={pmem:.2f}GB  tokens={tokens:,}  "
+                        f"val_acc={score.get('val_accuracy', float('nan')):.2f}%  "
+                        f"val_loss={score.get('val_loss', float('nan')):.3f}  "
+                        f"gap={score.get('overfit_gap', float('nan')):.2f}"
                     )
             except Exception as e:
                 import traceback
@@ -1168,6 +1542,11 @@ if __name__ == "__main__":
     parser.add_argument("--max-consecutive-failures", type=int, default=5)
     parser.add_argument("--llm-model", default=LLM_MODEL)
     parser.add_argument(
+        "--random-only",
+        action="store_true",
+        help="Disable the OpenRouter LLM proposer and use random search only",
+    )
+    parser.add_argument(
         "--budget",
         type=float,
         default="5.00",
@@ -1196,4 +1575,5 @@ if __name__ == "__main__":
         distributed_strategy=strategy,
         nproc_per_node=args.nproc_per_node,
         max_consecutive_failures=args.max_consecutive_failures,
+        random_only=args.random_only,
     ).run()

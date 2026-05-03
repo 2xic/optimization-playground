@@ -150,10 +150,28 @@ class BaseOptimizerConfig:
         return optimizer
 
 
+class _MuonGradClipWrapper:
+    def __init__(self, optimizer, max_grad_norm: float):
+        self._optimizer = optimizer
+        self._max_grad_norm = max_grad_norm
+
+    def step(self, closure=None):
+        if self._max_grad_norm and self._max_grad_norm > 0:
+            all_params = [p for group in self._optimizer.param_groups for p in group["params"]]
+            if all_params:
+                torch.nn.utils.clip_grad_norm_(all_params, self._max_grad_norm)
+        return self._optimizer.step(closure)
+
+    def __getattr__(self, name):
+        return getattr(self._optimizer, name)
+
+
 @dataclass
 class MuonConfig(BaseOptimizerConfig):
     lr: float = 3e-4
     hybrid: bool = False
+    weight_decay: float = 0.01
+    max_grad_norm: float = 0
 
     def create_optimizer_named(self, named_params):
         named_params = list(named_params)
@@ -164,16 +182,19 @@ class MuonConfig(BaseOptimizerConfig):
                 params=[p for n, p in named_params if p.ndim >= 2 and n not in skip],
                 use_muon=True,
                 lr=self.lr,
-                weight_decay=0.01,
+                weight_decay=self.weight_decay,
             ),
             dict(
                 params=[p for n, p in named_params if p.ndim < 2 or n in skip],
                 use_muon=False,
                 lr=self.lr,
-                weight_decay=0.01,
+                weight_decay=self.weight_decay,
             ),
         ]
-        return MuonWithAuxAdam(param_groups)
+        opt = MuonWithAuxAdam(param_groups)
+        if self.max_grad_norm and self.max_grad_norm > 0:
+            opt = _MuonGradClipWrapper(opt, self.max_grad_norm)
+        return opt
 
     def create_optimizer(self, params):
         return self.create_optimizer_named((("", p) for p in params))
@@ -186,9 +207,10 @@ class RMSpropConfig(BaseOptimizerConfig):
     eps: float = 1e-8
     weight_decay: float = 0
     momentum: float = 0
+    max_grad_norm: float = 0
 
     def _build_optimizer(self, params):
-        return torch.optim.RMSprop(
+        opt = torch.optim.RMSprop(
             params,
             lr=self.lr,
             alpha=self.alpha,
@@ -196,6 +218,9 @@ class RMSpropConfig(BaseOptimizerConfig):
             weight_decay=self.weight_decay,
             momentum=self.momentum,
         )
+        if self.max_grad_norm and self.max_grad_norm > 0:
+            opt = _MuonGradClipWrapper(opt, self.max_grad_norm)
+        return opt
 
 
 BETA_1 = 0.90

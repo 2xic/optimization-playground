@@ -235,6 +235,7 @@ def create_next_token_prediction_objective(
             padding_index=dataset.padding_index,
             vocab_size=dataset.vocab_size,
             sampler=sampler,
+            label_smoothing=getattr(model.config, "label_smoothing", 0.0),
         ),
         optimizer,
         lr_scheduler=lr_scheduler,
@@ -257,7 +258,26 @@ def execute(
     epochs_loss = MinMaxAvgArray()
     steps_accuracy = MinMaxAvgArray()
     steps_loss = MinMaxAvgArray()
+    val_steps_accuracy = MinMaxAvgArray()
+    val_steps_loss = MinMaxAvgArray()
+    val_at_step_out: list = []
     trainer = None
+    if options.val_loader is None and options.val_interval_steps > 0:
+        try:
+            from utils.web_dataloader import WebDataloader
+            options.val_loader = WebDataloader(
+                dataset.base_url,
+                dataset.dataset_name,
+                split="test",
+                rank=dataset.rank,
+                world_size=dataset.world_size,
+                columns=dataset.columns,
+                batch_size=dataset.batch_size,
+            )
+            _ = options.val_loader.info
+        except Exception as e:
+            print(f"Validation loader unavailable for {dataset.dataset_name}: {e}")
+            options.val_loader = None
     try:
         for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
             trainer = create_next_token_prediction_objective(
@@ -266,7 +286,8 @@ def execute(
                 options.optimizer,
                 options.lr_scheduler,
             )
-            (accuracy, loss, step_acc, step_ls, epoch_at_step) = trainer.train(
+            (accuracy, loss, step_acc, step_ls, epoch_at_step,
+             val_acc, val_ls, val_at_step) = trainer.train(
                 dataset,
                 options,
             )
@@ -276,6 +297,12 @@ def execute(
                 steps_accuracy.add(step_acc)
             if step_ls:
                 steps_loss.add(step_ls)
+            if val_acc:
+                val_steps_accuracy.add(val_acc)
+            if val_ls:
+                val_steps_loss.add(val_ls)
+            if val_at_step:
+                val_at_step_out = list(val_at_step)
             if trainer.has_timeout(options):
                 print("Hit timeout")
                 break
@@ -300,6 +327,9 @@ def execute(
         step_accuracy=steps_accuracy,
         step_loss=steps_loss,
         epoch_at_step=epoch_at_step if "epoch_at_step" in dir() else [],
+        step_val_accuracy=val_steps_accuracy,
+        step_val_loss=val_steps_loss,
+        val_at_step=val_at_step_out,
     )
     return experiment_variant, result
 

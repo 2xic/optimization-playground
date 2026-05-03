@@ -28,6 +28,9 @@ from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
 from utils.web_dataloader import WebDataloader
 
+_torch_version = tuple(int(x) for x in torch.__version__.split("+")[0].split(".")[:2])
+assert _torch_version >= (2, 4), f"PyTorch >= 2.4 required (got {torch.__version__}); needed for DTensor-aware clip_grad_norm_ and FSDP2."
+
 torch.backends.cudnn.benchmark = True
 
 DEBUG = False
@@ -145,6 +148,9 @@ class TrainingOptions:
     # accumulation_steps
     accumulation_steps: int = 1
     record_interval_steps: int = 0
+    val_interval_steps: int = 0
+    val_max_batches: int = 50
+    val_loader: Optional["WebDataloader"] = None
     # misc
     enable_checkpoints: bool = False
     checkpoint_tag: Optional[str] = None
@@ -206,6 +212,60 @@ class BaseTrainer(ABC):
         self.start = time.time()
         self.checkpoint_interval = 60 * 60
         self.last_checkpoint = time.time()
+        self._val_iter = None
+
+    def _run_validation(self, model, objective, training_options: TrainingOptions):
+        val_loader = training_options.val_loader
+        if val_loader is None:
+            return
+        was_training = model.training
+        model.eval()
+        device = training_options.device
+        sum_loss = torch.zeros((), dtype=torch.float64, device=device)
+        sum_correct = torch.zeros((), dtype=torch.float64, device=device)
+        sum_tokens = torch.zeros((), dtype=torch.float64, device=device)
+        sum_batches = torch.zeros((), dtype=torch.float64, device=device)
+        try:
+            with torch.no_grad():
+                for _ in range(max(1, training_options.val_max_batches)):
+                    if self._val_iter is None:
+                        self._val_iter = iter(val_loader)
+                    try:
+                        batch = next(self._val_iter)
+                    except StopIteration:
+                        self._val_iter = iter(val_loader)
+                        try:
+                            batch = next(self._val_iter)
+                        except StopIteration:
+                            break
+                    X, y = batch["x_tokens"], batch["y_tokens"]
+                    X = X.to(device, non_blocking=True)
+                    y = y.to(device, non_blocking=True)
+                    y_pred = model(X)
+                    loss = objective.forward(y_pred, y)
+                    correct, total = objective.evaluator(y_pred, y)
+                    sum_loss += loss.detach().double()
+                    sum_correct += correct.detach().double()
+                    sum_tokens += total.detach().double()
+                    sum_batches += 1.0
+            if dist.is_initialized():
+                stacked = torch.stack([sum_loss, sum_correct, sum_tokens, sum_batches])
+                dist.all_reduce(stacked, op=dist.ReduceOp.SUM)
+                sum_loss, sum_correct, sum_tokens, sum_batches = stacked.tolist()
+            else:
+                sum_loss = sum_loss.item()
+                sum_correct = sum_correct.item()
+                sum_tokens = sum_tokens.item()
+                sum_batches = sum_batches.item()
+            world = dist.get_world_size() if dist.is_initialized() else 1
+            avg_loss = sum_loss / max(sum_batches, 1.0) / max(world, 1)
+            acc_pct = (sum_correct / sum_tokens * 100.0) if sum_tokens > 0 else 0.0
+            training_options.metadata.plots.record_val(
+                loss=avg_loss, accuracy=acc_pct, train_step=self.total_batch_num
+            )
+        finally:
+            if was_training:
+                model.train()
 
     def train(
         self,
@@ -309,6 +369,14 @@ class BaseTrainer(ABC):
                     avg_loss, acc_pct = interval.compute()
                     training_options.metadata.plots.record_step(loss=avg_loss, accuracy=acc_pct)
                     interval.reset()
+
+            if (
+                training_options.val_interval_steps > 0
+                and training_options.val_loader is not None
+                and self.total_batch_num > 0
+                and self.total_batch_num % training_options.val_interval_steps == 0
+            ):
+                self._run_validation(model, objective, training_options)
 
             training_options.metadata.epoch = loader.epoch
             training_options.metadata.batches_consumed = loader._batches_consumed
@@ -488,6 +556,9 @@ class Trainer(BaseTrainer):
             training_options.metadata.plots.step_accuracies,
             training_options.metadata.plots.step_losses,
             training_options.metadata.plots.epoch_at_step,
+            training_options.metadata.plots.val_step_accuracies,
+            training_options.metadata.plots.val_step_losses,
+            training_options.metadata.plots.val_at_step,
         )
 
 
@@ -598,16 +669,19 @@ class GradScalerTrainer(Trainer):
                     max_grad_norm = getattr(training_options.optimizer, "max_grad_norm", 0)
                     if self.use_fsdp:
                         if max_grad_norm > 0:
-                            model.clip_grad_norm_(max_grad_norm)
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
                         self.optimizer.step()
+                        stepped = True
                     else:
                         if max_grad_norm > 0:
                             self.scaler.unscale_(self.optimizer)
                             torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                        prev_scale = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
+                        stepped = self.scaler.get_scale() >= prev_scale
                     self.optimizer.zero_grad(set_to_none=True)
-                    if self.lr_scheduler is not None:
+                    if stepped and self.lr_scheduler is not None:
                         self.lr_scheduler.step()
 
             self.total_batch_num += 1

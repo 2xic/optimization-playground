@@ -247,6 +247,9 @@ class TrainingHistory:
     step_losses: list = field(default_factory=list, repr=False)
     step_accuracies: list = field(default_factory=list, repr=False)
     epoch_at_step: list = field(default_factory=list, repr=False)
+    val_step_losses: list = field(default_factory=list, repr=False)
+    val_step_accuracies: list = field(default_factory=list, repr=False)
+    val_at_step: list = field(default_factory=list, repr=False)
 
     def record_epoch(self, loss, accuracy):
         self.losses.append(loss)
@@ -256,6 +259,11 @@ class TrainingHistory:
     def record_step(self, loss, accuracy):
         self.step_losses.append(loss)
         self.step_accuracies.append(accuracy)
+
+    def record_val(self, loss, accuracy, train_step):
+        self.val_step_losses.append(loss)
+        self.val_step_accuracies.append(accuracy)
+        self.val_at_step.append(train_step)
 
     def to_dict(self):
         return asdict(self)
@@ -268,6 +276,9 @@ class TrainingHistory:
             step_losses=d.get("step_losses", []),
             step_accuracies=d.get("step_accuracies", []),
             epoch_at_step=d.get("epoch_at_step", []),
+            val_step_losses=d.get("val_step_losses", []),
+            val_step_accuracies=d.get("val_step_accuracies", []),
+            val_at_step=d.get("val_at_step", []),
         )
 
 
