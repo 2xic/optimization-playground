@@ -18,6 +18,9 @@ class BaseObjective(nn.Module, ABC):
     def has_evaluator(self) -> bool:
         pass
 
+    def per_sequence_loss(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        raise NotImplementedError("per_sequence_loss not implemented for this objective")
+
 
 class NextTokenPrediction(BaseObjective):
     def __init__(
@@ -55,6 +58,18 @@ class NextTokenPrediction(BaseObjective):
     @property
     def has_evaluator(self):
         return self.sampler is not None
+
+    def per_sequence_loss(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        logits = y_predicted[..., :self.vocab_size].float()
+        B, T, V = logits.shape
+        flat = torch.nn.functional.cross_entropy(
+            logits.reshape(-1, V),
+            y.reshape(-1),
+            ignore_index=self.padding_index,
+            reduction='none',
+        ).reshape(B, T)
+        mask = (y != self.padding_index).float()
+        return (flat * mask).sum(-1) / mask.sum(-1).clamp_min(1.0)
 
     def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
         """

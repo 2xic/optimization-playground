@@ -52,6 +52,8 @@ from training.model import (
     PositionalEmbeddingType,
     NormalizationLayerType,
     AttentionType,
+    FFNActivation,
+    NormPlacement,
     Model,
 )
 from training.trainer import TrainingOptions, DistributedStrategy
@@ -139,6 +141,7 @@ LLM_MODEL = "anthropic/claude-opus-4-5"
 LLM_MAX_TOKENS = 1024
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 HISTORY_WINDOW = 15
+MAX_TRAINING_MINUTES = 480
 
 SEARCH_SPACE_DESCRIPTION = """
 Searchable hyperparameter space (use ONLY the values listed):
@@ -163,6 +166,8 @@ Architecture (exact enum names):
   attention_type:          DEFAULT | MHA | GQA | MLA
                            (DEFAULT = architecture's native attention: DEEPSEEK→MLA, LLAMA3→GQA, others→MHA)
   qk_norm:                 [true, false]   ← apply RMSNorm to Q and K after projection (improves stability)
+  ffn_activation:          SWIGLU | GEGLU | REGLU | SILU   ← FFN activation; gated variants use a gate proj, SILU is non-gated
+  norm_placement:          PRE | POST | SANDWICH | PERI   ← residual norm placement (PERI = Gemma3 peri-norm)
   label_smoothing:         [0.0, 0.05, 0.1]   ← cross-entropy label smoothing
   tie_embeddings:          [true, false]   ← share input embedding ↔ lm_head weights
   init_std:                [0.006, 0.01, 0.02, 0.04]   ← std of normal init for linears/embeddings
@@ -192,7 +197,15 @@ Scheduler:
 Training:
   batch_size:              [16, 32, 64, 128]
   accumulation_steps:      [1, 2, 4, 8, 16]
-  training_minutes:        [5, 15, 30, 60, 120, 360]   ← wall-clock budget per experiment; capped by --timeout-minutes
+  training_minutes:        [5, 15, 30, 60, 120, 240, 480]   ← wall-clock budget per experiment; --timeout-minutes is the default short budget, top-K successes auto-extend up to 480 (8h)
+
+RHO-Loss (optional, omit unless explicitly enabled):
+  rho_loss: nested dict {{"mode": "ema"|"snapshot"|"tag", "ratio": <float>, ...}}
+    mode="ema" (default): optional "decay" (default 0.999), "warmup_steps" (default 100)
+    mode="snapshot":      optional "snapshot_steps" (default 500), "warmup_steps" (default 100)
+    mode="tag":           requires "tag": <checkpoint tag of pre-trained IL model on holdout split>
+  ratio in [0.1, 0.2, 0.4]; <1 enables RHO-Loss.
+  Note: when enabled, batch_size is the *mega-batch* B; effective gradient batch is B * ratio.
 """
 
 _SYSTEM_PROMPT = f"""You are an expert ML researcher running autonomous hyperparameter optimization \
@@ -234,6 +247,8 @@ class ConfigSerializer:
             "normalization_layer": config.normalization_layer.name,
             "attention_type": config.attention_type.name,
             "qk_norm": config.qk_norm,
+            "ffn_activation": config.ffn_activation.name if config.ffn_activation is not None else None,
+            "norm_placement": config.norm_placement.name if config.norm_placement is not None else None,
             "label_smoothing": config.label_smoothing,
             "tie_embeddings": config.tie_embeddings,
             "init_std": config.init_std,
@@ -290,6 +305,15 @@ class ConfigSerializer:
             d["min_lr_ratio"] = sched.min_lr_ratio
         else:
             d["scheduler_type"] = "none"
+        if opts.rho_loss is not None:
+            from training.rho_loss import RhoLossTagConfig, RhoLossEmaConfig, RhoLossSnapshotConfig
+            rl = opts.rho_loss
+            if isinstance(rl, RhoLossTagConfig):
+                d["rho_loss"] = {"mode": "tag", "ratio": rl.ratio, "tag": rl.tag}
+            elif isinstance(rl, RhoLossEmaConfig):
+                d["rho_loss"] = {"mode": "ema", "ratio": rl.ratio, "decay": rl.decay, "warmup_steps": rl.warmup_steps}
+            elif isinstance(rl, RhoLossSnapshotConfig):
+                d["rho_loss"] = {"mode": "snapshot", "ratio": rl.ratio, "snapshot_steps": rl.snapshot_steps, "warmup_steps": rl.warmup_steps}
         return d
 
     @classmethod
@@ -313,6 +337,10 @@ class ConfigSerializer:
         config.normalization_layer = NormalizationLayerType[d["normalization_layer"]]
         config.attention_type = AttentionType[d.get("attention_type", "DEFAULT")]
         config.qk_norm = bool(d.get("qk_norm", False))
+        ffn_act = d.get("ffn_activation")
+        config.ffn_activation = FFNActivation[ffn_act] if ffn_act else None
+        norm_pl = d.get("norm_placement")
+        config.norm_placement = NormPlacement[norm_pl] if norm_pl else None
         config.label_smoothing = float(d.get("label_smoothing", 0.0))
         config.tie_embeddings = bool(d.get("tie_embeddings", True))
         config.init_std = float(d.get("init_std", 0.02))
@@ -384,7 +412,7 @@ class ConfigSerializer:
         opts = TrainingOptions(
             batch_size=int(d.get("batch_size", 32)),
             accumulation_steps=int(d.get("accumulation_steps", 1)),
-            training_timeout_minutes=min(int(d.get("training_minutes", timeout_minutes)), timeout_minutes),
+            training_timeout_minutes=min(int(d.get("training_minutes", timeout_minutes)), MAX_TRAINING_MINUTES),
             optimizer=optimizer,
             lr_scheduler=scheduler,
             record_interval_steps=50,
@@ -392,6 +420,19 @@ class ConfigSerializer:
             val_max_batches=int(d.get("val_max_batches", 50)),
             distributed_strategy=distributed_strategy,
         )
+        if "rho_loss" in d and d["rho_loss"]:
+            from training.rho_loss import RhoLossTagConfig, RhoLossEmaConfig, RhoLossSnapshotConfig
+            rl = d["rho_loss"]
+            mode = rl.get("mode", "ema")
+            ratio = float(rl.get("ratio", 0.2))
+            if mode == "tag":
+                opts.rho_loss = RhoLossTagConfig(tag=str(rl["tag"]), ratio=ratio)
+            elif mode == "ema":
+                opts.rho_loss = RhoLossEmaConfig(ratio=ratio, decay=float(rl.get("decay", 0.999)), warmup_steps=int(rl.get("warmup_steps", 100)))
+            elif mode == "snapshot":
+                opts.rho_loss = RhoLossSnapshotConfig(ratio=ratio, snapshot_steps=int(rl.get("snapshot_steps", 500)), warmup_steps=int(rl.get("warmup_steps", 100)))
+            else:
+                raise ValueError(f"Unknown rho_loss mode: {mode}")
         if device is not None:
             opts.device = device
         return opts
@@ -629,6 +670,8 @@ def random_config_dict() -> dict:
         "normalization_layer": random.choice(["LAYER_NORM", "DyT", "RMS_NORM"]),
         "attention_type": random.choice(["DEFAULT", "MHA", "GQA", "MLA"]),
         "qk_norm": random.choice([True, False]),
+        "ffn_activation": random.choice(["SWIGLU", "GEGLU", "REGLU", "SILU"]),
+        "norm_placement": random.choice(["PRE", "POST", "SANDWICH", "PERI"]),
         "label_smoothing": random.choice([0.0, 0.05, 0.1]),
         "tie_embeddings": random.choice([True, False]),
         "init_std": random.choice([0.006, 0.01, 0.02, 0.04]),
@@ -649,7 +692,7 @@ def random_config_dict() -> dict:
         "min_lr_ratio": random.choice([0.01, 0.05, 0.1]),
         "batch_size": random.choice([16, 32, 64, 128]),
         "accumulation_steps": random.choice([1, 2, 4, 8]),
-        "training_minutes": random.choice([5, 15, 30, 60, 120, 360]),
+        "training_minutes": random.choice([5, 15, 30, 60, 120, 240, 480]),
     }
 
 
@@ -671,7 +714,7 @@ def mutate_config_dict(parent: dict) -> dict:
         "min_lr_ratio": [0.01, 0.05, 0.1],
         "batch_size": [16, 32, 64, 128],
         "accumulation_steps": [1, 2, 4, 8, 16],
-        "training_minutes": [5, 15, 30, 60, 120, 360],
+        "training_minutes": [5, 15, 30, 60, 120, 240, 480],
         "weight_decay": [0, 0.01, 0.05, 0.1, 0.2],
         "max_grad_norm": [0, 0.5, 1.0, 5.0],
         "label_smoothing": [0.0, 0.05, 0.1],
@@ -692,7 +735,7 @@ def mutate_config_dict(parent: dict) -> dict:
 
     mutation_pool = [
         ("scale_lr", lambda: cfg.update(lr=max(1e-5, min(0.01, cfg.get("lr", 1e-3) * random.choice([0.5, 0.7, 1.5, 2.0]))))),
-        ("longer_train", lambda: cfg.update(training_minutes=min(360, int(cfg.get("training_minutes", 15) * 2)))),
+        ("longer_train", lambda: cfg.update(training_minutes=min(480, int(cfg.get("training_minutes", 15) * 2)))),
         ("step_dim", lambda: step_along("dim_embeddings")),
         ("step_layers", lambda: step_along("num_transformer_layers")),
         ("step_ffn", lambda: step_along("feed_forward_layer")),
@@ -708,6 +751,8 @@ def mutate_config_dict(parent: dict) -> dict:
             ["noam", "warmup_exp_decay", "step_exp", "cosine", "trapezoidal"]))),
         ("toggle_qk_norm", lambda: cfg.update(qk_norm=not cfg.get("qk_norm", False))),
         ("toggle_tie_emb", lambda: cfg.update(tie_embeddings=not cfg.get("tie_embeddings", False))),
+        ("swap_ffn_act", lambda: cfg.update(ffn_activation=random.choice(["SWIGLU", "GEGLU", "REGLU", "SILU"]))),
+        ("swap_norm_placement", lambda: cfg.update(norm_placement=random.choice(["PRE", "POST", "SANDWICH", "PERI"]))),
     ]
 
     n_mutations = random.randint(1, 3)
@@ -738,7 +783,7 @@ def _pick_mutation_parent(state) -> Optional[dict]:
     return {**parent.model_config, **parent.training_config}
 
 
-TRAINING_TIME_LADDER = [15, 60, 120, 360]
+TRAINING_TIME_LADDER = [15, 60, 120, 240, 480]
 
 
 def _config_signature_no_time(model_cfg: dict, training_cfg: dict) -> str:
@@ -772,6 +817,18 @@ def _pick_extension_candidate(state) -> Optional[dict]:
         cfg["reasoning"] = f"extend top run #{parent.experiment_id} ({cur_max}min -> {next_rung}min)"
         return cfg
     return None
+
+
+def _promote_best_tag(dataset_name: str, source_tag: str) -> None:
+    from utils.checkpoints import StorageBox
+    storage = StorageBox(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+    )
+    src = os.path.join("checkpoints", "tags", source_tag, "latest.json")
+    dst = os.path.join("checkpoints", "tags", f"best-{dataset_name}", "latest.json")
+    storage.save_bytes(storage.load_bytes(src, use_cache=False), dst)
 
 
 def _gpus_are_stuck() -> bool:
@@ -930,7 +987,7 @@ Respond with JSON matching this schema exactly:
   "reasoning": "<your explanation>",
   "dim_embeddings": <int>, "num_attention_heads": <int>, "num_transformer_layers": <int>,
   "dropout": <float>, "feed_forward_layer": <int>, "bias": <bool>, "hc_n": <int>,
-  "transformer_layer": "<string>", "positional_embedding": "<string>", "normalization_layer": "<string>", "attention_type": "<string>", "qk_norm": <bool>, "label_smoothing": <float>, "tie_embeddings": <bool>, "init_std": <float>,
+  "transformer_layer": "<string>", "positional_embedding": "<string>", "normalization_layer": "<string>", "attention_type": "<string>", "qk_norm": <bool>, "ffn_activation": "<string>", "norm_placement": "<string>", "label_smoothing": <float>, "tie_embeddings": <bool>, "init_std": <float>,
   "optimizer_type": "<string>", "lr": <float>, "beta1": <float>, "beta2": <float>,
   "weight_decay": <float>, "max_grad_norm": <float>, "alpha": <float>, "momentum": <float>,
   "scheduler_type": "<string>", "warmup_steps": <int>, "flat_steps": <int>, "decay_steps": <int>, "min_lr_ratio": <float>,
@@ -1200,16 +1257,19 @@ class AutoparamLoop:
             config = None
             training_options = None
             config_error = None
+            is_extension = False
 
             for attempt in range(MAX_DEDUP_ATTEMPTS):
-                if self._llm_disabled or exp_id % RANDOM_EXPLORE_EVERY == 0:
-                    extension = _pick_extension_candidate(self.state) if attempt == 0 else None
+                is_extension = False
+                extension = _pick_extension_candidate(self.state) if attempt == 0 else None
+                if extension is not None:
+                    cand = extension
+                    cand_reason = cand.pop("reasoning")
+                    is_extension = True
+                    src = f"Extending top run: {cand_reason}"
+                elif self._llm_disabled or exp_id % RANDOM_EXPLORE_EVERY == 0:
                     parent = _pick_mutation_parent(self.state)
-                    if extension is not None:
-                        cand = extension
-                        cand_reason = cand.pop("reasoning")
-                        src = f"Extending top run: {cand_reason}"
-                    elif parent is not None and _random.random() < MUTATE_PROB:
+                    if parent is not None and _random.random() < MUTATE_PROB:
                         cand = mutate_config_dict(parent)
                         cand_reason = cand.pop("reasoning")
                         src = f"Mutated top run: {cand_reason}"
@@ -1323,6 +1383,8 @@ class AutoparamLoop:
                 "model_config": model_dict,
                 "training_config": training_dict,
                 "distributed_strategy": self.distributed_strategy.name,
+                "is_extension": is_extension,
+                "checkpoint_tag": f"autoparam-{self.dataset.name}-{exp_name}" if is_extension else None,
             }
             config_path = None
             result_path = None
@@ -1444,6 +1506,12 @@ class AutoparamLoop:
                     llm_reasoning=reasoning,
                 )
             )
+            if status == "success" and is_extension and self.state.best_experiment_id == exp_id:
+                try:
+                    _promote_best_tag(self.dataset.name, f"autoparam-{self.dataset.name}-{exp_name}")
+                    self._log(f"Promoted #{exp_id} to best-{self.dataset.name} tag")
+                except Exception as e:
+                    self._log(f"Failed to promote best tag: {e}")
             plot_progress(self.state, self.plot_path)
 
             best = self.state.best_record

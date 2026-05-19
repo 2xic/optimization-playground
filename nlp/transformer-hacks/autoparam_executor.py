@@ -66,6 +66,9 @@ def main():
     training_options = ConfigSerializer.dict_to_training_options(
         training_dict, timeout_minutes, strategy, device
     )
+    if cfg.get("is_extension") and cfg.get("checkpoint_tag"):
+        training_options.enable_checkpoints = True
+        training_options.checkpoint_tag = cfg["checkpoint_tag"]
 
     def _dist_log(msg):
         ts = time.strftime("%H:%M:%S")

@@ -21,6 +21,7 @@ import shutil
 from abc import ABC
 from utils.performance_benchmarker import Timer
 from .objectives import BaseObjective
+from .rho_loss import RhoLossConfig, RhoLossTagConfig, RhoLossEmaConfig, RhoLossSnapshotConfig  # noqa: F401
 from .optimizer import BaseOptimizerConfig, AdamConfig, Scheduler
 from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
@@ -156,6 +157,7 @@ class TrainingOptions:
     checkpoint_tag: Optional[str] = None
     enable_metrics: bool = False
     distributed_strategy: DistributedStrategy = field(default_factory=DistributedStrategy.from_env)
+    rho_loss: Optional["RhoLossConfig"] = None
 
     @property
     def sampling_timeout_minutes(self):
@@ -213,6 +215,19 @@ class BaseTrainer(ABC):
         self.checkpoint_interval = 60 * 60
         self.last_checkpoint = time.time()
         self._val_iter = None
+        self._rho_selector = None
+
+    def _maybe_init_rho_loss(self, training_options: "TrainingOptions", main_model=None, dtype=None):
+        if self._rho_selector is not None:
+            return
+        cfg = training_options.rho_loss
+        if cfg is None or cfg.ratio >= 1.0:
+            return
+        from .rho_loss import RhoLossSelector
+        self._rho_selector = RhoLossSelector.build(
+            cfg, main_model if main_model is not None else self.model, training_options.device, dtype=dtype,
+        )
+        self.log(f"RHO-Loss enabled: mode={self._rho_selector.mode} ratio={cfg.ratio}")
 
     def _run_validation(self, model, objective, training_options: TrainingOptions):
         val_loader = training_options.val_loader
@@ -433,6 +448,8 @@ class BaseTrainer(ABC):
                 non_blocking=True,
             ),
         )
+        if self._rho_selector is not None:
+            X, y = self._rho_selector.select(X, y, model, objective)
         y_predicted = model(X)
         loss = objective(y_predicted, y)
 
@@ -445,7 +462,8 @@ class BaseTrainer(ABC):
             self.optimizer.zero_grad(set_to_none=True)
             if self.lr_scheduler is not None:
                 self.lr_scheduler.step()
-
+            if self._rho_selector is not None:
+                self._rho_selector.update(model)
         self.total_batch_num += 1
         # Report metrics.
         if objective.has_evaluator:
@@ -496,6 +514,7 @@ class Trainer(BaseTrainer):
     ):
         self.log(f"Training on {training_options.device}")
         self.model.to(training_options.device)
+        self._maybe_init_rho_loss(training_options)
         if training_options.distributed_strategy == DistributedStrategy.DDP and dist.is_initialized():
             self.model = DDP(self.model, device_ids=[dist.get_rank()])
         elif training_options.distributed_strategy == DistributedStrategy.FSDP and dist.is_initialized():
@@ -613,6 +632,8 @@ class GradScalerTrainer(Trainer):
             self._original_model.to(training_options.device)
         else:
             self._original_model.to(training_options.device).to(self.type)
+        il_dtype = None if self.use_fsdp else self.type
+        self._maybe_init_rho_loss(training_options, main_model=self._original_model, dtype=il_dtype)
         torch.backends.cuda.enable_flash_sdp(True)
         torch.backends.cuda.enable_mem_efficient_sdp(True)
         torch.set_float32_matmul_precision("high")
@@ -651,6 +672,9 @@ class GradScalerTrainer(Trainer):
                         non_blocking=True,
                     ),
                 )
+            if self._rho_selector is not None:
+                with self.metrics_tracker.span("rho_select"):
+                    X, y = self._rho_selector.select(X, y, model, objective)
             with self.metrics_tracker.span("forward"):
                 y_predicted = model(X)
             with self.metrics_tracker.span("objective"):
@@ -683,6 +707,8 @@ class GradScalerTrainer(Trainer):
                     self.optimizer.zero_grad(set_to_none=True)
                     if stepped and self.lr_scheduler is not None:
                         self.lr_scheduler.step()
+                    if self._rho_selector is not None:
+                        self._rho_selector.update(self._original_model)
 
             self.total_batch_num += 1
 

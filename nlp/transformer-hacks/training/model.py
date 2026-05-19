@@ -18,6 +18,7 @@ from .layers import (
     SimpleMultiHeadAttention,
 )
 from dataclasses import dataclass, asdict, fields, replace
+from typing import Optional
 
 
 class PositionalEmbeddingType(Enum):
@@ -55,6 +56,20 @@ class AttentionType(Enum):
     MHA = 1
     GQA = 2
     MLA = 3
+
+
+class FFNActivation(Enum):
+    SWIGLU = 0
+    GEGLU = 1
+    REGLU = 2
+    SILU = 3
+
+
+class NormPlacement(Enum):
+    PRE = 0
+    POST = 1
+    SANDWICH = 2
+    PERI = 3
 
 
 class ReLUSquared(nn.Module):
@@ -97,6 +112,8 @@ class Config:
     label_smoothing: float = 0.0
     tie_embeddings: bool = True
     init_std: float = 0.02
+    ffn_activation: Optional[FFNActivation] = None
+    norm_placement: Optional[NormPlacement] = None
 
     def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
         self.positional_embedding = positional_embedding
@@ -149,9 +166,39 @@ class NormalizationLayer(nn.Module):
         return self.norm(X)
 
 
+def _ffn_apply(activation, h, gate_layer, X):
+    if activation == FFNActivation.SILU:
+        return F.silu(h)
+    g = gate_layer(X)
+    if activation is None or activation == FFNActivation.SWIGLU:
+        return F.silu(h) * g
+    if activation == FFNActivation.GEGLU:
+        return F.gelu(h) * g
+    if activation == FFNActivation.REGLU:
+        return F.relu(h) * g
+    raise Exception(f"Unknown ffn activation {activation}")
+
+
+def _residual_block(placement, X, sublayer, pre_norm, post_norm):
+    if placement is None or placement == NormPlacement.PRE:
+        return X + sublayer(pre_norm(X))
+    if placement == NormPlacement.POST:
+        return post_norm(X + sublayer(X))
+    if placement == NormPlacement.SANDWICH or placement == NormPlacement.PERI:
+        return X + post_norm(sublayer(pre_norm(X)))
+    raise Exception(f"Unknown norm placement {placement}")
+
+
+def _maybe_post_norm(config, size):
+    if config.norm_placement is None or config.norm_placement == NormPlacement.PRE:
+        return None
+    return NormalizationLayer(config, size)
+
+
 class LlamaFeedForward(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.activation = config.ffn_activation
         self.l1 = nn.Linear(
             config.dim_embeddings,
             config.feed_forward_layer,
@@ -163,14 +210,14 @@ class LlamaFeedForward(nn.Module):
             bias=config.bias,
         )
         self.l2._is_residual_proj = True
-        self.gate = nn.Linear(
+        self.gate = None if self.activation == FFNActivation.SILU else nn.Linear(
             config.dim_embeddings,
             config.feed_forward_layer,
             bias=config.bias,
         )
 
     def forward(self, X):
-        return self.l2(F.silu(self.l1(X) * self.gate(X)))
+        return self.l2(_ffn_apply(self.activation, self.l1(X), self.gate, X))
 
 
 # https://github.com/meta-llama/llama/blob/v2/llama/model.py#L132-L304
@@ -232,71 +279,69 @@ class _PlainAttentionWrapper(nn.Module):
 class Llama2TransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.placement = config.norm_placement
         self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_1_post = _maybe_post_norm(config, config.dim_embeddings)
         self.rope_attention = _build_attention(config, gqa=False)
         self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_2_post = _maybe_post_norm(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
-        first_half = self.rope_attention(self.norm_1(X), mask)
-        first_half += X
-        second_half = self.linear(self.norm_2(first_half))
-        second_half += first_half
-        return second_half
+        h = _residual_block(self.placement, X, lambda y: self.rope_attention(y, mask), self.norm_1, self.norm_1_post)
+        return _residual_block(self.placement, h, self.linear, self.norm_2, self.norm_2_post)
 
 
 class Llama3TransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.placement = config.norm_placement
         self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_1_post = _maybe_post_norm(config, config.dim_embeddings)
         self.rope_attention = _build_attention(config, gqa=True)
         self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_2_post = _maybe_post_norm(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
-        first_half = self.rope_attention(self.norm_1(X), mask)
-        first_half += X
-        second_half = self.linear(self.norm_2(first_half))
-        second_half += first_half
-        return second_half
+        h = _residual_block(self.placement, X, lambda y: self.rope_attention(y, mask), self.norm_1, self.norm_1_post)
+        return _residual_block(self.placement, h, self.linear, self.norm_2, self.norm_2_post)
 
 
 class DeepSeekLikeTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.placement = config.norm_placement
         self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_1_post = _maybe_post_norm(config, config.dim_embeddings)
         effective_attention = AttentionType.MLA if config.attention_type == AttentionType.DEFAULT else config.attention_type
         self.attention = _build_attention(replace(config, attention_type=effective_attention), gqa=False)
         self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_2_post = _maybe_post_norm(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
-        X_norm = self.norm_1(X)
-        first_half = self.attention(X_norm, mask)
-        first_half += X
-        second_half = self.linear(self.norm_2(first_half))
-        second_half += first_half
-        return second_half
+        h = _residual_block(self.placement, X, lambda y: self.attention(y, mask), self.norm_1, self.norm_1_post)
+        return _residual_block(self.placement, h, self.linear, self.norm_2, self.norm_2_post)
 
 
 class BertLikeTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.placement = config.norm_placement
         self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_1_post = _maybe_post_norm(config, config.dim_embeddings)
         self.attention = BidirectionalAttention(
             config.dim_embeddings,
             config.num_attention_heads,
         )
         self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_2_post = _maybe_post_norm(config, config.dim_embeddings)
         self.linear = LlamaFeedForward(config)
 
     def forward(self, X, mask):
-        X_norm = self.norm_1(X)
-        first_half = self.attention(X_norm, X_norm, X_norm, mask)
-        first_half += X
-        second_half = self.linear(self.norm_2(first_half))
-        second_half += first_half
-        return second_half
+        h = _residual_block(self.placement, X, lambda y: self.attention(y, y, y, mask), self.norm_1, self.norm_1_post)
+        return _residual_block(self.placement, h, self.linear, self.norm_2, self.norm_2_post)
 
 
 class GptTransformerLayer(nn.Module):
@@ -497,6 +542,7 @@ class HyperConnection(nn.Module):
 class OlmoFeedForward(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.activation = config.ffn_activation
         self.l1 = nn.Linear(
             config.dim_embeddings,
             config.feed_forward_layer,
@@ -508,30 +554,32 @@ class OlmoFeedForward(nn.Module):
             bias=False,
         )
         self.l2._is_residual_proj = True
-        self.gate = nn.Linear(
+        self.gate = None if self.activation == FFNActivation.SILU else nn.Linear(
             config.dim_embeddings,
             config.feed_forward_layer,
             bias=False,
         )
 
     def forward(self, X):
-        return self.l2(F.silu(self.l1(X) * self.gate(X)))
+        if self.activation is None:
+            return self.l2(F.silu(self.l1(X) * self.gate(X)))
+        return self.l2(_ffn_apply(self.activation, self.l1(X), self.gate, X))
 
 
 class OlmoTransformerLayer(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
+        self.placement = config.norm_placement
         self.norm_1 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_1_post = _maybe_post_norm(config, config.dim_embeddings)
         self.rope_attention = _build_attention(config, gqa=False)
         self.norm_2 = NormalizationLayer(config, config.dim_embeddings)
+        self.norm_2_post = _maybe_post_norm(config, config.dim_embeddings)
         self.linear = OlmoFeedForward(config)
 
     def forward(self, X, mask):
-        first_half = self.rope_attention(self.norm_1(X), mask)
-        first_half += X
-        second_half = self.linear(self.norm_2(first_half))
-        second_half += first_half
-        return second_half
+        h = _residual_block(self.placement, X, lambda y: self.rope_attention(y, mask), self.norm_1, self.norm_1_post)
+        return _residual_block(self.placement, h, self.linear, self.norm_2, self.norm_2_post)
 
 
 class OlmoTransformerLayerHyperConnectivity(nn.Module):
