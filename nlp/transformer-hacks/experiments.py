@@ -890,7 +890,7 @@ def fine_tuning():
 
 def continue_training_from_checkpoint():
     base_model_name = "fineweb-256"
-    checkpoint_tag = "pre-training-fineweb256"
+    checkpoint_tag = "autoparam-fineweb-256"
     # checkpoint_model = "checkpoints/2026-01-18/20260118_102043/step_570108"
     checkpoint_model = load_modeL_tag(checkpoint_tag)
     #    base_model, config = load_best_model_from_checkpoint(base_model_name)

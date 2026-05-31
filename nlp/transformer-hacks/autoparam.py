@@ -47,6 +47,9 @@ from experiments import (
     NAMED_DATASETS,
     TRAINING_TIME_MINUTES,
 )
+from scheduler.cooperative import install_shutdown_handler, shutdown_requested
+
+install_shutdown_handler()
 from training.model import (
     TransformerLayerType,
     PositionalEmbeddingType,
@@ -69,6 +72,7 @@ from training.optimizer import (
     TrapezoidalLR,
 )
 from utils.plot import Results
+from utils.checkpoints import should_checkpoint
 import matplotlib.pyplot as plt
 
 STABILITY_TAIL_FRACTION = 0.25
@@ -819,7 +823,7 @@ def _pick_extension_candidate(state) -> Optional[dict]:
     return None
 
 
-def _promote_best_tag(dataset_name: str, source_tag: str) -> None:
+def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy: float, metadata: Optional[dict] = None) -> bool:
     from utils.checkpoints import StorageBox
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
@@ -827,8 +831,68 @@ def _promote_best_tag(dataset_name: str, source_tag: str) -> None:
         password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
     )
     src = os.path.join("checkpoints", "tags", source_tag, "latest.json")
-    dst = os.path.join("checkpoints", "tags", f"best-{dataset_name}", "latest.json")
-    storage.save_bytes(storage.load_bytes(src, use_cache=False), dst)
+    dst_best = os.path.join("checkpoints", "tags", dataset_name, "best.json")
+    dst_latest = os.path.join("checkpoints", "tags", dataset_name, "latest.json")
+
+    prev_score = None
+    prev_accuracy = None
+    prev_payload = None
+    try:
+        prev_payload = json.loads(storage.load_bytes(dst_best, use_cache=False))
+        prev_score = float(prev_payload.get("score", float("-inf")))
+        prev_accuracy = float(prev_payload.get("accuracy", float("-inf")))
+    except Exception:
+        prev_payload = None
+
+    accuracy_ok = prev_accuracy is None or accuracy >= prev_accuracy
+    score_ok = prev_score is None or score > prev_score
+    is_new_best = accuracy_ok and score_ok
+
+    try:
+        latest_payload = json.loads(storage.load_bytes(src, use_cache=False))
+    except Exception:
+        latest_payload = None
+
+    if is_new_best:
+        payload = {
+            "score": float(score),
+            "accuracy": float(accuracy),
+            "previous_score": prev_score,
+            "previous_accuracy": prev_accuracy,
+            "source_tag": source_tag,
+            "promoted_at": datetime.now().isoformat(),
+            "pointer": latest_payload,
+            "metadata": metadata or {},
+        }
+    else:
+        payload = prev_payload or {}
+        payload["last_checked_at"] = datetime.now().isoformat()
+        payload["last_checked_score"] = float(score)
+        payload["last_checked_accuracy"] = float(accuracy)
+        payload["last_checked_rejected_reason"] = (
+            "accuracy_regression" if not accuracy_ok else "score_not_better"
+        )
+    storage.save_bytes(json.dumps(payload, indent=2).encode(), dst_best)
+    if latest_payload is not None:
+        storage.save_bytes(json.dumps(latest_payload, indent=2).encode(), dst_latest)
+    if is_new_best:
+        dst_history = os.path.join("checkpoints", "tags", dataset_name, "history.jsonl")
+        entry = {
+            "promoted_at": payload["promoted_at"],
+            "source_tag": source_tag,
+            "score": float(score),
+            "accuracy": float(accuracy),
+            "previous_score": prev_score,
+            "previous_accuracy": prev_accuracy,
+        }
+        try:
+            existing = storage.load_bytes(dst_history, use_cache=False)
+        except Exception:
+            existing = b""
+        storage.save_bytes(existing + (json.dumps(entry) + "\n").encode(), dst_history)
+    return is_new_best
+
+
 
 
 def _gpus_are_stuck() -> bool:
@@ -1175,9 +1239,13 @@ class AutoparamLoop:
         os.makedirs(os.path.dirname(self.plot_path), exist_ok=True)
         self._active_proc = None
         self._active_pgid = None
+        self._active_stop_file = None
+        self._stop_requested_at = None
+        self._stop_grace_seconds = int(os.environ.get("AUTOPARAM_STOP_GRACE_SECONDS", "1800"))
         import atexit
         atexit.register(self._kill_active_proc)
         signal.signal(signal.SIGTERM, self._signal_handler)
+        signal.signal(signal.SIGUSR1, self._forward_sigusr1)
 
         baseline_config = create_default_config(self.dataset)
         baseline_opts = TrainingOptions(
@@ -1201,6 +1269,18 @@ class AutoparamLoop:
     def _signal_handler(self, signum, frame):
         self._kill_active_proc()
         sys.exit(1)
+
+    def _forward_sigusr1(self, signum, frame):
+        from scheduler.cooperative import _flag
+        _flag.set()
+        self._stop_requested_at = time.time()
+        path = self._active_stop_file
+        print(f"[autoparam] SIGUSR1 received — writing stop file {path}", flush=True)
+        if path:
+            try:
+                open(path, "w").close()
+            except OSError as e:
+                print(f"[autoparam] stop file write failed: {e}", flush=True)
 
     @staticmethod
     def _config_hash(model_dict: dict, training_dict: dict) -> str:
@@ -1230,6 +1310,9 @@ class AutoparamLoop:
         consecutive_failures = 0
 
         for exp_id in range(start_id, self.max_experiments):
+            if shutdown_requested():
+                self._log("Shutdown signal received — exiting cleanly between experiments.")
+                break
             if _gpus_are_stuck():
                 self._log("ERROR: GPUs show high utilization but no running processes — likely a zombie GPU context. Reboot required. Aborting.")
                 break
@@ -1357,13 +1440,9 @@ class AutoparamLoop:
                         model_dict,
                         training_dict,
                         reasoning,
-                        "failed",
+                        "skipped",
                         f"Model too large: estimated {est_gb:.2f} GB > {budget_gb:.2f} GB budget",
                     )
-                    consecutive_failures += 1
-                    if consecutive_failures >= self.max_consecutive_failures:
-                        self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
-                        return
                     continue
             except Exception as e:
                 self._log(f"Meta-device size estimate failed (continuing anyway): {e}")
@@ -1384,7 +1463,7 @@ class AutoparamLoop:
                 "training_config": training_dict,
                 "distributed_strategy": self.distributed_strategy.name,
                 "is_extension": is_extension,
-                "checkpoint_tag": f"autoparam-{self.dataset.name}-{exp_name}" if is_extension else None,
+                "checkpoint_tag": f"autoparam-{self.dataset.name}" if should_checkpoint(is_extension) else None,
             }
             config_path = None
             result_path = None
@@ -1395,6 +1474,7 @@ class AutoparamLoop:
                     json.dump(config_data, f)
                     config_path = f.name
                 result_path = config_path.replace(".json", "_result.json")
+                stop_file = config_path.replace(".json", ".stop")
 
                 executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), "autoparam_executor.py")
                 cmd = [
@@ -1415,30 +1495,76 @@ class AutoparamLoop:
                 env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
                 env.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
                 env.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+                env["AUTOPARAM_STOP_FILE"] = stop_file
                 proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True, env=env)
                 log_file.close()
                 self._active_proc = proc
                 pgid = os.getpgid(proc.pid)
                 self._active_pgid = pgid
+                self._active_stop_file = stop_file
+                self._stop_requested_at = None
+                hard_deadline = time.time() + (training_options.training_timeout_minutes + 5) * 60
                 try:
-                    proc.wait(timeout=(training_options.training_timeout_minutes + 5) * 60)
-                except subprocess.TimeoutExpired:
-                    print(f"Experiment subprocess timed out after {training_options.training_timeout_minutes + 5} minutes, killing")
+                    while True:
+                        try:
+                            proc.wait(timeout=5)
+                            break
+                        except subprocess.TimeoutExpired:
+                            pass
+                        now = time.time()
+                        if now >= hard_deadline:
+                            print(
+                                f"Experiment subprocess past hard deadline ({training_options.training_timeout_minutes + 5} min), killing",
+                                flush=True,
+                            )
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except OSError:
+                                pass
+                            break
+                        if shutdown_requested() and not os.path.exists(stop_file):
+                            try:
+                                open(stop_file, "w").close()
+                            except OSError:
+                                pass
+                            try:
+                                os.killpg(pgid, signal.SIGUSR1)
+                            except OSError:
+                                pass
+                            if self._stop_requested_at is None:
+                                self._stop_requested_at = now
+                        if self._stop_requested_at and now - self._stop_requested_at >= self._stop_grace_seconds:
+                            self._log(
+                                f"Stop requested >{self._stop_grace_seconds}s ago, escalating to SIGKILL"
+                            )
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except OSError:
+                                pass
+                            break
                 except KeyboardInterrupt:
                     os.killpg(pgid, signal.SIGKILL)
                     proc.wait()
                     raise
                 finally:
-                    try:
-                        os.killpg(pgid, signal.SIGKILL)
-                    except OSError:
-                        pass
+                    if proc.poll() is None:
+                        try:
+                            os.killpg(pgid, signal.SIGKILL)
+                        except OSError:
+                            pass
                     try:
                         proc.wait(timeout=10)
                     except subprocess.TimeoutExpired:
                         pass
                     self._active_proc = None
                     self._active_pgid = None
+                    self._active_stop_file = None
+                    self._stop_requested_at = None
+                    if os.path.exists(stop_file):
+                        try:
+                            os.unlink(stop_file)
+                        except OSError:
+                            pass
                     time.sleep(15)
 
                 if os.path.exists(result_path):
@@ -1506,10 +1632,25 @@ class AutoparamLoop:
                     llm_reasoning=reasoning,
                 )
             )
-            if status == "success" and is_extension and self.state.best_experiment_id == exp_id:
+            if status == "success":
                 try:
-                    _promote_best_tag(self.dataset.name, f"autoparam-{self.dataset.name}-{exp_name}")
-                    self._log(f"Promoted #{exp_id} to best-{self.dataset.name} tag")
+                    acc = score.get("final_accuracy", -1.0)
+                    slope = score.get("accuracy_slope", 0.0)
+                    val_loss = score.get("val_loss")
+                    composite = acc + 0.5 * max(0.0, slope * 500)
+                    if val_loss is not None and math.isfinite(val_loss):
+                        composite -= 2.0 * float(val_loss)
+                    promoted = _promote_best_tag(
+                        "autoparam-pretrain",
+                        f"autoparam-{self.dataset.name}",
+                        composite,
+                        accuracy=float(acc),
+                        metadata={"experiment_id": exp_id, "exp_name": exp_name, "score": score},
+                    )
+                    if promoted:
+                        self._log(f"Promoted #{exp_id} to autoparam-pretrain (score={composite:.4f})")
+                    else:
+                        self._log(f"#{exp_id} not promoted (score={composite:.4f} did not beat stored best)")
                 except Exception as e:
                     self._log(f"Failed to promote best tag: {e}")
             plot_progress(self.state, self.plot_path)

@@ -30,6 +30,9 @@ from experiments import execute, NAMED_DATASETS
 from training.model import Model, SamplingMethod
 from training.trainer import DistributedStrategy
 from autoparam import ConfigSerializer, StabilityMetric
+from scheduler.cooperative import install_shutdown_handler
+install_shutdown_handler()
+from utils.checkpoints import apply_checkpoint_tag
 
 
 def main():
@@ -66,9 +69,7 @@ def main():
     training_options = ConfigSerializer.dict_to_training_options(
         training_dict, timeout_minutes, strategy, device
     )
-    if cfg.get("is_extension") and cfg.get("checkpoint_tag"):
-        training_options.enable_checkpoints = True
-        training_options.checkpoint_tag = cfg["checkpoint_tag"]
+    apply_checkpoint_tag(training_options, cfg)
 
     def _dist_log(msg):
         ts = time.strftime("%H:%M:%S")

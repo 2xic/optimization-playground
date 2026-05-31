@@ -26,10 +26,41 @@ class WebDataloaderMixture:
     def __len__(self):
         return sum(len(dl) for dl in self.dataloaders)
 
+    @property
+    def _batches_consumed(self):
+        return sum(dl._batches_consumed for dl in self.dataloaders)
+
+    @property
+    def total_batches(self):
+        return sum(dl.total_batches for dl in self.dataloaders)
+
+    @property
+    def _failed_fetches(self):
+        return sum(dl._failed_fetches for dl in self.dataloaders)
+
+    class _AggQueue:
+        def __init__(self, dls):
+            self._dls = dls
+        def qsize(self):
+            return sum(dl.batch_queue.qsize() for dl in self._dls)
+
+    @property
+    def batch_queue(self):
+        return WebDataloaderMixture._AggQueue(self.dataloaders)
+
+    def set_batch_size(self, batch_size):
+        for dl in self.dataloaders:
+            dl.set_batch_size(batch_size)
+
     def set_epoch(self, epoch):
         self.epoch = epoch
         for dl in self.dataloaders:
             dl.set_epoch(epoch)
+
+    def load_state_dict(self, epoch, batches_consumed):
+        self.epoch = epoch
+        for dl in self.dataloaders:
+            dl.load_state_dict(epoch=epoch, batches_consumed=batches_consumed)
 
     def __iter__(self) -> Iterator:
         self._iters = [iter(dl) for dl in self.dataloaders]

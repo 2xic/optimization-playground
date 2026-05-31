@@ -150,20 +150,20 @@ class BaseOptimizerConfig:
         return optimizer
 
 
-class _MuonGradClipWrapper:
-    def __init__(self, optimizer, max_grad_norm: float):
-        self._optimizer = optimizer
-        self._max_grad_norm = max_grad_norm
+def _attach_grad_clip(optimizer, max_grad_norm: float):
+    if not max_grad_norm or max_grad_norm <= 0:
+        return optimizer
+    orig_step = optimizer.step
 
-    def step(self, closure=None):
-        if self._max_grad_norm and self._max_grad_norm > 0:
-            all_params = [p for group in self._optimizer.param_groups for p in group["params"]]
-            if all_params:
-                torch.nn.utils.clip_grad_norm_(all_params, self._max_grad_norm)
-        return self._optimizer.step(closure)
+    def step(closure=None):
+        all_params = [p for group in optimizer.param_groups for p in group["params"]]
+        if all_params:
+            torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
+        return orig_step(closure)
 
-    def __getattr__(self, name):
-        return getattr(self._optimizer, name)
+    import types
+    optimizer.step = types.MethodType(lambda self, closure=None: step(closure), optimizer)
+    return optimizer
 
 
 @dataclass
@@ -193,7 +193,7 @@ class MuonConfig(BaseOptimizerConfig):
         ]
         opt = MuonWithAuxAdam(param_groups)
         if self.max_grad_norm and self.max_grad_norm > 0:
-            opt = _MuonGradClipWrapper(opt, self.max_grad_norm)
+            opt = _attach_grad_clip(opt, self.max_grad_norm)
         return opt
 
     def create_optimizer(self, params):
@@ -219,7 +219,7 @@ class RMSpropConfig(BaseOptimizerConfig):
             momentum=self.momentum,
         )
         if self.max_grad_norm and self.max_grad_norm > 0:
-            opt = _MuonGradClipWrapper(opt, self.max_grad_norm)
+            opt = _attach_grad_clip(opt, self.max_grad_norm)
         return opt
 
 

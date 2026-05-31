@@ -59,8 +59,7 @@ def load_model_from_path(base_model_path):
         io.BytesIO(storage.load_bytes(os.path.join(base_model_path, "model.pt"))),
         map_location=torch.device("cpu"),
     )
-    new_state_dict = {k.replace("module.", ""): v for k, v in weights.items()}
-    model.load_state_dict(new_state_dict)
+    model.load_state_dict(weights)
     print("Model loaded!")
     return (model, model_config)
 

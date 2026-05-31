@@ -135,17 +135,16 @@ class Config:
 
     @classmethod
     def from_json(cls, data: dict) -> "Config":
-        converted = {}
-        field_types = {f.name: f.type for f in fields(cls)}
+        import typing
 
-        for key, value in data.items():
-            field_type = field_types.get(key)
-            if isinstance(field_type, type) and issubclass(field_type, Enum):
-                converted[key] = field_type(value)
-            else:
-                converted[key] = value
+        def enum_cls(tp):
+            for t in (tp, *typing.get_args(tp)):
+                if isinstance(t, type) and issubclass(t, Enum):
+                    return t
+            return None
 
-        return cls(**converted)
+        enums = {f.name: enum_cls(f.type) for f in fields(cls)}
+        return cls(**{k: enums[k](v) if enums.get(k) and v is not None else v for k, v in data.items()})
 
 
 class NormalizationLayer(nn.Module):
@@ -381,7 +380,7 @@ class SimpleTransformerLayer(nn.Module):
             embed_dim=config.dim_embeddings,
             num_query_heads=config.num_attention_heads,
         )
-        self.module = nn.Sequential(
+        self.ffn = nn.Sequential(
             *[
                 nn.Linear(self.configs.dim_embeddings, self.configs.feed_forward_layer),
                 nn.ReLU(),
@@ -394,7 +393,7 @@ class SimpleTransformerLayer(nn.Module):
     def forward(self, X, mask):
         attn_output = self.get_attention_output(self.layer_norm_in(X), mask)
         first_half = X + attn_output
-        return first_half + self.module(self.layer_norm_out(first_half))
+        return first_half + self.ffn(self.layer_norm_out(first_half))
 
     def get_attention_output(self, X: torch.Tensor, mask):
         if self.configs.transformer_layer == TransformerLayerType.SIMPLE:
@@ -414,7 +413,7 @@ class SimpleAttentionAtHomeTransformerLayer(nn.Module):
             embed_dim=config.dim_embeddings,
             num_query_heads=config.num_attention_heads,
         )
-        self.module = nn.Sequential(
+        self.ffn = nn.Sequential(
             *[
                 nn.Linear(self.configs.dim_embeddings, self.configs.feed_forward_layer),
                 nn.ReLU(),
@@ -428,7 +427,7 @@ class SimpleAttentionAtHomeTransformerLayer(nn.Module):
         X_norm = self.layer_norm_in(X)
         attn_output = self.self_attention(X_norm, X_norm, X_norm, mask)
         first_half = X + attn_output
-        return first_half + self.module(self.layer_norm_out(first_half))
+        return first_half + self.ffn(self.layer_norm_out(first_half))
 
 
 # https://arxiv.org/pdf/2512.24880
@@ -732,6 +731,7 @@ class Model(nn.Module):
             3. Dense layer
         """
         padded_vocab = math.ceil(self.config.vocab_size / 128) * 128
+        self.config.vocab_size = padded_vocab
         self.embeddings = nn.Embedding(
             padded_vocab,
             self.config.dim_embeddings,

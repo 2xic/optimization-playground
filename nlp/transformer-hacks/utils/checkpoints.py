@@ -13,6 +13,17 @@ import stat
 from tqdm import tqdm
 import hashlib
 from functools import cache
+
+
+def should_checkpoint(is_extension: bool) -> bool:
+    return bool(is_extension) or bool(os.environ.get("AUTOPARAM_FORCE_CHECKPOINT"))
+
+
+def apply_checkpoint_tag(training_options, cfg: dict):
+    tag = cfg.get("checkpoint_tag")
+    if tag:
+        training_options.enable_checkpoints = True
+        training_options.checkpoint_tag = tag
 from concurrent.futures import ThreadPoolExecutor, Future
 import atexit
 import time
@@ -447,9 +458,9 @@ class StorageBoxCheckpoint(StorageBox):
             raw = json.dumps(data.to_json(), indent=2).encode("utf-8")
         return raw
 
-    def _serialize_torch(self, torch_state) -> bytes:
+    def _serialize_torch(self, state_dict) -> bytes:
         buffer = io.BytesIO()
-        torch.save(torch_state.state_dict(), buffer)
+        torch.save(state_dict, buffer)
         return gzip.compress(buffer.getvalue(), compresslevel=1)
 
     def _track(self, future: Future) -> Future:

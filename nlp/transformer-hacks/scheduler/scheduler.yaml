@@ -1,0 +1,17 @@
+mem_free_threshold_mb: 500
+cleanup_timeout_sec: 60
+jobs:
+  - name: finetune
+    script: autoparam_finetune.py
+    args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: pretrain
+    script: autoparam.py
+    args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"

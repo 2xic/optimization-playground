@@ -25,6 +25,15 @@ from .rho_loss import RhoLossConfig, RhoLossTagConfig, RhoLossEmaConfig, RhoLoss
 from .optimizer import BaseOptimizerConfig, AdamConfig, Scheduler
 from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
+from scheduler.cooperative import shutdown_requested, install_shutdown_handler
+import signal as _signal
+
+def _trainer_sigusr1(_signum, _frame):
+    print(f"[trainer pid={os.getpid()}] SIGUSR1 received — setting shutdown flag", flush=True)
+    from scheduler.cooperative import _flag
+    _flag.set()
+
+_signal.signal(_signal.SIGUSR1, _trainer_sigusr1)
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
 from utils.web_dataloader import WebDataloader
@@ -401,13 +410,13 @@ class BaseTrainer(ABC):
             training_options.metadata.total_batch_num = self.total_batch_num
             training_options.metadata.epoch_batch_count = epoch_batch_count
 
-            timeout = int(self.has_timeout(training_options))
+            timeout = int(self.has_timeout(training_options) or shutdown_requested())
             if dist.is_initialized():
                 t = torch.tensor(timeout, device=training_options.device)
                 dist.all_reduce(t, op=dist.ReduceOp.MAX)
                 timeout = t.item()
             if timeout:
-                self.log("Hit timeout")
+                self.log("Hit timeout or shutdown")
                 break
 
         return (
@@ -428,16 +437,27 @@ class BaseTrainer(ABC):
             dataset=self.metrics_tracker.dataset_name,
             metadata=training_options.metadata,
         )
-        self.checkpoints_tracker.checkpoint(
-            model,
-            self.optimizer,
-            model.config,
-            stats,
+        from torch.distributed.checkpoint.state_dict import (
+            get_model_state_dict,
+            get_optimizer_state_dict,
+            StateDictOptions,
         )
-        if training_options.checkpoint_tag is not None:
-            self.checkpoints_tracker.tag(
-                tag_name=training_options.checkpoint_tag, stats=stats
+        opts = StateDictOptions(full_state_dict=True, cpu_offload=True)
+        model_sd = get_model_state_dict(model, options=opts)
+        optim_sd = get_optimizer_state_dict(model, self.optimizer, options=opts)
+        underlying = model.module if hasattr(model, "module") else model
+        config = underlying.config
+        is_rank0 = (not dist.is_initialized()) or dist.get_rank() == 0
+        if is_rank0:
+            self.checkpoints_tracker.checkpoint(
+                model_sd, optim_sd, config, stats,
             )
+            if training_options.checkpoint_tag is not None:
+                self.checkpoints_tracker.tag(
+                    tag_name=training_options.checkpoint_tag, stats=stats
+                )
+        if dist.is_initialized():
+            dist.barrier()
         self.last_checkpoint = time.time()
 
     def forward(self, model, objective, X, y, training_options: TrainingOptions):
@@ -549,13 +569,13 @@ class Trainer(BaseTrainer):
             training_options.metadata.plots.record_epoch(
                 loss=avg_loss, accuracy=accuracy_pct
             )
-            timeout = int(self.has_timeout(training_options))
+            timeout = int(self.has_timeout(training_options) or shutdown_requested())
             if dist.is_initialized():
                 t = torch.tensor(timeout, device=training_options.device)
                 dist.all_reduce(t, op=dist.ReduceOp.MAX)
                 timeout = t.item()
             if timeout:
-                self.log("Hit timeout")
+                self.log("Hit timeout or shutdown")
                 break
         if training_options.enable_checkpoints:
             self.log("Storing checkpoints ...")
