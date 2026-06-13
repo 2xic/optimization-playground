@@ -5,11 +5,25 @@ jobs:
     script: autoparam_finetune.py
     args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
-    slot_minutes: 120
+    slot_minutes: 480
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
   - name: pretrain
     script: autoparam.py
+    args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 480
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: feedback
+    script: autoparam_feedback.py
+    args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: evm-triplet
+    script: autoparam_evm_triplet.py
     args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 120

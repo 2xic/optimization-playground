@@ -1,0 +1,32 @@
+mem_free_threshold_mb: 500
+cleanup_timeout_sec: 30
+quarantine_hours: 0.01
+jobs:
+  - name: pretrain
+    script: autoparam.py
+    args: ["--max-experiments", "-1", "--max-consecutive-failures", "1", "--random-only"]
+    gpus: -1
+    slot_minutes: 10
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: finetune
+    script: autoparam_finetune.py
+    args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "-1", "--max-consecutive-failures", "1", "--random-only"]
+    gpus: -1
+    slot_minutes: 10
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: feedback
+    script: autoparam_feedback.py
+    args: ["--max-experiments", "-1", "--max-consecutive-failures", "1", "--random-only"]
+    gpus: -1
+    slot_minutes: 10
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: evm-triplet
+    script: autoparam_evm_triplet.py
+    args: ["--max-experiments", "-1", "--max-consecutive-failures", "1", "--random-only"]
+    gpus: -1
+    slot_minutes: 10
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"

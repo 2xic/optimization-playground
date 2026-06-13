@@ -16,7 +16,7 @@ from functools import cache
 
 
 def should_checkpoint(is_extension: bool) -> bool:
-    return bool(is_extension) or bool(os.environ.get("AUTOPARAM_FORCE_CHECKPOINT"))
+    return bool(is_extension) or os.environ.get("AUTOPARAM_FORCE_CHECKPOINT", "").lower() in ("1", "true", "yes")
 
 
 def apply_checkpoint_tag(training_options, cfg: dict):

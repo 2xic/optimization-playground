@@ -195,9 +195,13 @@ def create_config(vocab_size, padding_index, sequence_length):
     )
 
 
-def batch_iterator(dataset):
+def default_batch_adapter(batch):
+    return batch["x_tokens"], batch["y_tokens"]
+
+
+def batch_iterator(dataset, adapter=default_batch_adapter):
     for batch in dataset:
-        yield batch["x_tokens"], batch["y_tokens"]
+        yield adapter(batch)
 
 
 class BaseTrainer(ABC):
@@ -225,6 +229,7 @@ class BaseTrainer(ABC):
         self.last_checkpoint = time.time()
         self._val_iter = None
         self._rho_selector = None
+        self.batch_adapter = default_batch_adapter
 
     def _maybe_init_rho_loss(self, training_options: "TrainingOptions", main_model=None, dtype=None):
         if self._rho_selector is not None:
@@ -262,7 +267,7 @@ class BaseTrainer(ABC):
                             batch = next(self._val_iter)
                         except StopIteration:
                             break
-                    X, y = batch["x_tokens"], batch["y_tokens"]
+                    X, y = self.batch_adapter(batch)
                     X = X.to(device, non_blocking=True)
                     y = y.to(device, non_blocking=True)
                     y_pred = model(X)
@@ -326,7 +331,7 @@ class BaseTrainer(ABC):
         model.train()
         has_tqdm_loader = isinstance(progress, tqdm)
         self.metrics_tracker.dataset_name = loader.name
-        iterator = batch_iterator(progress)
+        iterator = batch_iterator(progress, self.batch_adapter)
 
         if training_options.metadata.epoch == loader.epoch:
             sum_loss = training_options.metadata.sum_loss

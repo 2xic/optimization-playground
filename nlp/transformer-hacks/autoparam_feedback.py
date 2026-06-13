@@ -1,16 +1,13 @@
 """
-Autonomous LLM-guided hyperparameter optimization for stage-2 SFT.
+Autonomous LLM-guided hyperparameter optimization for feedback-256 binary classification.
 
-Takes a pretrained base LM checkpoint and searches over SFT hyperparameters,
-training on a chat/instruction mixture (smoltalk + everyday-conversations +
-self-oss-instruct). Scoring uses held-out chat val accuracy.
+Trains a binary classification head over feedback-256. Optionally initializes
+from a pretrained base LM checkpoint. Scoring uses held-out val_accuracy.
 
 Usage:
-    OPENROUTER_API_KEY=... python autoparam_finetune.py \
+    OPENROUTER_API_KEY=... python autoparam_feedback.py --max-experiments 50
+    OPENROUTER_API_KEY=... python autoparam_feedback.py \
         --pretrain-tag autoparam-fineweb-256 --max-experiments 50
-
-    OPENROUTER_API_KEY=... python autoparam_finetune.py \
-        --use-best-of fineweb-256 --max-experiments 50
 """
 
 import argparse
@@ -68,38 +65,34 @@ def _load_pretrain_arch(init_tag: str) -> dict:
             out[k] = v
     return out
 
+
 install_shutdown_handler()
 
 
-CHAT_TAG = "autoparam-finetune"
+FEEDBACK_TAG = "autoparam-feedback"
 
-_SFT_SYSTEM_PROMPT = f"""You are an expert ML researcher running autonomous hyperparameter optimization \
-for stage-2 SUPERVISED FINETUNING (SFT) of a PRETRAINED transformer LM on a chat/instruction mixture \
-(smoltalk + everyday-conversations + self-oss-instruct). The base model has already learned language; \
-your job is to turn it into a chatbot WITHOUT destroying that knowledge.
+_FB_SYSTEM_PROMPT = f"""You are an expert ML researcher running autonomous hyperparameter optimization \
+for BINARY CLASSIFICATION (BCE-with-logits) on the feedback-256 dataset. A transformer encoder produces \
+a pooled representation over input_ids; a linear head outputs one logit; the target `feedback` is in {{0,1}}.
 
-Goal: maximize held-out chat **val_accuracy** (and minimize val_loss) on the chat mixture.
+Goal: maximize held-out **val_accuracy** (and minimize val_loss / BCE).
 
 {SEARCH_SPACE_DESCRIPTION}
 
-SFT-specific guidance (READ CAREFULLY):
-- Learning rate should start ~10x LOWER than typical pretraining LR. Try lr in [0.00001, 0.0005]. \
-Large LR will catastrophically forget the base model.
-- Use FEWER total steps than pretraining. Prefer training_minutes in [15, 60, 120]. SFT converges fast.
-- Prefer SHORT warmup (100-500 steps) and cosine or warmup_exp_decay schedulers with small min_lr_ratio.
-- AdamW or Muon_hybrid with weight_decay 0.0-0.1 are good defaults.
-- Architecture changes (num_transformer_layers, dim_embeddings, num_attention_heads, \
-transformer_layer, positional_embedding) are STRONGLY DISCOURAGED — changing them forces \
-re-initialization of mismatched weights, throwing away the pretrained representations. \
-Only propose an arch change if you have a clear hypothesis that justifies the cost; \
-otherwise keep the architecture identical to the baseline (which mirrors the pretrain config).
-- Smaller batch_size (16-64) with accumulation_steps 1-4 is usually fine for SFT.
-- Dropout 0.0-0.05 is typical for SFT.
+Feedback-classification-specific guidance:
+- If initializing from a pretrained LM checkpoint, lr should be ~10x LOWER than pretraining. Try lr in \
+[0.00001, 0.0005]. If training from scratch, the typical range applies.
+- Prefer training_minutes in [30, 60, 120]. Classification on a small label set converges fast.
+- Short warmup (100-500 steps) and cosine or warmup_exp_decay schedulers with small min_lr_ratio.
+- AdamW with weight_decay 0.0-0.1 is a good default.
+- When init-from-pretrain is set, the architecture is LOCKED to the pretrain config — do not propose \
+architecture changes (they will be ignored). Focus on optimizer/lr/schedule/batch/dropout.
+- Smaller batch_size (16-64) with accumulation_steps 1-4 is usually fine.
+- Dropout 0.0-0.1 is typical.
 
 Hard constraints:
 - dim_embeddings MUST be divisible by num_attention_heads
 - All enum values must match exactly (case-sensitive)
-- lr must be between 0.0001 and 0.01 (the schema floor; for SFT prefer the low end)
 - Do not repeat a configuration nearly identical to one that already failed
 
 You will receive the experiment history and must respond with a single valid JSON object.
@@ -107,44 +100,47 @@ No markdown, no prose outside the JSON.
 """
 
 
-class SFTLLMProposer(LLMProposer):
+class FeedbackLLMProposer(LLMProposer):
     def propose(self, state, baseline_dict):
         import autoparam as _ap
         original = _ap._SYSTEM_PROMPT
-        _ap._SYSTEM_PROMPT = _SFT_SYSTEM_PROMPT
+        _ap._SYSTEM_PROMPT = _FB_SYSTEM_PROMPT
         try:
             return super().propose(state, baseline_dict)
         finally:
             _ap._SYSTEM_PROMPT = original
 
 
-def _resolve_init_tag(args) -> str:
+def _resolve_init_tag(args) -> Optional[str]:
     if args.pretrain_tag:
         return args.pretrain_tag
-    return f"best-{args.use_best_of}"
+    if args.use_best_of:
+        return f"best-{args.use_best_of}"
+    return None
 
 
-class FinetuneAutoparamLoop(AutoparamLoopBase):
-    LOG_PREFIX = "[autoparam-ft]"
-    EXP_NAME_PREFIX = "autoparam_ft"
-    EXECUTOR_SCRIPT = "autoparam_finetune_executor.py"
-    PROMOTE_NAMESPACE = CHAT_TAG
+class FeedbackAutoparamLoop(AutoparamLoopBase):
+    LOG_PREFIX = "[autoparam-feedback]"
+    EXP_NAME_PREFIX = "autoparam_fb"
+    EXECUTOR_SCRIPT = "autoparam_feedback_executor.py"
+    PROMOTE_NAMESPACE = FEEDBACK_TAG
     INCLUDES_DATASET_NAME_IN_CONFIG = False
-    BASELINE_BATCH_SIZE = 32
+    BASELINE_BATCH_SIZE = 64
 
-    def __init__(self, init_tag: str, state_path: str = "autoparam_finetune_state.json", **kwargs):
+    def __init__(self, init_tag: Optional[str], state_path: str = "autoparam_feedback_state.json", **kwargs):
         self.init_tag = init_tag
-        self.locked_arch = _load_pretrain_arch(init_tag)
-        print(f"{self.LOG_PREFIX} Locked arch from pretrain: {self.locked_arch}", flush=True)
+        self.locked_arch = _load_pretrain_arch(init_tag) if init_tag else {}
+        if self.locked_arch:
+            print(f"{self.LOG_PREFIX} Locked arch from pretrain: {self.locked_arch}", flush=True)
         super().__init__(
-            dataset=NAMED_DATASETS["smoltalk-256"],
+            dataset=NAMED_DATASETS["feedback_256"],
             state_path=state_path,
-            plot_subdir=CHAT_TAG,
+            plot_subdir=FEEDBACK_TAG,
             **kwargs,
         )
 
     def _make_proposer(self, model: str):
-        return SFTLLMProposer(model=model)
+        return FeedbackLLMProposer(model=model)
 
     def _post_init(self):
         for k, v in self.locked_arch.items():
@@ -158,7 +154,8 @@ class FinetuneAutoparamLoop(AutoparamLoopBase):
             cand[k] = v
 
     def _apply_locks_to_config(self, cfg_obj):
-        from enum import Enum
+        if not self.locked_arch:
+            return
         from training.model import (
             TransformerLayerType, PositionalEmbeddingType, NormalizationLayerType,
             AttentionType, FFNActivation, NormPlacement,
@@ -180,10 +177,10 @@ class FinetuneAutoparamLoop(AutoparamLoopBase):
                 setattr(cfg_obj, k, v)
 
     def _run_tag(self) -> str:
-        return "autoparam-finetune"
+        return "autoparam-feedback"
 
     def _extra_config_data(self) -> dict:
-        return {"init_from_tag": self.init_tag}
+        return {"init_from_tag": self.init_tag} if self.init_tag else {}
 
     def _extract_accuracy(self, score: dict) -> float:
         return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
@@ -222,14 +219,14 @@ class FinetuneAutoparamLoop(AutoparamLoopBase):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Autonomous SFT hyperparameter optimization")
-    init_group = parser.add_mutually_exclusive_group(required=True)
+    parser = argparse.ArgumentParser(description="Autonomous feedback-256 hyperparameter optimization")
+    init_group = parser.add_mutually_exclusive_group(required=False)
     init_group.add_argument("--pretrain-tag", help="Explicit pretrained checkpoint tag")
     init_group.add_argument("--use-best-of", metavar="DATASET",
                             help="Resolve to best-<DATASET> at startup (e.g. fineweb-256)")
     parser.add_argument("--max-experiments", type=lambda s: None if int(s) < 0 else int(s), default=50)
     parser.add_argument("--budget", type=float, default=5.00, metavar="USD")
-    parser.add_argument("--state-file", default="autoparam_finetune_state.json")
+    parser.add_argument("--state-file", default="autoparam_feedback_state.json")
     parser.add_argument("--distributed-strategy", default="fsdp", choices=["none", "ddp", "fsdp"])
     parser.add_argument(
         "--nproc-per-node", type=int,
@@ -254,16 +251,19 @@ if __name__ == "__main__":
         sys.exit(0)
 
     init_tag = _resolve_init_tag(args)
-    try:
-        resolved_path = load_modeL_tag(init_tag)
-        print(f"[autoparam-ft] Resolved init tag '{init_tag}' -> {resolved_path}", flush=True)
-    except Exception as e:
-        print(f"[autoparam-ft] ERROR: failed to resolve init tag '{init_tag}': {e}", flush=True)
-        sys.exit(1)
+    if init_tag:
+        try:
+            resolved_path = load_modeL_tag(init_tag)
+            print(f"[autoparam-feedback] Resolved init tag '{init_tag}' -> {resolved_path}", flush=True)
+        except Exception as e:
+            print(f"[autoparam-feedback] ERROR: failed to resolve init tag '{init_tag}': {e}", flush=True)
+            sys.exit(1)
+    else:
+        print("[autoparam-feedback] No pretrain init tag - training from scratch", flush=True)
 
     strategy = DistributedStrategy[args.distributed_strategy.upper()]
 
-    FinetuneAutoparamLoop(
+    FeedbackAutoparamLoop(
         init_tag=init_tag,
         max_experiments=args.max_experiments,
         experiment_timeout_minutes=args.timeout_minutes,

@@ -92,3 +92,66 @@ class NextTokenPrediction(BaseObjective):
         accuracy = correct_predictions.sum()
         total_valid_tokens = valid_mask.sum()
         return accuracy, total_valid_tokens
+
+
+class BinaryFeedbackClassification(BaseObjective):
+    def __init__(self, pos_weight: Optional[float] = None):
+        super().__init__()
+        self.pos_weight = pos_weight
+
+    def _flatten(self, y_predicted: torch.Tensor) -> torch.Tensor:
+        if y_predicted.dim() > 1:
+            y_predicted = y_predicted.squeeze(-1)
+        return y_predicted.float()
+
+    def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        logits = self._flatten(y_predicted)
+        target = y.float().view(-1)
+        pw = None
+        if self.pos_weight is not None:
+            pw = torch.tensor(self.pos_weight, device=logits.device, dtype=logits.dtype)
+        return torch.nn.functional.binary_cross_entropy_with_logits(
+            logits, target, pos_weight=pw
+        )
+
+    @property
+    def has_evaluator(self):
+        return True
+
+    def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
+        logits = self._flatten(y_predicted)
+        target = y.float().view(-1)
+        pred = (logits > 0).to(target.dtype)
+        correct = (pred == target).sum()
+        total = torch.tensor(target.numel(), device=logits.device)
+        return correct, total
+
+
+class TripletContrastive(BaseObjective):
+    def __init__(self, margin: float = 0.2):
+        super().__init__()
+        self.margin = margin
+
+    def _split(self, y_predicted: torch.Tensor):
+        b3, _ = y_predicted.shape
+        assert b3 % 3 == 0, f"triplet expects 3*B rows, got {b3}"
+        b = b3 // 3
+        return y_predicted[:b], y_predicted[b:2 * b], y_predicted[2 * b:]
+
+    def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        anchor, positive, negative = self._split(y_predicted)
+        return torch.nn.functional.triplet_margin_loss(
+            anchor.float(), positive.float(), negative.float(), margin=self.margin
+        )
+
+    @property
+    def has_evaluator(self):
+        return True
+
+    def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
+        anchor, positive, negative = self._split(y_predicted)
+        sim_pos = (anchor * positive).sum(-1)
+        sim_neg = (anchor * negative).sum(-1)
+        correct = (sim_pos > sim_neg).sum()
+        total = torch.tensor(anchor.shape[0], device=anchor.device)
+        return correct, total

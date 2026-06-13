@@ -229,6 +229,7 @@ class WebDataloader:
                     try:
                         result = task.result()
                     except Exception:
+                        logger.exception("Batch task failed")
                         self._failed_fetches += 1
                         continue
 
@@ -281,6 +282,7 @@ class WebDataloader:
             return result
 
         except Exception:
+            logger.exception("Fetch failed for url=%s", url)
             return self._empty_batch()
 
     def _empty_batch(self):

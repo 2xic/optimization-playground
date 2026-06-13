@@ -1208,35 +1208,53 @@ def plot_progress(state: AutoparamState, output_path: str):
     print(f"[autoparam] Progress plot saved: {output_path}")
 
 
-class AutoparamLoop:
+class AutoparamLoopBase:
+    """Shared LLM-guided autoparam loop. Subclasses override hooks for task-specific bits.
+
+    Override surface:
+      LOG_PREFIX, EXP_NAME_PREFIX, EXECUTOR_SCRIPT, PROMOTE_NAMESPACE,
+      INCLUDES_DATASET_NAME_IN_CONFIG, BASELINE_BATCH_SIZE,
+      _make_proposer, _post_init, _apply_locks_to_dict, _apply_locks_to_config,
+      _run_tag, _extra_config_data, _extract_accuracy,
+      _format_success_log, _format_best_log, _summary_sort_key, _format_summary_line.
+    """
+
+    LOG_PREFIX = "[autoparam]"
+    EXP_NAME_PREFIX = "autoparam"
+    EXECUTOR_SCRIPT = "autoparam_executor.py"
+    PROMOTE_NAMESPACE = "autoparam-pretrain"
+    INCLUDES_DATASET_NAME_IN_CONFIG = True
+    BASELINE_BATCH_SIZE = 1
+
     def __init__(
         self,
-        dataset_name: str,
-        max_experiments: int = 40,
+        dataset,
+        state_path: str,
+        max_experiments: Optional[int] = 40,
         experiment_timeout_minutes: int = 40,
-        state_path: Optional[str] = None,
         llm_model: str = LLM_MODEL,
         budget_usd: Optional[float] = None,
         distributed_strategy: DistributedStrategy = DistributedStrategy.FSDP,
         nproc_per_node: int = 1,
         max_consecutive_failures: int = 5,
         random_only: bool = False,
+        plot_subdir: Optional[str] = None,
     ):
-        if state_path is None:
-            state_path = f"autoparam_state_{dataset_name}.json"
+        self.dataset = dataset
         self.max_experiments = max_experiments
         self.budget_usd = budget_usd
         self.distributed_strategy = distributed_strategy
         self.nproc_per_node = nproc_per_node
         self.max_consecutive_failures = max_consecutive_failures
-        self.log_path = state_path.replace(".json", ".log")
         self.timeout = experiment_timeout_minutes
+        self.log_path = state_path.replace(".json", ".log")
         self.state = AutoparamState(state_path)
         self._llm_disabled = random_only
-        self.proposer = None if random_only else LLMProposer(model=llm_model)
-        self.dataset = NAMED_DATASETS[dataset_name]
-        self.plot_path = os.path.join("plots", dataset_name, "autoparam_progress.png")
+        self.proposer = None if random_only else self._make_proposer(llm_model)
+        subdir = plot_subdir or dataset.name
+        self.plot_path = os.path.join("plots", subdir, "autoparam_progress.png")
         os.makedirs(os.path.dirname(self.plot_path), exist_ok=True)
+
         self._active_proc = None
         self._active_pgid = None
         self._active_stop_file = None
@@ -1249,14 +1267,82 @@ class AutoparamLoop:
 
         baseline_config = create_default_config(self.dataset)
         baseline_opts = TrainingOptions(
-            batch_size=1,
+            batch_size=self.BASELINE_BATCH_SIZE,
             training_timeout_minutes=experiment_timeout_minutes,
         )
         self.baseline_dict = {
             **ConfigSerializer.config_to_dict(baseline_config),
             **ConfigSerializer.training_options_to_dict(baseline_opts),
         }
+        self._post_init()
 
+    # ---- Hooks ----
+    def _make_proposer(self, model: str):
+        return LLMProposer(model=model)
+
+    def _post_init(self):
+        """Called at end of __init__. Override to e.g. lock baseline arch."""
+        pass
+
+    def _apply_locks_to_dict(self, cand: dict):
+        pass
+
+    def _apply_locks_to_config(self, cfg_obj):
+        pass
+
+    def _exp_name(self, exp_id: int) -> str:
+        return f"{self.EXP_NAME_PREFIX}_{exp_id:03d}"
+
+    def _run_tag(self) -> str:
+        return f"autoparam-{self.dataset.name}"
+
+    def _extra_config_data(self) -> dict:
+        return {}
+
+    def _extract_accuracy(self, score: dict) -> float:
+        return float(score.get("final_accuracy", -1.0))
+
+    def _format_success_log(self, score: dict) -> str:
+        steps = score.get("steps_to_threshold", -1)
+        params_m = score.get("params_count", 0) / 1e6
+        pmem = score.get("peak_memory_gb", 0)
+        tokens = score.get("tokens_seen", 0)
+        return (
+            f"Result: accuracy={score['final_accuracy']:.2f}%  "
+            f"ppl={score.get('perplexity', 0):.1f}  "
+            f"slope={score.get('accuracy_slope', 0):.4f}  "
+            f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
+            f"stability={score['stability_score']:.3f}  "
+            f"params={params_m:.1f}M  peak_mem={pmem:.2f}GB  tokens={tokens:,}  "
+            f"val_acc={score.get('val_accuracy', float('nan')):.2f}%  "
+            f"val_loss={score.get('val_loss', float('nan')):.3f}  "
+            f"gap={score.get('overfit_gap', float('nan')):.2f}"
+        )
+
+    def _format_best_log(self, best) -> str:
+        return (
+            f"Best so far: #{best.experiment_id}  "
+            f"acc={best.score.get('final_accuracy', 0):.2f}%  "
+            f"ppl={best.score.get('perplexity', 0):.1f}  "
+            f"slope={best.score.get('accuracy_slope', 0):.4f}"
+        )
+
+    def _summary_sort_key(self, e):
+        return e.score.get("final_accuracy", 0)
+
+    def _format_summary_line(self, rank: int, e) -> str:
+        s = e.score
+        steps = s.get("steps_to_threshold", -1)
+        return (
+            f"  #{rank}  exp={e.experiment_id:03d}  "
+            f"acc={s.get('final_accuracy', 0):.2f}%  "
+            f"ppl={s.get('perplexity', 0):.1f}  "
+            f"slope={s.get('accuracy_slope', 0):.4f}  "
+            f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
+            f"stability={s.get('stability_score', 0):.3f}"
+        )
+
+    # ---- Lifecycle internals ----
     def _kill_active_proc(self):
         pgid = self._active_pgid
         if pgid is None:
@@ -1275,12 +1361,12 @@ class AutoparamLoop:
         _flag.set()
         self._stop_requested_at = time.time()
         path = self._active_stop_file
-        print(f"[autoparam] SIGUSR1 received — writing stop file {path}", flush=True)
+        print(f"{self.LOG_PREFIX} SIGUSR1 received — writing stop file {path}", flush=True)
         if path:
             try:
                 open(path, "w").close()
             except OSError as e:
-                print(f"[autoparam] stop file write failed: {e}", flush=True)
+                print(f"{self.LOG_PREFIX} stop file write failed: {e}", flush=True)
 
     @staticmethod
     def _config_hash(model_dict: dict, training_dict: dict) -> str:
@@ -1298,8 +1384,9 @@ class AutoparamLoop:
     def run(self):
         start_id = len(self.state.experiments)
         budget_msg = f"  Budget: ${self.budget_usd:.2f}" if self.budget_usd else ""
+        target_str = "∞" if self.max_experiments is None else str(self.max_experiments)
         print(
-            f"[autoparam] Starting from experiment {start_id}. Target: {self.max_experiments}. Timeout: {self.timeout}min each.{budget_msg}"
+            f"{self.LOG_PREFIX} Starting from experiment {start_id}. Target: {target_str}. Timeout: {self.timeout}min each.{budget_msg}"
         )
         if self.budget_usd and not self._llm_disabled:
             self._daily_spend_at_start = fetch_openrouter_daily_usage()
@@ -1309,14 +1396,16 @@ class AutoparamLoop:
                 )
         consecutive_failures = 0
 
-        for exp_id in range(start_id, self.max_experiments):
+        import itertools
+        loop_range = itertools.count(start_id) if self.max_experiments is None else range(start_id, self.max_experiments)
+        for exp_id in loop_range:
             if shutdown_requested():
                 self._log("Shutdown signal received — exiting cleanly between experiments.")
                 break
             if _gpus_are_stuck():
                 self._log("ERROR: GPUs show high utilization but no running processes — likely a zombie GPU context. Reboot required. Aborting.")
                 break
-            self._log(f"=== Experiment {exp_id + 1}/{self.max_experiments} ===")
+            self._log(f"=== Experiment {exp_id + 1}/{self.max_experiments if self.max_experiments is not None else '∞'} ===")
 
             if self.budget_usd and not self._llm_disabled:
                 daily = fetch_openrouter_daily_usage()
@@ -1381,7 +1470,9 @@ class AutoparamLoop:
                         src = f"Reasoning: {cand_reason}"
 
                 try:
+                    self._apply_locks_to_dict(cand)
                     cfg_obj = ConfigSerializer.dict_to_config(cand, self.dataset)
+                    self._apply_locks_to_config(cfg_obj)
                     to_obj = ConfigSerializer.dict_to_training_options(cand, self.timeout)
                     m_dict = ConfigSerializer.config_to_dict(cfg_obj)
                     t_dict = ConfigSerializer.training_options_to_dict(to_obj)
@@ -1451,20 +1542,22 @@ class AutoparamLoop:
                 f"Config: {json.dumps(model_dict)}  training: {json.dumps(training_dict)}"
             )
 
-            exp_name = f"autoparam_{exp_id:03d}"
+            exp_name = self._exp_name(exp_id)
             timestamp_start = datetime.now().isoformat()
             score, status, error_message = {}, "failed", None
 
             config_data = {
-                "dataset_name": self.dataset.name,
                 "exp_name": exp_name,
                 "timeout_minutes": training_options.training_timeout_minutes,
                 "model_config": model_dict,
                 "training_config": training_dict,
                 "distributed_strategy": self.distributed_strategy.name,
                 "is_extension": is_extension,
-                "checkpoint_tag": f"autoparam-{self.dataset.name}" if should_checkpoint(is_extension) else None,
+                "checkpoint_tag": self._run_tag() if should_checkpoint(is_extension) else None,
             }
+            if self.INCLUDES_DATASET_NAME_IN_CONFIG:
+                config_data["dataset_name"] = self.dataset.name
+            config_data.update(self._extra_config_data())
             config_path = None
             result_path = None
             try:
@@ -1476,7 +1569,7 @@ class AutoparamLoop:
                 result_path = config_path.replace(".json", "_result.json")
                 stop_file = config_path.replace(".json", ".stop")
 
-                executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), "autoparam_executor.py")
+                executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), self.EXECUTOR_SCRIPT)
                 cmd = [
                     "torchrun",
                     f"--nproc_per_node={self.nproc_per_node}",
@@ -1489,7 +1582,7 @@ class AutoparamLoop:
                 ]
                 log_path = result_path.replace("_result.json", "_run.log")
                 log_file = open(log_path, "w")
-                print(f"[autoparam] subprocess log: {log_path}", flush=True)
+                print(f"{self.LOG_PREFIX} subprocess log: {log_path}", flush=True)
                 env = os.environ.copy()
                 env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
                 env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
@@ -1581,21 +1674,7 @@ class AutoparamLoop:
                     self._log(f"Training failed: {error_message}")
                     consecutive_failures += 1
                 else:
-                    steps = score.get("steps_to_threshold", -1)
-                    params_m = score.get("params_count", 0) / 1e6
-                    pmem = score.get("peak_memory_gb", 0)
-                    tokens = score.get("tokens_seen", 0)
-                    self._log(
-                        f"Result: accuracy={score['final_accuracy']:.2f}%  "
-                        f"ppl={score.get('perplexity', 0):.1f}  "
-                        f"slope={score.get('accuracy_slope', 0):.4f}  "
-                        f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
-                        f"stability={score['stability_score']:.3f}  "
-                        f"params={params_m:.1f}M  peak_mem={pmem:.2f}GB  tokens={tokens:,}  "
-                        f"val_acc={score.get('val_accuracy', float('nan')):.2f}%  "
-                        f"val_loss={score.get('val_loss', float('nan')):.3f}  "
-                        f"gap={score.get('overfit_gap', float('nan')):.2f}"
-                    )
+                    self._log(self._format_success_log(score))
             except Exception as e:
                 import traceback
                 error_message = str(e)
@@ -1634,21 +1713,21 @@ class AutoparamLoop:
             )
             if status == "success":
                 try:
-                    acc = score.get("final_accuracy", -1.0)
+                    acc = self._extract_accuracy(score)
                     slope = score.get("accuracy_slope", 0.0)
                     val_loss = score.get("val_loss")
                     composite = acc + 0.5 * max(0.0, slope * 500)
                     if val_loss is not None and math.isfinite(val_loss):
                         composite -= 2.0 * float(val_loss)
                     promoted = _promote_best_tag(
-                        "autoparam-pretrain",
-                        f"autoparam-{self.dataset.name}",
+                        self.PROMOTE_NAMESPACE,
+                        self._run_tag(),
                         composite,
                         accuracy=float(acc),
                         metadata={"experiment_id": exp_id, "exp_name": exp_name, "score": score},
                     )
                     if promoted:
-                        self._log(f"Promoted #{exp_id} to autoparam-pretrain (score={composite:.4f})")
+                        self._log(f"Promoted #{exp_id} to {self.PROMOTE_NAMESPACE} (score={composite:.4f})")
                     else:
                         self._log(f"#{exp_id} not promoted (score={composite:.4f} did not beat stored best)")
                 except Exception as e:
@@ -1657,12 +1736,7 @@ class AutoparamLoop:
 
             best = self.state.best_record
             if best:
-                self._log(
-                    f"Best so far: #{best.experiment_id}  "
-                    f"acc={best.score.get('final_accuracy', 0):.2f}%  "
-                    f"ppl={best.score.get('perplexity', 0):.1f}  "
-                    f"slope={best.score.get('accuracy_slope', 0):.4f}"
-                )
+                self._log(self._format_best_log(best))
 
         self._print_summary()
 
@@ -1676,7 +1750,7 @@ class AutoparamLoop:
         self.state.add_experiment(
             ExperimentRecord(
                 experiment_id=exp_id,
-                name=f"autoparam_{exp_id:03d}",
+                name=self._exp_name(exp_id),
                 model_config=model_dict,
                 training_config=training_dict,
                 score={},
@@ -1690,7 +1764,7 @@ class AutoparamLoop:
 
     def _print_summary(self):
         successes = self.state.successful_experiments()
-        print(f"\n[autoparam] ═══ Summary ═══")
+        print(f"\n{self.LOG_PREFIX} ═══ Summary ═══")
         print(
             f"Total : {len(self.state.experiments)}  Successful : {len(successes)}  Failed : {len(self.state.experiments) - len(successes)}"
         )
@@ -1698,24 +1772,21 @@ class AutoparamLoop:
         if not successes:
             return
 
-        top = sorted(
-            successes, key=lambda e: e.score.get("final_accuracy", 0), reverse=True
-        )[:5]
+        top = sorted(successes, key=self._summary_sort_key, reverse=True)[:5]
         print(f"\n── Top {len(top)} ──")
         for rank, e in enumerate(top, 1):
-            s = e.score
-            steps = s.get("steps_to_threshold", -1)
-            print(
-                f"  #{rank}  exp={e.experiment_id:03d}  "
-                f"acc={s.get('final_accuracy', 0):.2f}%  "
-                f"ppl={s.get('perplexity', 0):.1f}  "
-                f"slope={s.get('accuracy_slope', 0):.4f}  "
-                f"steps_to_{int(STEPS_TO_ACCURACY_THRESHOLD)}pct={'never' if steps < 0 else steps}  "
-                f"stability={s.get('stability_score', 0):.3f}"
-            )
+            print(self._format_summary_line(rank, e))
             print(f"       model    : {json.dumps(e.model_config)}")
             print(f"       training : {json.dumps(e.training_config)}")
             print(f"       reasoning: {e.llm_reasoning}")
+
+
+class AutoparamLoop(AutoparamLoopBase):
+    def __init__(self, dataset_name: str, state_path: Optional[str] = None, **kwargs):
+        dataset = NAMED_DATASETS[dataset_name]
+        if state_path is None:
+            state_path = f"autoparam_{dataset_name}_state.json"
+        super().__init__(dataset=dataset, state_path=state_path, **kwargs)
 
 
 if __name__ == "__main__":
@@ -1725,7 +1796,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset", default=os.environ.get("TARGET_DATASET", "fineweb-256")
     )
-    parser.add_argument("--max-experiments", type=int, default=1_000)
+    parser.add_argument("--max-experiments", type=lambda s: None if int(s) < 0 else int(s), default=1_000, help="Pass -1 for unlimited")
     parser.add_argument(
         "--timeout-minutes",
         type=int,

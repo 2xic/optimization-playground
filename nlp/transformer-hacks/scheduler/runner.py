@@ -150,6 +150,36 @@ def tail_log(path: Path, n: int = 50) -> str:
         return f"<log tail failed: {e}>"
 
 
+def extract_error_excerpt(path: Path, tail_lines: int = 30) -> str:
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            chunk = min(size, 65536)
+            f.seek(size - chunk)
+            data = f.read().decode(errors="replace")
+        lines = data.splitlines()
+        for i in range(len(lines) - 1, -1, -1):
+            if "Traceback (most recent call last)" in lines[i]:
+                return "\n".join(lines[i:])
+        keywords = ("Error", "error:", "Exception", "FAILED", "CUDA out of memory", "RuntimeError")
+        hits = [l for l in lines if any(k in l for k in keywords)]
+        if hits:
+            return "\n".join(hits[-tail_lines:])
+        return "\n".join(lines[-tail_lines:])
+    except Exception as e:
+        return f"<error extract failed: {e}>"
+
+
+def log_error_excerpt(job_name: str, log_path: Path, rc: int, ran_seconds: float):
+    excerpt = extract_error_excerpt(log_path)
+    if not excerpt.strip():
+        return
+    log(f"!!! {job_name} failure detail (rc={rc}, ran={ran_seconds:.0f}s, log={log_path}):")
+    for line in excerpt.splitlines():
+        log(f"    | {line}")
+
+
 _active_proc = {"proc": None}
 
 
@@ -268,6 +298,9 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
         ran_seconds = time.time() - launch_time
         log(f"{job['name']} exited rc={rc} after {ran_seconds:.0f}s")
 
+        if rc != 0 or ran_seconds < quick_exit_seconds:
+            log_error_excerpt(job["name"], log_path, rc, ran_seconds)
+
         if sigusr1_sent:
             break
 
@@ -303,6 +336,8 @@ def cleanup(job: dict, mem_threshold: int, cleanup_timeout: int):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--max-cycles", type=int, default=0,
+                        help="exit cleanly after this many job slots (0 = run forever)")
     args = parser.parse_args()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -349,6 +384,9 @@ def main():
             quarantine_until[job["name"]] = time.time() + quarantine_sec
             log(f"quarantining {job['name']} for {cfg['quarantine_hours']}h")
         i += 1
+        if args.max_cycles and i >= args.max_cycles:
+            log(f"reached --max-cycles={args.max_cycles}, exiting cleanly")
+            return
 
 
 if __name__ == "__main__":

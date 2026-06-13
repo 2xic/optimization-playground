@@ -12,7 +12,7 @@ from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
 from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
-from training.objectives import NextTokenPrediction
+from training.objectives import NextTokenPrediction, BinaryFeedbackClassification, TripletContrastive
 from training.optimizer import (
     AdamConfig,
     AdamWConfig,
@@ -30,7 +30,7 @@ from optimization_playground_shared.nlp.utils.sampling import (
 import time
 import torch.multiprocessing as mp
 import torch
-from utils.web_dataloader import WebDataloader
+from utils.web_dataloader import WebDataloader, FloatColumn
 from dotenv import load_dotenv
 import torch.distributed as dist
 from dataclasses import dataclass
@@ -181,6 +181,22 @@ NAMED_DATASETS = {
             rank=rank,
             world_size=world_size,
         ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "feedback_256",
+            columns=["input_ids", FloatColumn("feedback")],
+            batch_size=_batch_size(64),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "evm-cluster_triplet-256",
+            columns=["anchor_tokens", "positive_tokens", "negative_tokens"],
+            batch_size=_batch_size(32),
+            rank=rank,
+            world_size=world_size,
+        ),
     ]
 }
 
@@ -243,6 +259,29 @@ def create_next_token_prediction_objective(
     return trainer
 
 
+def _build_trainer(model, objective, optimizer_config, lr_scheduler):
+    trainer_class = GradScalerTrainer if (USE_GRAD_SCALER and not isinstance(optimizer_config, MuonConfig)) else Trainer
+    if isinstance(optimizer_config, MuonConfig):
+        optimizer = optimizer_config.create_optimizer_named(model.named_parameters())
+    else:
+        optimizer = optimizer_config.create_optimizer(model.parameters())
+    if lr_scheduler is not None:
+        lr_scheduler.create_scheduler(optimizer)
+    return trainer_class(model, objective, optimizer, lr_scheduler=lr_scheduler)
+
+
+def create_feedback_classification_objective(
+    dataset, model, optimizer_config=AdamWConfig(), lr_scheduler=None
+):
+    return _build_trainer(model, BinaryFeedbackClassification(), optimizer_config, lr_scheduler)
+
+
+def create_triplet_contrastive_objective(
+    dataset, model, optimizer_config=AdamWConfig(), lr_scheduler=None
+):
+    return _build_trainer(model, TripletContrastive(), optimizer_config, lr_scheduler)
+
+
 def execute(
     dataset,
     experiment_variant,
@@ -251,6 +290,8 @@ def execute(
         epochs=EPOCHS,
         batch_size=32,
     ),
+    objective_factory=None,
+    batch_adapter=None,
 ):
     import gc
 
@@ -280,12 +321,15 @@ def execute(
             options.val_loader = None
     try:
         for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
-            trainer = create_next_token_prediction_objective(
+            factory = objective_factory or create_next_token_prediction_objective
+            trainer = factory(
                 dataset,
                 model,
                 options.optimizer,
                 options.lr_scheduler,
             )
+            if batch_adapter is not None:
+                trainer.batch_adapter = batch_adapter
             (accuracy, loss, step_acc, step_ls, epoch_at_step,
              val_acc, val_ls, val_at_step) = trainer.train(
                 dataset,
