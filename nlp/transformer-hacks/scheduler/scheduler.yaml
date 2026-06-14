@@ -29,3 +29,19 @@ jobs:
     slot_minutes: 120
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
+
+  - name: evm-selector-17
+    script: autoparam_evm_selector.py
+    args: ["--dataset", "evm-selector-bytecode-17", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 60
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+
+  - name: evm-selector-33
+    script: autoparam_evm_selector.py
+    args: ["--dataset", "evm-selector-bytecode-33", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 60
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"

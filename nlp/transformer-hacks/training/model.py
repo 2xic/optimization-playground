@@ -799,6 +799,14 @@ class Model(nn.Module):
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
 
     def forward(self, x: torch.Tensor):
+        return self.output_layer(self.get_hidden_states(x))
+
+    def embed(self, x):
+        hidden = self.get_hidden_states(x)
+        emb = hidden.mean(dim=1)
+        return F.normalize(emb, p=2, dim=-1)
+
+    def get_hidden_states(self, x: torch.Tensor):
         assert len(x.shape) == 2, f"X = {x.shape}"
         if self.config.transformer_layer in [
             TransformerLayerType.OLMO_HYPER_CONNECTIONS,
@@ -811,32 +819,13 @@ class Model(nn.Module):
             for layer in self.transformer_layers:
                 H = layer(H, self.mask)
             x = H.sum(dim=2)
-            x = self.layer_norm(x)
-            return self.output_layer(x)
-        else:
-            x = self.embeddings(x)
-            x = self.positional_embeddings(x)
-            x = self.dropout(x)
-            for layer in self.transformer_layers:
-                x = layer(x, self.mask)
-            # Output
-            x = self.layer_norm(x)
-            return self.output_layer(x)
-
-    def embed(self, x):
-        hidden = self.get_hidden_states(x)
-        emb = hidden.mean(dim=1)
-        return F.normalize(emb, p=2, dim=-1)
-
-    def get_hidden_states(self, x: torch.Tensor):
-        assert len(x.shape) == 2, f"X = {x.shape}"
+            return self.layer_norm(x)
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
         x = self.dropout(x)
         for layer in self.transformer_layers:
             x = layer(x, self.mask)
-        x = self.layer_norm(x)
-        return x
+        return self.layer_norm(x)
 
     @torch.no_grad()
     def generate(

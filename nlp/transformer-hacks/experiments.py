@@ -12,7 +12,7 @@ from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
 from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
-from training.objectives import NextTokenPrediction, BinaryFeedbackClassification, TripletContrastive
+from training.objectives import NextTokenPrediction, BinaryFeedbackClassification, TripletContrastive, MultiClassClassification
 from training.optimizer import (
     AdamConfig,
     AdamWConfig,
@@ -197,6 +197,22 @@ NAMED_DATASETS = {
             rank=rank,
             world_size=world_size,
         ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "evm-selector-bytecode-17",
+            columns=["window_tokens", "label"],
+            batch_size=_batch_size(256),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "evm-selector-bytecode-33",
+            columns=["window_tokens", "label"],
+            batch_size=_batch_size(128),
+            rank=rank,
+            world_size=world_size,
+        ),
     ]
 }
 
@@ -280,6 +296,15 @@ def create_triplet_contrastive_objective(
     dataset, model, optimizer_config=AdamWConfig(), lr_scheduler=None
 ):
     return _build_trainer(model, TripletContrastive(), optimizer_config, lr_scheduler)
+
+
+def create_selector_classification_objective(
+    dataset, model, optimizer_config=AdamWConfig(), lr_scheduler=None
+):
+    objective = MultiClassClassification(
+        label_smoothing=getattr(model.config, "label_smoothing", 0.0)
+    )
+    return _build_trainer(model, objective, optimizer_config, lr_scheduler)
 
 
 def execute(

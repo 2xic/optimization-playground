@@ -1395,6 +1395,7 @@ class AutoparamLoopBase:
                     f"OpenRouter daily spend at start: ${self._daily_spend_at_start:.4f}"
                 )
         consecutive_failures = 0
+        stopped_early = False
 
         import itertools
         loop_range = itertools.count(start_id) if self.max_experiments is None else range(start_id, self.max_experiments)
@@ -1513,7 +1514,8 @@ class AutoparamLoopBase:
                 consecutive_failures += 1
                 if consecutive_failures >= self.max_consecutive_failures:
                     self._log(f"Stopping early: {consecutive_failures} consecutive failures.")
-                    return
+                    stopped_early = True
+                    break
                 continue
 
             try:
@@ -1582,6 +1584,13 @@ class AutoparamLoopBase:
                 ]
                 log_path = result_path.replace("_result.json", "_run.log")
                 log_file = open(log_path, "w")
+                current_link = "/tmp/autoparam_current.log"
+                try:
+                    if os.path.islink(current_link) or os.path.exists(current_link):
+                        os.unlink(current_link)
+                    os.symlink(log_path, current_link)
+                except OSError:
+                    pass
                 print(f"{self.LOG_PREFIX} subprocess log: {log_path}", flush=True)
                 env = os.environ.copy()
                 env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
@@ -1695,6 +1704,7 @@ class AutoparamLoopBase:
                 self._log(
                     f"Stopping early: {consecutive_failures} consecutive failures."
                 )
+                stopped_early = True
                 break
 
             self.state.add_experiment(
@@ -1739,6 +1749,10 @@ class AutoparamLoopBase:
                 self._log(self._format_best_log(best))
 
         self._print_summary()
+
+        successful = sum(1 for r in self.state.experiments if r.status == "success")
+        if stopped_early or successful == 0:
+            sys.exit(1)
 
     def _log(self, text: str):
         line = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {text}"

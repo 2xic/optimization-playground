@@ -69,6 +69,7 @@ class StorageBox(metaclass=SingletonMeta):
 
         self.cache_dir = Path("/tmp/sftp_cache")
         self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self._evict_stale_cache()
 
         self.transport = paramiko.Transport((host, 23))
         self.transport.default_window_size = MAX_WINDOW_SIZE  # ~2GB
@@ -79,6 +80,15 @@ class StorageBox(metaclass=SingletonMeta):
 
         self.transport.connect(username=username, password=password)
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
+
+    def _evict_stale_cache(self, max_age_seconds: int = 86400):
+        cutoff = time.time() - max_age_seconds
+        for entry in self.cache_dir.iterdir():
+            try:
+                if entry.is_file() and entry.stat().st_mtime < cutoff:
+                    entry.unlink()
+            except OSError:
+                pass
 
     def _path_exists(self, path: str) -> bool:
         try:
@@ -126,6 +136,10 @@ class StorageBox(metaclass=SingletonMeta):
         if use_cache:
             cache_path = self.cache_dir / self._cache_key(path)
             if cache_path.exists():
+                try:
+                    os.utime(cache_path, None)
+                except OSError:
+                    pass
                 data = cache_path.read_bytes()
                 if data[:2] == b"\x1f\x8b":
                     data = gzip.decompress(data)

@@ -9,7 +9,7 @@ import requests
 import torch
 from typing import Iterator, List, Optional
 import aiohttp
-from aiohttp_retry import RetryClient, ExponentialRetry
+from aiohttp_retry import RetryClient, JitterRetry
 import ormsgpack
 import numpy as np
 from dataclasses import dataclass
@@ -200,9 +200,18 @@ class WebDataloader:
             limit=self.max_workers,
             limit_per_host=self.max_workers,
         )
-        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        timeout = aiohttp.ClientTimeout(
+            total=None, sock_connect=self.timeout, sock_read=self.timeout
+        )
 
-        retry_options = ExponentialRetry(attempts=5, start_timeout=2, max_timeout=30)
+        retry_options = JitterRetry(
+            attempts=8,
+            start_timeout=1.0,
+            max_timeout=30.0,
+            factor=2.0,
+            random_interval_size=2.0,
+            retry_all_server_errors=True,
+        )
         async with RetryClient(
             connector=connector, timeout=timeout, retry_options=retry_options
         ) as session:

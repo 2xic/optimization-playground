@@ -127,6 +127,39 @@ class BinaryFeedbackClassification(BaseObjective):
         return correct, total
 
 
+class MultiClassClassification(BaseObjective):
+    def __init__(self, label_smoothing: float = 0.0, class_weights: Optional[list] = None):
+        super().__init__()
+        self.label_smoothing = label_smoothing
+        self.class_weights = class_weights
+
+    def _weight(self, logits: torch.Tensor) -> Optional[torch.Tensor]:
+        if self.class_weights is None:
+            return None
+        return torch.tensor(self.class_weights, device=logits.device, dtype=logits.dtype)
+
+    def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        logits = y_predicted.float()
+        target = y.long().view(-1)
+        return torch.nn.functional.cross_entropy(
+            logits, target,
+            weight=self._weight(logits),
+            label_smoothing=self.label_smoothing,
+        )
+
+    @property
+    def has_evaluator(self):
+        return True
+
+    def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
+        logits = y_predicted.float()
+        target = y.long().view(-1)
+        pred = logits.argmax(dim=-1)
+        correct = (pred == target).sum()
+        total = torch.tensor(target.numel(), device=logits.device)
+        return correct, total
+
+
 class TripletContrastive(BaseObjective):
     def __init__(self, margin: float = 0.2):
         super().__init__()

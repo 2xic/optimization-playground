@@ -223,6 +223,7 @@ class BaseTrainer(ABC):
             safety_margin=0.15,
             window_size=128,
         )
+        self.static_shapes = os.environ.get("TRAINER_STATIC_SHAPES") == "1"
         # Do a checkpoint each hour.
         self.start = time.time()
         self.checkpoint_interval = 60 * 60
@@ -380,7 +381,7 @@ class BaseTrainer(ABC):
                     training_options, model, sum_loss, sum_accuracy, count_rows, epoch_batch_count
                 )
 
-            if self.sizer.record_step(training_options.device):
+            if not self.static_shapes and self.sizer.record_step(training_options.device):
                 # Update the batch size if needed
                 training_options.batch_size = self.sizer.get_batch_size()
                 loader.set_batch_size(self.sizer.get_batch_size())
@@ -667,8 +668,9 @@ class GradScalerTrainer(Trainer):
             capability = torch.cuda.get_device_capability(training_options.device)
             if capability[0] >= 7:
                 try:
-                    compiled = torch.compile(self.model, dynamic=True)
-                    dummy = torch.zeros(1, self._original_model.config.sequence_length, dtype=torch.long, device=training_options.device)
+                    compiled = torch.compile(self.model, dynamic=not self.static_shapes)
+                    warm_batch = training_options.batch_size if self.static_shapes else 1
+                    dummy = torch.zeros(warm_batch, self._original_model.config.sequence_length, dtype=torch.long, device=training_options.device)
                     with torch.no_grad():
                         compiled(dummy)
                     del dummy

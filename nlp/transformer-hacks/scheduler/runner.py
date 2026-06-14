@@ -26,6 +26,9 @@ LOG_DIR = PKG_DIR / "logs"
 STATUS_FILE = PKG_DIR / "status.json"
 DEFAULT_CONFIG = PKG_DIR / "scheduler.yaml"
 SCHEDULER_LOG = PKG_DIR / "scheduler.log"
+INBOX_DIR = PKG_DIR / "inbox"
+INBOX_DONE = INBOX_DIR / "done"
+INBOX_FAILED = INBOX_DIR / "failed"
 
 _logger = None
 
@@ -99,26 +102,30 @@ def load_config(path: Path) -> dict:
     return cfg
 
 
+def _validate_job(j: dict, gpus_total: int):
+    for required in ("name", "script", "gpus"):
+        if required not in j:
+            raise SystemExit(f"job missing field '{required}': {j}")
+    if j["gpus"] == -1:
+        j["gpus"] = gpus_total
+    if j["gpus"] <= 0 or j["gpus"] > gpus_total:
+        raise SystemExit(
+            f"job '{j['name']}' requests {j['gpus']} GPUs; only {gpus_total} available"
+        )
+    if "slot_minutes" not in j:
+        raise SystemExit(f"job '{j['name']}' missing slot_minutes")
+    j["slot_minutes"] = float(j["slot_minutes"])
+    if j["slot_minutes"] <= 0:
+        raise SystemExit(f"job '{j['name']}' has non-positive slot_minutes")
+    j.setdefault("args", [])
+    j.setdefault("pass_nproc_per_node", True)
+
+
 def validate(cfg: dict, gpus_total: int):
     if gpus_total <= 0:
         raise SystemExit("no GPUs detected via nvidia-smi -L")
     for j in cfg["jobs"]:
-        for required in ("name", "script", "gpus"):
-            if required not in j:
-                raise SystemExit(f"job missing field '{required}': {j}")
-        if j["gpus"] == -1:
-            j["gpus"] = gpus_total
-        if j["gpus"] <= 0 or j["gpus"] > gpus_total:
-            raise SystemExit(
-                f"job '{j['name']}' requests {j['gpus']} GPUs; only {gpus_total} available"
-            )
-        if "slot_minutes" not in j:
-            raise SystemExit(f"job '{j['name']}' missing slot_minutes")
-        j["slot_minutes"] = float(j["slot_minutes"])
-        if j["slot_minutes"] <= 0:
-            raise SystemExit(f"job '{j['name']}' has non-positive slot_minutes")
-        j.setdefault("args", [])
-        j.setdefault("pass_nproc_per_node", True)
+        _validate_job(j, gpus_total)
 
 
 class Status:
@@ -207,30 +214,36 @@ def _shutdown_handler(signum, _frame):
     sys.exit(0)
 
 
+def build_cmd_env(job: dict, gpus: int, slot_minutes: float):
+    cuda_visible = ",".join(str(i) for i in range(gpus))
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = cuda_visible
+    env.setdefault("TRAINING_TIME_MINUTES", str(max(1, int(slot_minutes) - 5)))
+    for k, v in (job.get("env") or {}).items():
+        env[str(k)] = str(v)
+    extra = []
+    if job.get("pass_nproc_per_node", True) and not any(
+        str(a).startswith("--nproc_per_node") or str(a).startswith("--nproc-per-node")
+        for a in job["args"]
+    ):
+        extra = [f"--nproc-per-node={gpus}"]
+    cmd = ["python3", "-u", job["script"]] + [str(a) for a in job["args"]] + extra
+    return cmd, env, cuda_visible
+
+
 def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int,
              max_quick_exits: int, quick_exit_seconds: int, keep_job_logs: int,
-             stop_grace_seconds: int) -> bool:
+             stop_grace_seconds: int, preempt_check=None):
     slot_deadline = time.time() + job["slot_minutes"] * 60
-    cuda_visible = ",".join(str(i) for i in range(job["gpus"]))
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     _prune_job_logs(job["name"], keep_job_logs)
     quick_exits = 0
+    preempted = False
 
     while time.time() < slot_deadline:
         ts = time.strftime("%Y%m%d-%H%M%S")
         log_path = LOG_DIR / f"{job['name']}-{ts}.log"
-        env = os.environ.copy()
-        env["CUDA_VISIBLE_DEVICES"] = cuda_visible
-        env.setdefault("TRAINING_TIME_MINUTES", str(max(1, int(job["slot_minutes"]) - 5)))
-        for k, v in (job.get("env") or {}).items():
-            env[str(k)] = str(v)
-        extra = []
-        if job.get("pass_nproc_per_node", True) and not any(
-            str(a).startswith("--nproc_per_node") or str(a).startswith("--nproc-per-node")
-            for a in job["args"]
-        ):
-            extra = [f"--nproc-per-node={job['gpus']}"]
-        cmd = ["python3", "-u", job["script"]] + [str(a) for a in job["args"]] + extra
+        cmd, env, cuda_visible = build_cmd_env(job, job["gpus"], job["slot_minutes"])
         log(f"launching {job['name']}: {' '.join(cmd)} (CUDA_VISIBLE_DEVICES={cuda_visible})")
         log(f"  log: {log_path}")
 
@@ -272,6 +285,15 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
                         pass
                     sigusr1_sent = True
                     sigusr1_time = now
+                elif not sigusr1_sent and preempt_check is not None and preempt_check():
+                    log(f"inbox job queued — preempting {job['name']} early (SIGUSR1 pgid {proc.pid})")
+                    try:
+                        os.killpg(proc.pid, signal.SIGUSR1)
+                    except ProcessLookupError:
+                        pass
+                    sigusr1_sent = True
+                    sigusr1_time = now
+                    preempted = True
                 elif sigusr1_sent and not killed and now - sigusr1_time >= stop_grace_seconds:
                     log(
                         f"grace period {stop_grace_seconds}s expired — escalating to SIGKILL on pgid {proc.pid}"
@@ -310,12 +332,12 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
             if quick_exits >= max_quick_exits:
                 log(f"hit {max_quick_exits} quick exits in a row — abandoning slot, advancing to next job")
                 cleanup(job, mem_threshold, cleanup_timeout)
-                return True
+                return True, False
         else:
             quick_exits = 0
 
     cleanup(job, mem_threshold, cleanup_timeout)
-    return False
+    return False, preempted
 
 
 def cleanup(job: dict, mem_threshold: int, cleanup_timeout: int):
@@ -326,11 +348,143 @@ def cleanup(job: dict, mem_threshold: int, cleanup_timeout: int):
     deadline = time.time() + cleanup_timeout
     while time.time() < deadline:
         mem = gpu_memory_used_mb()
-        if mem and all(m < mem_threshold for m in mem[: job["gpus"]]):
-            log(f"GPUs clean: {mem[: job['gpus']]} MB")
+        n = job["gpus"] if job["gpus"] and job["gpus"] > 0 else len(mem)
+        if mem and all(m < mem_threshold for m in mem[:n]):
+            log(f"GPUs clean: {mem[:n]} MB")
             return
         time.sleep(2)
     log(f"WARNING: cleanup timeout — GPU memory still: {gpu_memory_used_mb()}")
+
+
+def next_inbox_file():
+    if not INBOX_DIR.exists():
+        return None
+    files = [p for p in INBOX_DIR.glob("*.yaml") if p.is_file()]
+    if not files:
+        return None
+    return min(files, key=lambda p: p.stat().st_mtime)
+
+
+def _move_inbox(path: Path, dest_dir: Path):
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    target = dest_dir / f"{ts}-{path.name}"
+    try:
+        path.replace(target)
+    except Exception as e:
+        log(f"[inbox] move {path.name} failed: {e}")
+
+
+def run_inbox_job(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int,
+                  keep_job_logs: int, stop_grace_seconds: int) -> bool:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    _prune_job_logs(job["name"], keep_job_logs)
+    deadline = time.time() + job["slot_minutes"] * 60
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    log_path = LOG_DIR / f"{job['name']}-{ts}.log"
+    cmd, env, cuda_visible = build_cmd_env(job, job["gpus"], job["slot_minutes"])
+    log(f"[inbox] launching {job['name']}: {' '.join(cmd)} (CUDA_VISIBLE_DEVICES={cuda_visible})")
+    log(f"  log: {log_path}")
+
+    started = datetime.now().isoformat(timespec="seconds")
+    launch_time = time.time()
+    with open(log_path, "ab") as lf:
+        proc = subprocess.Popen(
+            cmd, cwd=str(APP_DIR), env=env, stdout=lf,
+            stderr=subprocess.STDOUT, start_new_session=True,
+        )
+    _active_proc["proc"] = proc
+    status.current = {
+        "job": f"inbox:{job['name']}",
+        "pid": proc.pid,
+        "started_at": started,
+        "slot_deadline": datetime.fromtimestamp(deadline).isoformat(timespec="seconds"),
+        "log": str(log_path),
+    }
+    status.write()
+
+    sigusr1_sent = False
+    sigusr1_time = None
+    killed = False
+    while True:
+        try:
+            rc = proc.wait(timeout=5)
+            break
+        except subprocess.TimeoutExpired:
+            now = time.time()
+            if not sigusr1_sent and now >= deadline:
+                log(f"[inbox] {job['name']} hit slot cap — SIGUSR1 pgid {proc.pid}")
+                try:
+                    os.killpg(proc.pid, signal.SIGUSR1)
+                except ProcessLookupError:
+                    pass
+                sigusr1_sent = True
+                sigusr1_time = now
+            elif sigusr1_sent and not killed and now - sigusr1_time >= stop_grace_seconds:
+                log(f"[inbox] grace expired — SIGKILL pgid {proc.pid}")
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                killed = True
+
+    _active_proc["proc"] = None
+    ran_seconds = time.time() - launch_time
+    ended = datetime.now().isoformat(timespec="seconds")
+    status.history.append({
+        "job": f"inbox:{job['name']}",
+        "started": started,
+        "ended": ended,
+        "exit_code": rc,
+        "error": tail_log(log_path) if rc != 0 else None,
+        "cooperative_shutdown": sigusr1_sent,
+    })
+    status.current = None
+    status.write()
+    log(f"[inbox] {job['name']} exited rc={rc} after {ran_seconds:.0f}s")
+    if rc != 0:
+        log_error_excerpt(job["name"], log_path, rc, ran_seconds)
+    cleanup(job, mem_threshold, cleanup_timeout)
+    return rc == 0
+
+
+def process_inbox_file(path: Path, status: Status, cfg: dict, gpus_total: int):
+    log(f"=== inbox steal: {path.name} ===")
+    try:
+        data = yaml.safe_load(path.read_text())
+    except Exception as e:
+        log(f"[inbox] failed to parse {path.name}: {e} — moving to failed/")
+        _move_inbox(path, INBOX_FAILED)
+        return
+    if isinstance(data, dict) and "jobs" in data:
+        jobs = data["jobs"]
+    elif isinstance(data, list):
+        jobs = data
+    elif isinstance(data, dict):
+        jobs = [data]
+    else:
+        log(f"[inbox] {path.name} has no jobs — moving to failed/")
+        _move_inbox(path, INBOX_FAILED)
+        return
+    try:
+        for j in jobs:
+            j.setdefault("gpus", -1)
+            j.setdefault("slot_minutes", 30)
+            _validate_job(j, gpus_total)
+    except SystemExit as e:
+        log(f"[inbox] invalid job in {path.name}: {e} — moving to failed/")
+        _move_inbox(path, INBOX_FAILED)
+        return
+    all_ok = True
+    for j in jobs:
+        ok = run_inbox_job(
+            j, status, cfg["mem_free_threshold_mb"], cfg["cleanup_timeout_sec"],
+            cfg["keep_job_logs"], cfg["stop_grace_seconds"],
+        )
+        all_ok = all_ok and ok
+    dest = INBOX_DONE if all_ok else INBOX_FAILED
+    _move_inbox(path, dest)
+    log(f"=== inbox done: {path.name} → {dest.name}/ ({'ok' if all_ok else 'had failures'}) ===")
 
 
 def main():
@@ -341,6 +495,7 @@ def main():
     args = parser.parse_args()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    INBOX_DIR.mkdir(parents=True, exist_ok=True)
     _init_logger()
 
     cfg = load_config(args.config)
@@ -359,6 +514,10 @@ def main():
     quarantine_sec = cfg["quarantine_hours"] * 3600
     i = 0
     while True:
+        inbox = next_inbox_file()
+        if inbox is not None:
+            process_inbox_file(inbox, status, cfg, gpus_total)
+            continue
         job = jobs[i % len(jobs)]
         now = time.time()
         if quarantine_until[job["name"]] > now:
@@ -373,13 +532,18 @@ def main():
             continue
         log(f"=== slot start: {job['name']} ({job['slot_minutes']:.1f}m) ===")
         try:
-            abandoned = run_slot(job, status, cfg["mem_free_threshold_mb"], cfg["cleanup_timeout_sec"],
-                                 cfg["max_quick_exits"], cfg["quick_exit_seconds"],
-                                 cfg["keep_job_logs"], cfg["stop_grace_seconds"])
+            abandoned, preempted = run_slot(
+                job, status, cfg["mem_free_threshold_mb"], cfg["cleanup_timeout_sec"],
+                cfg["max_quick_exits"], cfg["quick_exit_seconds"],
+                cfg["keep_job_logs"], cfg["stop_grace_seconds"],
+                preempt_check=lambda: next_inbox_file() is not None)
         except Exception as e:
             log(f"run_slot raised: {e}")
             cleanup(job, cfg["mem_free_threshold_mb"], cfg["cleanup_timeout_sec"])
-            abandoned = True
+            abandoned, preempted = True, False
+        if preempted:
+            log(f"{job['name']} preempted by inbox — will resume after draining inbox")
+            continue
         if abandoned:
             quarantine_until[job["name"]] = time.time() + quarantine_sec
             log(f"quarantining {job['name']} for {cfg['quarantine_hours']}h")
