@@ -539,24 +539,43 @@ class Trainer(BaseTrainer):
         progress=lambda x: tqdm(x, mininterval=1),
     ):
         self.log(f"Training on {training_options.device}")
-        self.model.to(training_options.device)
+        is_fsdp = (
+            training_options.distributed_strategy == DistributedStrategy.FSDP
+            and dist.is_initialized()
+        )
+        if not is_fsdp:
+            self.model.to(training_options.device)
         self._maybe_init_rho_loss(training_options)
         if training_options.distributed_strategy == DistributedStrategy.DDP and dist.is_initialized():
             self.model = DDP(self.model, device_ids=[dist.get_rank()])
-        elif training_options.distributed_strategy == DistributedStrategy.FSDP and dist.is_initialized():
+        elif is_fsdp:
             bf16 = check_bf16_support()
             mp_dtype = torch.bfloat16 if bf16 else torch.float16
+            blocks = [
+                layer
+                for mod in self.model.modules()
+                if isinstance(mod, torch.nn.ModuleList)
+                for layer in mod
+            ]
             if _FSDP2_AVAILABLE:
                 mp_policy = FSDP2MixedPrecision(param_dtype=mp_dtype if bf16 else None, reduce_dtype=mp_dtype)
+                for layer in blocks:
+                    fully_shard(layer, mp_policy=mp_policy)
                 fully_shard(self.model, mp_policy=mp_policy)
+                self.model.to(training_options.device)
                 self.optimizer = training_options.optimizer.create_optimizer(self.model.parameters())
             else:
+                from torch.distributed.fsdp.wrap import ModuleWrapPolicy
                 mp_policy = MixedPrecision(param_dtype=mp_dtype, reduce_dtype=mp_dtype, buffer_dtype=mp_dtype)
-                self.model = FSDP(self.model, device_id=dist.get_rank(), mixed_precision=mp_policy, use_orig_params=True)
+                wrap_policy = ModuleWrapPolicy({type(layer) for layer in blocks}) if blocks else None
+                self.model = FSDP(self.model, device_id=dist.get_rank(), mixed_precision=mp_policy, use_orig_params=True, auto_wrap_policy=wrap_policy)
         for state in self.optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(training_options.device)
+        if is_fsdp:
+            resident_mb = torch.cuda.memory_allocated(training_options.device) / 1024**2
+            self.log(f"[fsdp] world_size={dist.get_world_size()} fsdp2={_FSDP2_AVAILABLE} blocks={len(blocks)} resident_after_shard={resident_mb:.0f}MB")
         self.sizer.current_batch = training_options.batch_size
         self.log("Starting to train now!")
         dataloader.load_state_dict(

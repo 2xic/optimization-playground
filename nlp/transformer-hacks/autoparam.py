@@ -82,6 +82,19 @@ STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
 _GPU_MEMORY_HEADROOM = 0.6
 
 
+def _log_has_oom(path: str) -> bool:
+    try:
+        with open(path, "rb") as f:
+            try:
+                f.seek(-65536, 2)
+            except OSError:
+                f.seek(0)
+            data = f.read()
+        return b"out of memory" in data or b"OutOfMemoryError" in data
+    except OSError:
+        return False
+
+
 def _total_gpu_memory_gb() -> float:
     try:
         pynvml.nvmlInit()
@@ -1225,6 +1238,8 @@ class AutoparamLoopBase:
     PROMOTE_NAMESPACE = "autoparam-pretrain"
     INCLUDES_DATASET_NAME_IN_CONFIG = True
     BASELINE_BATCH_SIZE = 1
+    OOM_MAX_RETRIES = 5
+    OOM_BATCH_FLOOR = 4
 
     def __init__(
         self,
@@ -1384,7 +1399,7 @@ class AutoparamLoopBase:
     def run(self):
         start_id = len(self.state.experiments)
         budget_msg = f"  Budget: ${self.budget_usd:.2f}" if self.budget_usd else ""
-        target_str = "∞" if self.max_experiments is None else str(self.max_experiments)
+        target_str = "∞" if self.max_experiments is None else str(start_id + self.max_experiments)
         print(
             f"{self.LOG_PREFIX} Starting from experiment {start_id}. Target: {target_str}. Timeout: {self.timeout}min each.{budget_msg}"
         )
@@ -1398,7 +1413,7 @@ class AutoparamLoopBase:
         stopped_early = False
 
         import itertools
-        loop_range = itertools.count(start_id) if self.max_experiments is None else range(start_id, self.max_experiments)
+        loop_range = itertools.count(start_id) if self.max_experiments is None else range(start_id, start_id + self.max_experiments)
         for exp_id in loop_range:
             if shutdown_requested():
                 self._log("Shutdown signal received — exiting cleanly between experiments.")
@@ -1406,7 +1421,7 @@ class AutoparamLoopBase:
             if _gpus_are_stuck():
                 self._log("ERROR: GPUs show high utilization but no running processes — likely a zombie GPU context. Reboot required. Aborting.")
                 break
-            self._log(f"=== Experiment {exp_id + 1}/{self.max_experiments if self.max_experiments is not None else '∞'} ===")
+            self._log(f"=== Experiment {exp_id + 1}/{start_id + self.max_experiments if self.max_experiments is not None else '∞'} ===")
 
             if self.budget_usd and not self._llm_disabled:
                 daily = fetch_openrouter_daily_usage()
@@ -1562,122 +1577,164 @@ class AutoparamLoopBase:
             config_data.update(self._extra_config_data())
             config_path = None
             result_path = None
+            oom_attempt = 0
             try:
-                with tempfile.NamedTemporaryFile(
-                    mode="w", suffix=".json", delete=False, dir="/tmp"
-                ) as f:
-                    json.dump(config_data, f)
-                    config_path = f.name
-                result_path = config_path.replace(".json", "_result.json")
-                stop_file = config_path.replace(".json", ".stop")
+                while True:
+                    oom_detected = False
+                    with tempfile.NamedTemporaryFile(
+                        mode="w", suffix=".json", delete=False, dir="/tmp"
+                    ) as f:
+                        json.dump(config_data, f)
+                        config_path = f.name
+                    result_path = config_path.replace(".json", "_result.json")
+                    stop_file = config_path.replace(".json", ".stop")
 
-                executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), self.EXECUTOR_SCRIPT)
-                cmd = [
-                    "torchrun",
-                    f"--nproc_per_node={self.nproc_per_node}",
-                    "--standalone",
-                    "--max-restarts=0",
-                    "--monitor-interval=5",
-                    executor,
-                    "--config", config_path,
-                    "--result", result_path,
-                ]
-                log_path = result_path.replace("_result.json", "_run.log")
-                log_file = open(log_path, "w")
-                current_link = "/tmp/autoparam_current.log"
-                try:
-                    if os.path.islink(current_link) or os.path.exists(current_link):
-                        os.unlink(current_link)
-                    os.symlink(log_path, current_link)
-                except OSError:
-                    pass
-                print(f"{self.LOG_PREFIX} subprocess log: {log_path}", flush=True)
-                env = os.environ.copy()
-                env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
-                env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
-                env.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
-                env.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
-                env["AUTOPARAM_STOP_FILE"] = stop_file
-                proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True, env=env)
-                log_file.close()
-                self._active_proc = proc
-                pgid = os.getpgid(proc.pid)
-                self._active_pgid = pgid
-                self._active_stop_file = stop_file
-                self._stop_requested_at = None
-                hard_deadline = time.time() + (training_options.training_timeout_minutes + 5) * 60
-                try:
-                    while True:
+                    executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), self.EXECUTOR_SCRIPT)
+                    cmd = [
+                        "torchrun",
+                        f"--nproc_per_node={self.nproc_per_node}",
+                        "--standalone",
+                        "--max-restarts=0",
+                        "--monitor-interval=5",
+                        executor,
+                        "--config", config_path,
+                        "--result", result_path,
+                    ]
+                    log_path = result_path.replace("_result.json", "_run.log")
+                    log_file = open(log_path, "w")
+                    current_link = "/tmp/autoparam_current.log"
+                    try:
+                        if os.path.islink(current_link) or os.path.exists(current_link):
+                            os.unlink(current_link)
+                        os.symlink(log_path, current_link)
+                    except OSError:
+                        pass
+                    print(f"{self.LOG_PREFIX} subprocess log: {log_path}", flush=True)
+                    env = os.environ.copy()
+                    env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+                    env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
+                    env.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
+                    env.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+                    env["AUTOPARAM_STOP_FILE"] = stop_file
+                    proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True, env=env)
+                    log_file.close()
+                    self._active_proc = proc
+                    pgid = os.getpgid(proc.pid)
+                    self._active_pgid = pgid
+                    self._active_stop_file = stop_file
+                    self._stop_requested_at = None
+                    hard_deadline = time.time() + (training_options.training_timeout_minutes + 5) * 60
+                    try:
+                        while True:
+                            try:
+                                proc.wait(timeout=5)
+                                break
+                            except subprocess.TimeoutExpired:
+                                pass
+                            now = time.time()
+                            if _log_has_oom(log_path):
+                                print(
+                                    f"{self.LOG_PREFIX} Detected CUDA OOM in subprocess log, killing early",
+                                    flush=True,
+                                )
+                                oom_detected = True
+                                try:
+                                    os.killpg(pgid, signal.SIGKILL)
+                                except OSError:
+                                    pass
+                                break
+                            if now >= hard_deadline:
+                                print(
+                                    f"Experiment subprocess past hard deadline ({training_options.training_timeout_minutes + 5} min), killing",
+                                    flush=True,
+                                )
+                                try:
+                                    os.killpg(pgid, signal.SIGKILL)
+                                except OSError:
+                                    pass
+                                break
+                            if shutdown_requested() and not os.path.exists(stop_file):
+                                try:
+                                    open(stop_file, "w").close()
+                                except OSError:
+                                    pass
+                                try:
+                                    os.killpg(pgid, signal.SIGUSR1)
+                                except OSError:
+                                    pass
+                                if self._stop_requested_at is None:
+                                    self._stop_requested_at = now
+                            if self._stop_requested_at and now - self._stop_requested_at >= self._stop_grace_seconds:
+                                self._log(
+                                    f"Stop requested >{self._stop_grace_seconds}s ago, escalating to SIGKILL"
+                                )
+                                try:
+                                    os.killpg(pgid, signal.SIGKILL)
+                                except OSError:
+                                    pass
+                                break
+                    except KeyboardInterrupt:
+                        os.killpg(pgid, signal.SIGKILL)
+                        proc.wait()
+                        raise
+                    finally:
+                        if proc.poll() is None:
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except OSError:
+                                pass
                         try:
-                            proc.wait(timeout=5)
-                            break
+                            proc.wait(timeout=10)
                         except subprocess.TimeoutExpired:
                             pass
-                        now = time.time()
-                        if now >= hard_deadline:
-                            print(
-                                f"Experiment subprocess past hard deadline ({training_options.training_timeout_minutes + 5} min), killing",
-                                flush=True,
-                            )
+                        self._active_proc = None
+                        self._active_pgid = None
+                        self._active_stop_file = None
+                        self._stop_requested_at = None
+                        if os.path.exists(stop_file):
                             try:
-                                os.killpg(pgid, signal.SIGKILL)
+                                os.unlink(stop_file)
                             except OSError:
                                 pass
-                            break
-                        if shutdown_requested() and not os.path.exists(stop_file):
-                            try:
-                                open(stop_file, "w").close()
-                            except OSError:
-                                pass
-                            try:
-                                os.killpg(pgid, signal.SIGUSR1)
-                            except OSError:
-                                pass
-                            if self._stop_requested_at is None:
-                                self._stop_requested_at = now
-                        if self._stop_requested_at and now - self._stop_requested_at >= self._stop_grace_seconds:
-                            self._log(
-                                f"Stop requested >{self._stop_grace_seconds}s ago, escalating to SIGKILL"
-                            )
-                            try:
-                                os.killpg(pgid, signal.SIGKILL)
-                            except OSError:
-                                pass
-                            break
-                except KeyboardInterrupt:
-                    os.killpg(pgid, signal.SIGKILL)
-                    proc.wait()
-                    raise
-                finally:
-                    if proc.poll() is None:
-                        try:
-                            os.killpg(pgid, signal.SIGKILL)
-                        except OSError:
-                            pass
-                    try:
-                        proc.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        pass
-                    self._active_proc = None
-                    self._active_pgid = None
-                    self._active_stop_file = None
-                    self._stop_requested_at = None
-                    if os.path.exists(stop_file):
-                        try:
-                            os.unlink(stop_file)
-                        except OSError:
-                            pass
-                    time.sleep(15)
+                        time.sleep(15)
 
-                if os.path.exists(result_path):
-                    with open(result_path) as f:
-                        result_data = json.load(f)
-                    score = result_data.get("score", {})
-                    status = result_data.get("status", "failed")
-                    error_message = result_data.get("error_message")
-                else:
-                    status = "failed"
-                    error_message = f"Executor exited with code {proc.returncode}, no result written"
+                    if os.path.exists(result_path):
+                        with open(result_path) as f:
+                            result_data = json.load(f)
+                        score = result_data.get("score", {})
+                        status = result_data.get("status", "failed")
+                        error_message = result_data.get("error_message")
+                    else:
+                        status = "failed"
+                        error_message = f"Executor exited with code {proc.returncode}, no result written"
+
+                    if not oom_detected and error_message:
+                        _em = error_message.lower()
+                        oom_detected = "out of memory" in _em or "outofmemoryerror" in _em
+                    cur_bs = int(training_dict.get("batch_size", 0) or 0)
+                    if (
+                        oom_detected
+                        and oom_attempt < self.OOM_MAX_RETRIES
+                        and cur_bs > self.OOM_BATCH_FLOOR
+                    ):
+                        new_bs = max(self.OOM_BATCH_FLOOR, cur_bs // 2)
+                        oom_attempt += 1
+                        self._log(
+                            f"OOM detected, retrying with batch_size {cur_bs} -> {new_bs} "
+                            f"(attempt {oom_attempt}/{self.OOM_MAX_RETRIES})"
+                        )
+                        training_dict["batch_size"] = new_bs
+                        config_data["training_config"] = training_dict
+                        for _p in [config_path, result_path]:
+                            if _p and os.path.exists(_p):
+                                try:
+                                    os.unlink(_p)
+                                except OSError:
+                                    pass
+                        config_path = None
+                        result_path = None
+                        continue
+                    break
 
                 if status == "failed":
                     self._log(f"Training failed: {error_message}")

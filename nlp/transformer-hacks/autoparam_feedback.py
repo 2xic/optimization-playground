@@ -124,18 +124,22 @@ class FeedbackAutoparamLoop(AutoparamLoopBase):
     EXP_NAME_PREFIX = "autoparam_fb"
     EXECUTOR_SCRIPT = "autoparam_feedback_executor.py"
     PROMOTE_NAMESPACE = FEEDBACK_TAG
-    INCLUDES_DATASET_NAME_IN_CONFIG = False
+    INCLUDES_DATASET_NAME_IN_CONFIG = True
     BASELINE_BATCH_SIZE = 64
 
-    def __init__(self, init_tag: Optional[str], state_path: str = "autoparam_feedback_state.json", **kwargs):
+    def __init__(self, init_tag: Optional[str], dataset_name: str = "feedback_256",
+                 version: str = "v1",
+                 state_path: str = "autoparam_feedback_state.json", **kwargs):
         self.init_tag = init_tag
+        self.version = version
+        self.PROMOTE_NAMESPACE = FEEDBACK_TAG if version == "v1" else f"autoparam-{dataset_name}"
         self.locked_arch = _load_pretrain_arch(init_tag) if init_tag else {}
         if self.locked_arch:
             print(f"{self.LOG_PREFIX} Locked arch from pretrain: {self.locked_arch}", flush=True)
         super().__init__(
-            dataset=NAMED_DATASETS["feedback_256"],
+            dataset=NAMED_DATASETS[dataset_name],
             state_path=state_path,
-            plot_subdir=FEEDBACK_TAG,
+            plot_subdir=FEEDBACK_TAG if version == "v1" else dataset_name,
             **kwargs,
         )
 
@@ -177,7 +181,9 @@ class FeedbackAutoparamLoop(AutoparamLoopBase):
                 setattr(cfg_obj, k, v)
 
     def _run_tag(self) -> str:
-        return "autoparam-feedback"
+        if self.version == "v1":
+            return FEEDBACK_TAG
+        return f"autoparam-{self.dataset.name}"
 
     def _extra_config_data(self) -> dict:
         return {"init_from_tag": self.init_tag} if self.init_tag else {}
@@ -224,6 +230,8 @@ if __name__ == "__main__":
     init_group.add_argument("--pretrain-tag", help="Explicit pretrained checkpoint tag")
     init_group.add_argument("--use-best-of", metavar="DATASET",
                             help="Resolve to best-<DATASET> at startup (e.g. fineweb-256)")
+    parser.add_argument("--dataset", default="feedback_256")
+    parser.add_argument("--version", default="v1")
     parser.add_argument("--max-experiments", type=lambda s: None if int(s) < 0 else int(s), default=50)
     parser.add_argument("--budget", type=float, default=5.00, metavar="USD")
     parser.add_argument("--state-file", default="autoparam_feedback_state.json")
@@ -265,6 +273,8 @@ if __name__ == "__main__":
 
     FeedbackAutoparamLoop(
         init_tag=init_tag,
+        dataset_name=args.dataset,
+        version=args.version,
         max_experiments=args.max_experiments,
         experiment_timeout_minutes=args.timeout_minutes,
         state_path=args.state_file,

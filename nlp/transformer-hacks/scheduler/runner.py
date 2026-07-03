@@ -359,10 +359,15 @@ def cleanup(job: dict, mem_threshold: int, cleanup_timeout: int):
 def next_inbox_file():
     if not INBOX_DIR.exists():
         return None
-    files = [p for p in INBOX_DIR.glob("*.yaml") if p.is_file()]
-    if not files:
+    mtimes = []
+    for p in INBOX_DIR.glob("*.yaml"):
+        try:
+            mtimes.append((p.stat().st_mtime, p))
+        except FileNotFoundError:
+            continue
+    if not mtimes:
         return None
-    return min(files, key=lambda p: p.stat().st_mtime)
+    return min(mtimes, key=lambda t: t[0])[1]
 
 
 def _move_inbox(path: Path, dest_dir: Path):
@@ -452,6 +457,9 @@ def process_inbox_file(path: Path, status: Status, cfg: dict, gpus_total: int):
     log(f"=== inbox steal: {path.name} ===")
     try:
         data = yaml.safe_load(path.read_text())
+    except FileNotFoundError:
+        log(f"[inbox] {path.name} removed before processing — skipping")
+        return
     except Exception as e:
         log(f"[inbox] failed to parse {path.name}: {e} — moving to failed/")
         _move_inbox(path, INBOX_FAILED)

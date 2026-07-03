@@ -78,14 +78,20 @@ class TripletAutoparamLoop(AutoparamLoopBase):
     EXP_NAME_PREFIX = "autoparam_evt"
     EXECUTOR_SCRIPT = "autoparam_evm_triplet_executor.py"
     PROMOTE_NAMESPACE = TRIPLET_TAG
-    INCLUDES_DATASET_NAME_IN_CONFIG = False
+    INCLUDES_DATASET_NAME_IN_CONFIG = True
     BASELINE_BATCH_SIZE = 32
 
-    def __init__(self, state_path: str = "autoparam_evm_triplet_state.json", **kwargs):
+    def __init__(self, dataset_name: str = "evm-cluster_triplet-256",
+                 version: str = "v1",
+                 state_path: str = None, **kwargs):
+        self.version = version
+        self.PROMOTE_NAMESPACE = TRIPLET_TAG if version == "v1" else f"autoparam-{dataset_name}"
+        if state_path is None:
+            state_path = f"autoparam_{dataset_name}_state.json"
         super().__init__(
-            dataset=NAMED_DATASETS["evm-cluster_triplet-256"],
+            dataset=NAMED_DATASETS[dataset_name],
             state_path=state_path,
-            plot_subdir=TRIPLET_TAG,
+            plot_subdir=TRIPLET_TAG if version == "v1" else dataset_name,
             **kwargs,
         )
 
@@ -93,7 +99,9 @@ class TripletAutoparamLoop(AutoparamLoopBase):
         return TripletLLMProposer(model=model)
 
     def _run_tag(self) -> str:
-        return "autoparam-evm-triplet"
+        if self.version == "v1":
+            return "autoparam-evm-triplet"
+        return f"autoparam-{self.dataset.name}"
 
     def _extract_accuracy(self, score: dict) -> float:
         return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
@@ -131,9 +139,12 @@ class TripletAutoparamLoop(AutoparamLoopBase):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Autonomous evm-triplet-256 hyperparameter optimization")
+    parser.add_argument("--dataset", default="evm-cluster_triplet-256",
+                        choices=["evm-cluster_triplet-256", "evm-cluster-triplet-256-v2"])
+    parser.add_argument("--version", default="v1")
     parser.add_argument("--max-experiments", type=lambda s: None if int(s) < 0 else int(s), default=50)
     parser.add_argument("--budget", type=float, default=5.00, metavar="USD")
-    parser.add_argument("--state-file", default="autoparam_evm_triplet_state.json")
+    parser.add_argument("--state-file", default=None)
     parser.add_argument("--distributed-strategy", default="fsdp", choices=["none", "ddp", "fsdp"])
     parser.add_argument(
         "--nproc-per-node", type=int,
@@ -159,6 +170,8 @@ if __name__ == "__main__":
     strategy = DistributedStrategy[args.distributed_strategy.upper()]
 
     TripletAutoparamLoop(
+        dataset_name=args.dataset,
+        version=args.version,
         max_experiments=args.max_experiments,
         experiment_timeout_minutes=args.timeout_minutes,
         state_path=args.state_file,

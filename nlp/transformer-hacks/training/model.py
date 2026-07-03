@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import math
 import torch.nn as nn
 import torch
+import torch.utils.checkpoint
 from optimization_playground_shared.nlp.PositionalEncoding import (
     SinusoidalPositionalEncoding,
     RotaryPositionalEncoding,
@@ -114,6 +115,7 @@ class Config:
     init_std: float = 0.02
     ffn_activation: Optional[FFNActivation] = None
     norm_placement: Optional[NormPlacement] = None
+    gradient_checkpointing: bool = True
 
     def with_positional_embedding(self, positional_embedding: PositionalEmbeddingType):
         self.positional_embedding = positional_embedding
@@ -816,15 +818,21 @@ class Model(nn.Module):
             x = self.embeddings(x)
             H = x.unsqueeze(2).expand(-1, -1, self.config.hc_n, -1).contiguous()
             H = self.dropout(H)
-            for layer in self.transformer_layers:
-                H = layer(H, self.mask)
+            for i, layer in enumerate(self.transformer_layers):
+                if self.training and self.config.gradient_checkpointing and i % 2 == 0:
+                    H = torch.utils.checkpoint.checkpoint(layer, H, self.mask, use_reentrant=False)
+                else:
+                    H = layer(H, self.mask)
             x = H.sum(dim=2)
             return self.layer_norm(x)
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
         x = self.dropout(x)
-        for layer in self.transformer_layers:
-            x = layer(x, self.mask)
+        for i, layer in enumerate(self.transformer_layers):
+            if self.training and self.config.gradient_checkpointing and i % 2 == 0:
+                x = torch.utils.checkpoint.checkpoint(layer, x, self.mask, use_reentrant=False)
+            else:
+                x = layer(x, self.mask)
         return self.layer_norm(x)
 
     @torch.no_grad()

@@ -213,6 +213,38 @@ NAMED_DATASETS = {
             rank=rank,
             world_size=world_size,
         ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "feedback-256-v2",
+            columns=["input_ids", FloatColumn("feedback")],
+            batch_size=_batch_size(32),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "evm-selector-bytecode-17-v2",
+            columns=["window_tokens", "label"],
+            batch_size=_batch_size(256),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "evm-selector-bytecode-33-v2",
+            columns=["window_tokens", "label"],
+            batch_size=_batch_size(128),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "evm-cluster-triplet-256-v2",
+            columns=["anchor_tokens", "positive_tokens", "negative_tokens"],
+            batch_size=_batch_size(32),
+            rank=rank,
+            world_size=world_size,
+        ),
     ]
 }
 
@@ -345,7 +377,7 @@ def execute(
             print(f"Validation loader unavailable for {dataset.dataset_name}: {e}")
             options.val_loader = None
     try:
-        for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {experiment_variant}"):
+        for _ in tqdm(range(SAMPLE_SIZE), desc=f"Training {dataset.name}"):
             factory = objective_factory or create_next_token_prediction_objective
             trainer = factory(
                 dataset,

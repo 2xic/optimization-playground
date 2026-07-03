@@ -81,24 +81,26 @@ def run(
         _log(f"exception caught:\n{traceback.format_exc()}")
     finally:
         _log(f"finally | status={status} | error={error_message}")
-        if dist.is_initialized():
-            if error_message is None:
+        if error_message is not None:
+            if rank == 0:
                 try:
-                    dist.barrier()
-                except Exception as barrier_exc:
-                    _log(f"dist.barrier() FAILED: {barrier_exc}")
+                    with open(args.result, "w") as f:
+                        json.dump(
+                            {"score": score, "status": status, "error_message": error_message}, f
+                        )
+                except Exception:
+                    pass
+            os._exit(1)
+        if dist.is_initialized():
+            try:
+                dist.barrier()
+            except Exception as barrier_exc:
+                _log(f"dist.barrier() FAILED: {barrier_exc}")
             torch.cuda.empty_cache()
             try:
                 dist.destroy_process_group()
             except Exception as destroy_exc:
                 _log(f"dist.destroy_process_group() FAILED: {destroy_exc}")
-        if error_message is not None:
-            if rank == 0:
-                with open(args.result, "w") as f:
-                    json.dump(
-                        {"score": score, "status": status, "error_message": error_message}, f
-                    )
-            os._exit(1)
 
     if rank == 0:
         with open(args.result, "w") as f:

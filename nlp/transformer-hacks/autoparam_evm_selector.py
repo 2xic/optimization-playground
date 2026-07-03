@@ -85,13 +85,16 @@ class SelectorAutoparamLoop(AutoparamLoopBase):
     BASELINE_BATCH_SIZE = 256
 
     def __init__(self, dataset_name: str = "evm-selector-bytecode-17",
+                 version: str = "v1",
                  state_path: str = None, **kwargs):
+        self.version = version
+        self.PROMOTE_NAMESPACE = SELECTOR_TAG if version == "v1" else f"autoparam-{dataset_name}"
         if state_path is None:
             state_path = f"autoparam_{dataset_name}_state.json"
         super().__init__(
             dataset=NAMED_DATASETS[dataset_name],
             state_path=state_path,
-            plot_subdir=f"{SELECTOR_TAG}/{dataset_name}",
+            plot_subdir=f"{SELECTOR_TAG}/{dataset_name}" if version == "v1" else dataset_name,
             **kwargs,
         )
 
@@ -99,7 +102,9 @@ class SelectorAutoparamLoop(AutoparamLoopBase):
         return SelectorLLMProposer(model=model)
 
     def _run_tag(self) -> str:
-        return f"autoparam-evm-selector-{self.dataset.name}"
+        if self.version == "v1":
+            return f"autoparam-evm-selector-{self.dataset.name}"
+        return f"autoparam-{self.dataset.name}"
 
     def _extract_accuracy(self, score: dict) -> float:
         return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
@@ -138,7 +143,9 @@ class SelectorAutoparamLoop(AutoparamLoopBase):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Autonomous evm-selector-bytecode hyperparameter optimization")
     parser.add_argument("--dataset", default="evm-selector-bytecode-17",
-                        choices=["evm-selector-bytecode-17", "evm-selector-bytecode-33"])
+                        choices=["evm-selector-bytecode-17", "evm-selector-bytecode-33",
+                                 "evm-selector-bytecode-17-v2", "evm-selector-bytecode-33-v2"])
+    parser.add_argument("--version", default="v1")
     parser.add_argument("--max-experiments", type=lambda s: None if int(s) < 0 else int(s), default=50)
     parser.add_argument("--budget", type=float, default=5.00, metavar="USD")
     parser.add_argument("--state-file", default=None)
@@ -168,6 +175,7 @@ if __name__ == "__main__":
 
     SelectorAutoparamLoop(
         dataset_name=args.dataset,
+        version=args.version,
         max_experiments=args.max_experiments,
         experiment_timeout_minutes=args.timeout_minutes,
         state_path=args.state_file,

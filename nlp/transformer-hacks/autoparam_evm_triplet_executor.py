@@ -51,7 +51,7 @@ def build_and_run(cfg, rank, log):
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     device = torch.device(f"cuda:{rank}")
 
-    dataset = NAMED_DATASETS[DATASET_NAME]
+    dataset = NAMED_DATASETS[cfg.get("dataset_name", DATASET_NAME)]
     proposed_config = ConfigSerializer.dict_to_config(model_dict, dataset)
     proposed_config.sampling_method = SamplingMethod.ARGMAX
 
