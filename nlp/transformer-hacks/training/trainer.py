@@ -709,7 +709,7 @@ class GradScalerTrainer(Trainer):
         self, model, objective, X, y, training_options: TrainingOptions
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         now = time.time()
-        with nullcontext() if self.use_fsdp else autocast("cuda", dtype=self.type):
+        with autocast("cuda", dtype=self.type):
             with self.metrics_tracker.span("to_device"):
                 X, y = (
                     X.to(training_options.device, non_blocking=True),
@@ -729,27 +729,18 @@ class GradScalerTrainer(Trainer):
                     y,
                 )
             with self.metrics_tracker.span("optimize"):
-                if self.use_fsdp:
-                    (loss / training_options.accumulation_steps).backward()
-                else:
-                    self.scaler.scale(loss / training_options.accumulation_steps).backward()
+                self.scaler.scale(loss / training_options.accumulation_steps).backward()
                 if (
                     self.total_batch_num + 1
                 ) % training_options.accumulation_steps == 0:
                     max_grad_norm = getattr(training_options.optimizer, "max_grad_norm", 0)
-                    if self.use_fsdp:
-                        if max_grad_norm > 0:
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-                        self.optimizer.step()
-                        stepped = True
-                    else:
-                        if max_grad_norm > 0:
-                            self.scaler.unscale_(self.optimizer)
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-                        prev_scale = self.scaler.get_scale()
-                        self.scaler.step(self.optimizer)
-                        self.scaler.update()
-                        stepped = self.scaler.get_scale() >= prev_scale
+                    if max_grad_norm > 0:
+                        self.scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                    prev_scale = self.scaler.get_scale()
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                    stepped = self.scaler.get_scale() >= prev_scale
                     self.optimizer.zero_grad(set_to_none=True)
                     if stepped and self.lr_scheduler is not None:
                         self.lr_scheduler.step()

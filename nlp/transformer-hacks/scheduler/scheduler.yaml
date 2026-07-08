@@ -63,17 +63,17 @@ jobs:
     enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
-  - name: finetune
-    script: autoparam_finetune.py
-    args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+  - name: pretrain
+    script: autoparam.py
+    args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 480
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
       TRAINING_TIME_MINUTES: "475"
-  - name: pretrain
-    script: autoparam.py
-    args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+  - name: finetune
+    script: autoparam_finetune.py
+    args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 480
     env:

@@ -20,7 +20,6 @@ import torch.distributed as dist
 
 def setup_env():
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-    os.environ.setdefault("CUDA_LAUNCH_BLOCKING", "1")
     os.environ.setdefault("TORCH_NCCL_ENABLE_MONITORING", "0")
     os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
 
