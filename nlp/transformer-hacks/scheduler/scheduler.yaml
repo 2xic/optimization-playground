@@ -1,26 +1,57 @@
 mem_free_threshold_mb: 500
 cleanup_timeout_sec: 60
 jobs:
+  - name: evm-triplet-triplet-uniform
+    script: autoparam_evm_triplet.py
+    args: ["--dataset", "evm-cluster-triplet-256-v2", "--version", "v2", "--triplet-loss", "TRIPLET_UNIFORM", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+
+  - name: evm-triplet-infonce
+    script: autoparam_evm_triplet.py
+    args: ["--dataset", "evm-cluster-triplet-256-v2", "--version", "v2", "--triplet-loss", "INFONCE", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+
+  - name: evm-triplet-infonce-uniform
+    script: autoparam_evm_triplet.py
+    args: ["--dataset", "evm-cluster-triplet-256-v2", "--version", "v2", "--triplet-loss", "INFONCE_UNIFORM", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+
   - name: feedback
     script: autoparam_feedback.py
     args: ["--dataset", "feedback-256-v2", "--version", "v2", "--pretrain-tag", "autoparam-fineweb-256", "--state-file", "autoparam_feedback_v2_state.json", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 120
+    enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
-  - name: evm-triplet
+  - name: evm-triplet-triplet
     script: autoparam_evm_triplet.py
-    args: ["--dataset", "evm-cluster-triplet-256-v2", "--version", "v2", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    args: ["--dataset", "evm-cluster-triplet-256-v2", "--version", "v2", "--triplet-loss", "TRIPLET", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 120
+    enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
+
 
   - name: evm-selector-17
     script: autoparam_evm_selector.py
     args: ["--dataset", "evm-selector-bytecode-17-v2", "--version", "v2", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 60
+    enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
 
@@ -29,6 +60,7 @@ jobs:
     args: ["--dataset", "evm-selector-bytecode-33-v2", "--version", "v2", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 60
+    enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
   - name: finetune
@@ -38,6 +70,7 @@ jobs:
     slot_minutes: 480
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "475"
   - name: pretrain
     script: autoparam.py
     args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
@@ -45,3 +78,4 @@ jobs:
     slot_minutes: 480
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "475"

@@ -3,6 +3,7 @@ Loads in tensor from a hosted server
 """
 
 import asyncio
+import base64
 import threading
 import queue
 import requests
@@ -311,17 +312,21 @@ class WebDataloader:
         self.cleanup()
 
     def convert_token_to_id(self, token):
-        tokenized = self.tokenize([token], padding=False)
+        tokenized = self.tokenize([token if isinstance(token, bytes) else token.encode()], padding=False)
         assert len(tokenized) == 1
         assert len(tokenized[0]) == 1
         return tokenized[0][0]
 
-    def tokenize(self, documents: List[str], padding=True):
+    def tokenize(self, documents: List[bytes], padding=True, apply_transform=True, add_special_tokens=False):
         assert isinstance(documents, list)
 
         response = self.session.post(
             f"{self.base_url}/datasets/{self.dataset_name}/tokenize",
-            json={"documents": documents},
+            json={
+                "documents_base64": [base64.b64encode(d).decode() for d in documents],
+                "apply_transform": apply_transform,
+                "add_special_tokens": add_special_tokens,
+            },
         )
 
         if response.status_code != 200:

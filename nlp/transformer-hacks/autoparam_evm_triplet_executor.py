@@ -5,6 +5,7 @@ over the evm-triplet-256 dataset. Trains from scratch.
 
 import math
 import os
+import random
 
 import torch
 from autoparam_executor_lib import setup_env, run, tail_mean, slope, common_score_extras
@@ -18,8 +19,9 @@ load_dotenv()
 from experiments import (
     execute,
     NAMED_DATASETS,
-    create_triplet_contrastive_objective,
+    make_triplet_objective_factory,
 )
+from training.objectives import TripletLoss
 from training.model import Model, SamplingMethod
 from training.heads import TripletEmbeddingModel
 from training.trainer import DistributedStrategy
@@ -60,7 +62,13 @@ def build_and_run(cfg, rank, log):
     )
     apply_checkpoint_tag(training_options, cfg)
 
-    log("training triplet embedding from scratch")
+    loss_name = training_dict.get("triplet_loss")
+    if loss_name is None:
+        loss = random.Random(exp_name).choice(list(TripletLoss))
+    else:
+        loss = TripletLoss[loss_name.upper()]
+    training_dict["triplet_loss"] = loss.name
+    log(f"training triplet embedding from scratch (loss={loss.name})")
     inner = Model(proposed_config)
     model = TripletEmbeddingModel(inner)
 
@@ -68,7 +76,7 @@ def build_and_run(cfg, rank, log):
     torch.cuda.reset_peak_memory_stats()
     _, results = execute(
         dataset, exp_name, model, training_options,
-        objective_factory=create_triplet_contrastive_objective,
+        objective_factory=make_triplet_objective_factory(loss),
         batch_adapter=_batch_adapter,
     )
 
@@ -95,6 +103,7 @@ def build_and_run(cfg, rank, log):
         score["val_accuracy"] = float(val_accs[-1])
     if val_losses:
         score["val_loss"] = float(val_losses[-1])
+    score["triplet_loss"] = loss.name
     score.update(common_score_extras(
         results, proposed_config, training_options, world_size, model_dict, training_dict, strategy_name
     ))

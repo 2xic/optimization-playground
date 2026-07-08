@@ -140,7 +140,9 @@ def common_score_extras(results, config, training_options, world_size, model_dic
     except Exception:
         pass
     try:
-        steps_run = len(results.step_loss.min_max_avg) or len(results.loss.min_max_avg)
+        record_interval = getattr(training_options, "record_interval_steps", 1) or 1
+        records = len(results.step_loss.min_max_avg) or len(results.loss.min_max_avg)
+        steps_run = records * record_interval
         extras["steps_run"] = steps_run
         seq_len = getattr(config, "sequence_length", 0) or getattr(config, "context_length", 0) or 0
         bs = getattr(training_options, "batch_size", 0) or 0

@@ -59,8 +59,35 @@ def load_model_from_path(base_model_path):
         io.BytesIO(storage.load_bytes(os.path.join(base_model_path, "model.pt"))),
         map_location=torch.device("cpu"),
     )
+    if any(k.startswith("base.") for k in weights):
+        weights = {
+            k[len("base.") :]: v
+            for k, v in weights.items()
+            if k.startswith("base.")
+        }
     model.load_state_dict(weights)
     print("Model loaded!")
+    return (model, model_config)
+
+
+def load_head_model_from_path(base_model_path, num_classes=1):
+    from training.heads import ClassificationHeadModel
+
+    storage = StorageBox(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+    )
+    model_config = Config.from_json(
+        json.loads(storage.load_bytes(os.path.join(base_model_path, "config.json")))
+    )
+    model = ClassificationHeadModel(Model(model_config), num_classes=num_classes)
+    weights = torch.load(
+        io.BytesIO(storage.load_bytes(os.path.join(base_model_path, "model.pt"))),
+        map_location=torch.device("cpu"),
+    )
+    model.load_state_dict(weights)
+    model.eval()
     return (model, model_config)
 
 

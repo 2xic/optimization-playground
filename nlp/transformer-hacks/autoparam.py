@@ -78,6 +78,8 @@ import matplotlib.pyplot as plt
 STABILITY_TAIL_FRACTION = 0.25
 STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
 
+SCORING_VERSION = 2
+
 
 _GPU_MEMORY_HEADROOM = 0.6
 
@@ -429,7 +431,7 @@ class ConfigSerializer:
         opts = TrainingOptions(
             batch_size=int(d.get("batch_size", 32)),
             accumulation_steps=int(d.get("accumulation_steps", 1)),
-            training_timeout_minutes=min(int(d.get("training_minutes", timeout_minutes)), MAX_TRAINING_MINUTES),
+            training_timeout_minutes=min(int(os.environ.get("TRAINING_TIME_MINUTES", d.get("training_minutes", timeout_minutes))), MAX_TRAINING_MINUTES),
             optimizer=optimizer,
             lr_scheduler=scheduler,
             record_interval_steps=50,
@@ -593,9 +595,15 @@ class AutoparamState:
         with open(self.state_path) as f:
             data = json.load(f)
         self.experiments = [ExperimentRecord.from_dict(e) for e in data["experiments"]]
-        self.best_experiment_id = data.get("best_experiment_id")
-        self.best_score = data.get("best_score", -1.0)
         self.session_start = data.get("session_start", self.session_start)
+        if data.get("scoring_version") != SCORING_VERSION:
+            self.best_experiment_id = None
+            self.best_score = -1.0
+            for e in self.experiments:
+                self._rescore(e)
+        else:
+            self.best_experiment_id = data.get("best_experiment_id")
+            self.best_score = data.get("best_score", -1.0)
         print(
             f"[autoparam] Resumed: {len(self.experiments)} previous experiments loaded."
         )
@@ -605,6 +613,7 @@ class AutoparamState:
         with open(tmp, "w") as f:
             json.dump(
                 {
+                    "scoring_version": SCORING_VERSION,
                     "experiments": [e.to_dict() for e in self.experiments],
                     "best_experiment_id": self.best_experiment_id,
                     "best_score": self.best_score,
@@ -616,15 +625,19 @@ class AutoparamState:
             )
         os.replace(tmp, self.state_path)
 
+    def _rescore(self, record: ExperimentRecord):
+        if record.status != "success":
+            return
+        acc = record.score.get("val_accuracy", record.score.get("final_accuracy", -1.0))
+        val_loss = record.score.get("val_loss")
+        score = acc - (0.01 * float(val_loss) if val_loss is not None and math.isfinite(val_loss) else 0.0)
+        if score > self.best_score:
+            self.best_score = score
+            self.best_experiment_id = record.experiment_id
+
     def add_experiment(self, record: ExperimentRecord):
         self.experiments.append(record)
-        if record.status == "success":
-            acc = record.score.get("final_accuracy", -1.0)
-            slope = record.score.get("accuracy_slope", 0.0)
-            score = acc + 0.5 * max(0.0, slope * 500)
-            if score > self.best_score:
-                self.best_score = score
-                self.best_experiment_id = record.experiment_id
+        self._rescore(record)
         self.save()
 
     @property
@@ -857,6 +870,10 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
     except Exception:
         prev_payload = None
 
+    if prev_payload is not None and prev_payload.get("scoring_version") != SCORING_VERSION:
+        prev_score = None
+        prev_accuracy = None
+
     accuracy_ok = prev_accuracy is None or accuracy >= prev_accuracy
     score_ok = prev_score is None or score > prev_score
     is_new_best = accuracy_ok and score_ok
@@ -868,6 +885,7 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
 
     if is_new_best:
         payload = {
+            "scoring_version": SCORING_VERSION,
             "score": float(score),
             "accuracy": float(accuracy),
             "previous_score": prev_score,
@@ -879,6 +897,7 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
         }
     else:
         payload = prev_payload or {}
+        payload["scoring_version"] = SCORING_VERSION
         payload["last_checked_at"] = datetime.now().isoformat()
         payload["last_checked_score"] = float(score)
         payload["last_checked_accuracy"] = float(accuracy)
@@ -1389,6 +1408,9 @@ class AutoparamLoopBase:
             json.dumps({**model_dict, **training_dict}, sort_keys=True).encode()
         ).hexdigest()
 
+    def _augment_training_dict(self, training_dict: dict) -> None:
+        pass
+
     def _already_run(self, model_dict: dict, training_dict: dict) -> bool:
         h = self._config_hash(model_dict, training_dict)
         return any(
@@ -1492,6 +1514,7 @@ class AutoparamLoopBase:
                     to_obj = ConfigSerializer.dict_to_training_options(cand, self.timeout)
                     m_dict = ConfigSerializer.config_to_dict(cfg_obj)
                     t_dict = ConfigSerializer.training_options_to_dict(to_obj)
+                    self._augment_training_dict(t_dict)
                 except Exception as e:
                     config_error = e
                     proposed = cand
@@ -1781,11 +1804,10 @@ class AutoparamLoopBase:
             if status == "success":
                 try:
                     acc = self._extract_accuracy(score)
-                    slope = score.get("accuracy_slope", 0.0)
                     val_loss = score.get("val_loss")
-                    composite = acc + 0.5 * max(0.0, slope * 500)
+                    composite = acc
                     if val_loss is not None and math.isfinite(val_loss):
-                        composite -= 2.0 * float(val_loss)
+                        composite -= 0.01 * float(val_loss)
                     promoted = _promote_best_tag(
                         self.PROMOTE_NAMESPACE,
                         self._run_tag(),

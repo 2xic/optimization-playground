@@ -26,6 +26,8 @@ from utils.mixture_dataloader import WebDataloaderMixture
 from utils.load_mode_from_checkpoint import load_modeL_tag, load_model_from_path
 from utils.checkpoints import apply_checkpoint_tag
 
+WARMUP_CLAMP_ENABLED = False
+
 FINETUNE_DATASET_NAMES = [
     "smoltalk-256",
     "everyday-conversations-256",
@@ -98,6 +100,12 @@ def build_and_run(cfg, rank, log):
         training_dict, timeout_minutes, strategy, device
     )
     apply_checkpoint_tag(training_options, cfg)
+    sched = getattr(training_options, "lr_scheduler", None)
+    if WARMUP_CLAMP_ENABLED and sched is not None and getattr(sched, "warmup_steps", 0):
+        max_warmup = 200
+        if sched.warmup_steps > max_warmup:
+            log(f"clamping warmup_steps {sched.warmup_steps} -> {max_warmup} (SFT runs are short)")
+            sched.warmup_steps = max_warmup
     bs = getattr(training_options, "batch_size", 32) or 32
     train_mixture = _build_mixture(rank, world_size, bs, split="train")
     try:

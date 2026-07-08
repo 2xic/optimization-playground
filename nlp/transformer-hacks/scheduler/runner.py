@@ -119,6 +119,10 @@ def _validate_job(j: dict, gpus_total: int):
         raise SystemExit(f"job '{j['name']}' has non-positive slot_minutes")
     j.setdefault("args", [])
     j.setdefault("pass_nproc_per_node", True)
+    j.setdefault("enabled", True)
+    j["weight"] = int(j.get("weight", 1))
+    if j["weight"] < 1:
+        raise SystemExit(f"job '{j['name']}' has weight < 1")
 
 
 def validate(cfg: dict, gpus_total: int):
@@ -517,7 +521,9 @@ def main():
 
     status = Status()
     status.write()
-    jobs = cfg["jobs"]
+    jobs = [j for j in cfg["jobs"] if j["enabled"] for _ in range(j["weight"])]
+    if not jobs:
+        raise SystemExit("no enabled jobs")
     quarantine_until = {j["name"]: 0.0 for j in jobs}
     quarantine_sec = cfg["quarantine_hours"] * 3600
     i = 0

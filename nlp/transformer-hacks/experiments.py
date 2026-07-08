@@ -12,7 +12,7 @@ from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
 from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
-from training.objectives import NextTokenPrediction, BinaryFeedbackClassification, TripletContrastive, MultiClassClassification
+from training.objectives import NextTokenPrediction, BinaryFeedbackClassification, TripletContrastive, MultiClassClassification, TripletLoss, build_triplet_objective
 from training.optimizer import (
     AdamConfig,
     AdamWConfig,
@@ -328,6 +328,13 @@ def create_triplet_contrastive_objective(
     dataset, model, optimizer_config=AdamWConfig(), lr_scheduler=None
 ):
     return _build_trainer(model, TripletContrastive(), optimizer_config, lr_scheduler)
+
+
+def make_triplet_objective_factory(loss: TripletLoss, **overrides):
+    def factory(dataset, model, optimizer_config=AdamWConfig(), lr_scheduler=None):
+        objective = build_triplet_objective(loss, **overrides)
+        return _build_trainer(model, objective, optimizer_config, lr_scheduler)
+    return factory
 
 
 def create_selector_classification_objective(

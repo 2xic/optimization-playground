@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Optional, Callable
 
 
@@ -160,22 +161,19 @@ class MultiClassClassification(BaseObjective):
         return correct, total
 
 
-class TripletContrastive(BaseObjective):
-    def __init__(self, margin: float = 0.2):
-        super().__init__()
-        self.margin = margin
+def _uniformity(emb: torch.Tensor, t: float) -> torch.Tensor:
+    emb = torch.nn.functional.normalize(emb.float(), dim=-1)
+    if emb.shape[0] < 2:
+        return emb.new_zeros(())
+    return torch.pdist(emb, p=2).pow(2).mul(-t).exp().mean().log()
 
+
+class _TripletBase(BaseObjective):
     def _split(self, y_predicted: torch.Tensor):
         b3, _ = y_predicted.shape
         assert b3 % 3 == 0, f"triplet expects 3*B rows, got {b3}"
         b = b3 // 3
         return y_predicted[:b], y_predicted[b:2 * b], y_predicted[2 * b:]
-
-    def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        anchor, positive, negative = self._split(y_predicted)
-        return torch.nn.functional.triplet_margin_loss(
-            anchor.float(), positive.float(), negative.float(), margin=self.margin
-        )
 
     @property
     def has_evaluator(self):
@@ -183,8 +181,80 @@ class TripletContrastive(BaseObjective):
 
     def evaluator(self, y_predicted: torch.Tensor, y: torch.Tensor):
         anchor, positive, negative = self._split(y_predicted)
-        sim_pos = (anchor * positive).sum(-1)
-        sim_neg = (anchor * negative).sum(-1)
-        correct = (sim_pos > sim_neg).sum()
+        a = torch.nn.functional.normalize(anchor.float(), dim=-1)
+        p = torch.nn.functional.normalize(positive.float(), dim=-1)
+        n = torch.nn.functional.normalize(negative.float(), dim=-1)
+        cos_pos = (a * p).sum(-1)
+        cos_neg = (a * n).sum(-1)
+        margin_sum = (cos_pos - cos_neg).sum()
         total = torch.tensor(anchor.shape[0], device=anchor.device)
-        return correct, total
+        return margin_sum, total
+
+
+class TripletContrastive(_TripletBase):
+    def __init__(self, margin: float = 0.2, uniformity_weight: float = 0.0, uniformity_t: float = 2.0):
+        super().__init__()
+        self.margin = margin
+        self.uniformity_weight = uniformity_weight
+        self.uniformity_t = uniformity_t
+
+    def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        anchor, positive, negative = self._split(y_predicted)
+        loss = torch.nn.functional.triplet_margin_loss(
+            anchor.float(), positive.float(), negative.float(), margin=self.margin
+        )
+        if self.uniformity_weight > 0:
+            loss = loss + self.uniformity_weight * _uniformity(y_predicted, self.uniformity_t)
+        return loss
+
+
+class NTXentContrastive(_TripletBase):
+    def __init__(self, temperature: float = 0.1, uniformity_weight: float = 0.0, uniformity_t: float = 2.0):
+        super().__init__()
+        self.temperature = temperature
+        self.uniformity_weight = uniformity_weight
+        self.uniformity_t = uniformity_t
+
+    def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        anchor, positive, negative = self._split(y_predicted)
+        a = torch.nn.functional.normalize(anchor.float(), dim=-1)
+        p = torch.nn.functional.normalize(positive.float(), dim=-1)
+        n = torch.nn.functional.normalize(negative.float(), dim=-1)
+        candidates = torch.cat([p, n], dim=0)
+        logits = (a @ candidates.t()) / self.temperature
+        target = torch.arange(a.shape[0], device=a.device)
+        loss = torch.nn.functional.cross_entropy(logits, target)
+        if self.uniformity_weight > 0:
+            loss = loss + self.uniformity_weight * _uniformity(y_predicted, self.uniformity_t)
+        return loss
+
+
+class TripletLoss(Enum):
+    TRIPLET = 0
+    TRIPLET_UNIFORM = 1
+    INFONCE = 2
+    INFONCE_UNIFORM = 3
+
+    @property
+    def slug(self) -> str:
+        return self.name.lower().replace("_", "-")
+
+
+def build_triplet_objective(loss: TripletLoss = TripletLoss.TRIPLET, **overrides):
+    if loss is TripletLoss.TRIPLET:
+        return TripletContrastive(margin=overrides.get("margin", 0.2))
+    if loss is TripletLoss.TRIPLET_UNIFORM:
+        return TripletContrastive(
+            margin=overrides.get("margin", 0.2),
+            uniformity_weight=overrides.get("uniformity_weight", 0.5),
+            uniformity_t=overrides.get("uniformity_t", 2.0),
+        )
+    if loss is TripletLoss.INFONCE:
+        return NTXentContrastive(temperature=overrides.get("temperature", 0.1))
+    if loss is TripletLoss.INFONCE_UNIFORM:
+        return NTXentContrastive(
+            temperature=overrides.get("temperature", 0.1),
+            uniformity_weight=overrides.get("uniformity_weight", 0.5),
+            uniformity_t=overrides.get("uniformity_t", 2.0),
+        )
+    raise ValueError(f"unknown triplet loss {loss!r}")

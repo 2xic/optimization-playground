@@ -27,6 +27,7 @@ from autoparam import (
     fetch_openrouter_daily_usage,
 )
 from scheduler.cooperative import install_shutdown_handler
+from training.objectives import TripletLoss
 
 install_shutdown_handler()
 
@@ -83,11 +84,15 @@ class TripletAutoparamLoop(AutoparamLoopBase):
 
     def __init__(self, dataset_name: str = "evm-cluster_triplet-256",
                  version: str = "v1",
+                 triplet_loss: str = None,
                  state_path: str = None, **kwargs):
         self.version = version
-        self.PROMOTE_NAMESPACE = TRIPLET_TAG if version == "v1" else f"autoparam-{dataset_name}"
+        self.triplet_loss = TripletLoss[triplet_loss] if triplet_loss else None
+        suffix = f"-{self.triplet_loss.slug}" if self.triplet_loss else ""
+        base_ns = TRIPLET_TAG if version == "v1" else f"autoparam-{dataset_name}"
+        self.PROMOTE_NAMESPACE = base_ns + suffix
         if state_path is None:
-            state_path = f"autoparam_{dataset_name}_state.json"
+            state_path = f"autoparam_{dataset_name}{suffix}_state.json"
         super().__init__(
             dataset=NAMED_DATASETS[dataset_name],
             state_path=state_path,
@@ -98,10 +103,15 @@ class TripletAutoparamLoop(AutoparamLoopBase):
     def _make_proposer(self, model: str):
         return TripletLLMProposer(model=model)
 
+    def _augment_training_dict(self, training_dict: dict) -> None:
+        if self.triplet_loss:
+            training_dict["triplet_loss"] = self.triplet_loss.name
+
     def _run_tag(self) -> str:
+        suffix = f"-{self.triplet_loss.slug}" if self.triplet_loss else ""
         if self.version == "v1":
-            return "autoparam-evm-triplet"
-        return f"autoparam-{self.dataset.name}"
+            return "autoparam-evm-triplet" + suffix
+        return f"autoparam-{self.dataset.name}" + suffix
 
     def _extract_accuracy(self, score: dict) -> float:
         return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
@@ -142,6 +152,8 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="evm-cluster_triplet-256",
                         choices=["evm-cluster_triplet-256", "evm-cluster-triplet-256-v2"])
     parser.add_argument("--version", default="v1")
+    parser.add_argument("--triplet-loss", default=None,
+                        choices=[t.name for t in TripletLoss])
     parser.add_argument("--max-experiments", type=lambda s: None if int(s) < 0 else int(s), default=50)
     parser.add_argument("--budget", type=float, default=5.00, metavar="USD")
     parser.add_argument("--state-file", default=None)
@@ -172,6 +184,7 @@ if __name__ == "__main__":
     TripletAutoparamLoop(
         dataset_name=args.dataset,
         version=args.version,
+        triplet_loss=args.triplet_loss,
         max_experiments=args.max_experiments,
         experiment_timeout_minutes=args.timeout_minutes,
         state_path=args.state_file,
