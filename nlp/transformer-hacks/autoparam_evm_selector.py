@@ -94,7 +94,6 @@ class SelectorAutoparamLoop(AutoparamLoopBase):
         super().__init__(
             dataset=NAMED_DATASETS[dataset_name],
             state_path=state_path,
-            plot_subdir=f"{SELECTOR_TAG}/{dataset_name}" if version == "v1" else dataset_name,
             **kwargs,
         )
 

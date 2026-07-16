@@ -132,6 +132,17 @@ def validate(cfg: dict, gpus_total: int):
         _validate_job(j, gpus_total)
 
 
+def _config_mtime(path: Path):
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return None
+
+
+def _build_jobs(cfg: dict):
+    return [j for j in cfg["jobs"] if j["enabled"]]
+
+
 class Status:
     def __init__(self):
         self.history = deque(maxlen=50)
@@ -521,29 +532,28 @@ def main():
 
     status = Status()
     status.write()
-    jobs = [j for j in cfg["jobs"] if j["enabled"] for _ in range(j["weight"])]
+    jobs = _build_jobs(cfg)
     if not jobs:
         raise SystemExit("no enabled jobs")
+    cfg_mtime = _config_mtime(args.config)
     quarantine_until = {j["name"]: 0.0 for j in jobs}
     quarantine_sec = cfg["quarantine_hours"] * 3600
-    i = 0
+    runs = {j["name"]: 0 for j in jobs}
+    cycles = 0
     while True:
         inbox = next_inbox_file()
         if inbox is not None:
             process_inbox_file(inbox, status, cfg, gpus_total)
             continue
-        job = jobs[i % len(jobs)]
         now = time.time()
-        if quarantine_until[job["name"]] > now:
-            remaining = quarantine_until[job["name"]] - now
-            if all(quarantine_until[j["name"]] > now for j in jobs):
-                sleep_for = min(quarantine_until[j["name"]] for j in jobs) - now
-                log(f"all jobs quarantined — sleeping {sleep_for:.0f}s")
-                time.sleep(max(sleep_for, 1))
-                continue
-            log(f"skipping {job['name']} — quarantined for {remaining:.0f}s more")
-            i += 1
+        order = {j["name"]: k for k, j in enumerate(jobs)}
+        eligible = [j for j in jobs if quarantine_until.get(j["name"], 0.0) <= now]
+        if not eligible:
+            sleep_for = min(quarantine_until[j["name"]] for j in jobs) - now
+            log(f"all jobs quarantined — sleeping {sleep_for:.0f}s")
+            time.sleep(max(sleep_for, 1))
             continue
+        job = min(eligible, key=lambda j: (runs[j["name"]] / j["weight"], order[j["name"]]))
         log(f"=== slot start: {job['name']} ({job['slot_minutes']:.1f}m) ===")
         try:
             abandoned, preempted = run_slot(
@@ -558,13 +568,37 @@ def main():
         if preempted:
             log(f"{job['name']} preempted by inbox — will resume after draining inbox")
             continue
+        runs[job["name"]] += 1
         if abandoned:
             quarantine_until[job["name"]] = time.time() + quarantine_sec
             log(f"quarantining {job['name']} for {cfg['quarantine_hours']}h")
-        i += 1
-        if args.max_cycles and i >= args.max_cycles:
+        cycles += 1
+        if args.max_cycles and cycles >= args.max_cycles:
             log(f"reached --max-cycles={args.max_cycles}, exiting cleanly")
             return
+
+        new_mtime = _config_mtime(args.config)
+        if new_mtime is not None and new_mtime != cfg_mtime:
+            try:
+                new_cfg = load_config(args.config)
+                validate(new_cfg, gpus_total)
+                new_jobs = _build_jobs(new_cfg)
+                if not new_jobs:
+                    raise SystemExit("no enabled jobs")
+            except Exception as e:
+                log(f"FATAL: config reload failed — fix scheduler.yaml and restart: {e}")
+                raise SystemExit(f"invalid config on reload: {e}")
+            else:
+                base = min(runs.values()) if runs else 0
+                cfg, jobs, cfg_mtime = new_cfg, new_jobs, new_mtime
+                quarantine_sec = cfg["quarantine_hours"] * 3600
+                quarantine_until = {
+                    j["name"]: quarantine_until.get(j["name"], 0.0) for j in jobs
+                }
+                runs = {j["name"]: runs.get(j["name"], base) for j in jobs}
+                added = [j["name"] for j in jobs if j["name"] not in order]
+                log(f"config reloaded — {len(jobs)} jobs"
+                    + (f", new: {', '.join(added)}" if added else ""))
 
 
 if __name__ == "__main__":

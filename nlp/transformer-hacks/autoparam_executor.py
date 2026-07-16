@@ -17,12 +17,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from experiments import execute, NAMED_DATASETS
+from experiments import execute, NAMED_DATASETS, PretrainedModelConstruction
 from training.model import Model, SamplingMethod
 from training.trainer import DistributedStrategy
 from autoparam import ConfigSerializer, StabilityMetric
 from scheduler.cooperative import install_shutdown_handler
 install_shutdown_handler()
+from utils.load_mode_from_checkpoint import load_modeL_tag, load_model_from_path, load_raw_from_path
 from utils.checkpoints import apply_checkpoint_tag
 
 
@@ -45,10 +46,38 @@ def build_and_run(cfg, rank, log):
     )
     apply_checkpoint_tag(training_options, cfg)
 
-    model = Model(config)
+    init_from_tag = cfg.get("init_from_tag")
+    init_from_path = cfg.get("init_from_path")
+    resume = None
+    if init_from_tag or init_from_path:
+        checkpoint_path = load_modeL_tag(init_from_tag) if init_from_tag else init_from_path
+        log(f"resuming from: {checkpoint_path}")
+        base_model, pretrain_config = load_model_from_path(checkpoint_path)
+        arch_keys = ("num_transformer_layers", "dim_embeddings", "num_attention_heads",
+                     "vocab_size", "sequence_length", "transformer_layer", "positional_embedding")
+        arch_match = all(
+            getattr(config, k, None) == getattr(pretrain_config, k, None)
+            for k in arch_keys
+        )
+        if not arch_match:
+            raise ValueError(
+                f"arch mismatch: preset config does not match checkpoint {checkpoint_path}"
+            )
+        log("arch matches checkpoint - using PretrainedModelConstruction")
+        model = PretrainedModelConstruction(pretrain_config, base_model)()
+        if cfg.get("resume_optimizer", True):
+            _, optimizer_state, stats = load_raw_from_path(checkpoint_path)
+            resume_step = int(stats.get("steps", 0))
+            resume = {"optimizer_state": optimizer_state, "step": resume_step}
+            sched = getattr(training_options, "lr_scheduler", None)
+            if sched is not None and hasattr(sched, "last_epoch"):
+                sched.last_epoch = resume_step
+            log(f"resuming optimizer + step from {resume_step}")
+    else:
+        model = Model(config)
     params_count = sum(p.numel() for p in model.parameters())
     torch.cuda.reset_peak_memory_stats()
-    _, results = execute(dataset, exp_name, model, training_options)
+    _, results = execute(dataset, exp_name, model, training_options, resume=resume)
     score = StabilityMetric.compute(results)
     score["params_count"] = params_count
     try:

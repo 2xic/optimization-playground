@@ -81,7 +81,7 @@ STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
 SCORING_VERSION = 2
 
 
-_GPU_MEMORY_HEADROOM = 0.6
+_GPU_MEMORY_HEADROOM = 0.85
 
 
 def _log_has_oom(path: str) -> bool:
@@ -912,6 +912,9 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
         entry = {
             "promoted_at": payload["promoted_at"],
             "source_tag": source_tag,
+            "path": (latest_payload or {}).get("path"),
+            "run_id": (latest_payload or {}).get("run_id"),
+            "step": (latest_payload or {}).get("step"),
             "score": float(score),
             "accuracy": float(accuracy),
             "previous_score": prev_score,
@@ -1272,9 +1275,14 @@ class AutoparamLoopBase:
         nproc_per_node: int = 1,
         max_consecutive_failures: int = 5,
         random_only: bool = False,
-        plot_subdir: Optional[str] = None,
+        init_from_path: Optional[str] = None,
+        init_from_tag: Optional[str] = None,
+        preset_config: Optional[dict] = None,
     ):
         self.dataset = dataset
+        self.init_from_path = init_from_path
+        self.init_from_tag = init_from_tag
+        self.preset_config = preset_config
         self.max_experiments = max_experiments
         self.budget_usd = budget_usd
         self.distributed_strategy = distributed_strategy
@@ -1285,8 +1293,7 @@ class AutoparamLoopBase:
         self.state = AutoparamState(state_path)
         self._llm_disabled = random_only
         self.proposer = None if random_only else self._make_proposer(llm_model)
-        subdir = plot_subdir or dataset.name
-        self.plot_path = os.path.join("plots", subdir, "autoparam_progress.png")
+        self.plot_path = os.path.join("plots", self.PROMOTE_NAMESPACE, "progress.png")
         os.makedirs(os.path.dirname(self.plot_path), exist_ok=True)
 
         self._active_proc = None
@@ -1471,8 +1478,14 @@ class AutoparamLoopBase:
 
             for attempt in range(MAX_DEDUP_ATTEMPTS):
                 is_extension = False
-                extension = _pick_extension_candidate(self.state) if attempt == 0 else None
-                if extension is not None:
+                extension = None if self.preset_config is not None else (
+                    _pick_extension_candidate(self.state) if attempt == 0 else None
+                )
+                if self.preset_config is not None:
+                    cand = dict(self.preset_config)
+                    cand_reason = cand.pop("reasoning", "Preset predefined architecture")
+                    src = f"Preset predefined architecture (exp {exp_id})"
+                elif extension is not None:
                     cand = extension
                     cand_reason = cand.pop("reasoning")
                     is_extension = True
@@ -1521,7 +1534,7 @@ class AutoparamLoopBase:
                     reasoning = cand_reason
                     break
 
-                if self._already_run(m_dict, t_dict):
+                if self.preset_config is None and self._already_run(m_dict, t_dict):
                     self._log(f"Duplicate config (attempt {attempt + 1}/{MAX_DEDUP_ATTEMPTS}), retrying.")
                     continue
 
@@ -1597,6 +1610,10 @@ class AutoparamLoopBase:
             }
             if self.INCLUDES_DATASET_NAME_IN_CONFIG:
                 config_data["dataset_name"] = self.dataset.name
+            if self.init_from_path:
+                config_data["init_from_path"] = self.init_from_path
+            if self.init_from_tag:
+                config_data["init_from_tag"] = self.init_from_tag
             config_data.update(self._extra_config_data())
             config_path = None
             result_path = None
@@ -1926,6 +1943,21 @@ if __name__ == "__main__":
         metavar="USD",
         help="Stop when OpenRouter daily spend exceeds this amount (in USD)",
     )
+    parser.add_argument(
+        "--init-from-path",
+        default=None,
+        help="Raw checkpoint step-dir path to continue training from (weights+optimizer+step)",
+    )
+    parser.add_argument(
+        "--init-from-tag",
+        default=None,
+        help="Checkpoint tag to continue training from (weights+optimizer+step)",
+    )
+    parser.add_argument(
+        "--preset-config",
+        default=None,
+        help="Path to a JSON config to force-train (bypasses proposer/dedup)",
+    )
     args = parser.parse_args()
 
     if args.check_spend:
@@ -1938,6 +1970,11 @@ if __name__ == "__main__":
 
     strategy = DistributedStrategy[args.distributed_strategy.upper()]
 
+    preset_config = None
+    if args.preset_config:
+        with open(args.preset_config) as f:
+            preset_config = json.load(f)
+
     AutoparamLoop(
         dataset_name=args.dataset,
         max_experiments=args.max_experiments,
@@ -1949,4 +1986,7 @@ if __name__ == "__main__":
         nproc_per_node=args.nproc_per_node,
         max_consecutive_failures=args.max_consecutive_failures,
         random_only=args.random_only,
+        init_from_path=args.init_from_path,
+        init_from_tag=args.init_from_tag,
+        preset_config=preset_config,
     ).run()

@@ -810,6 +810,8 @@ class Model(nn.Module):
 
     def get_hidden_states(self, x: torch.Tensor):
         assert len(x.shape) == 2, f"X = {x.shape}"
+        seq_len = x.shape[1]
+        mask = self.mask[:seq_len, :seq_len] if self.mask is not None else None
         if self.config.transformer_layer in [
             TransformerLayerType.OLMO_HYPER_CONNECTIONS,
             TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
@@ -820,9 +822,9 @@ class Model(nn.Module):
             H = self.dropout(H)
             for i, layer in enumerate(self.transformer_layers):
                 if self.training and self.config.gradient_checkpointing and i % 2 == 0:
-                    H = torch.utils.checkpoint.checkpoint(layer, H, self.mask, use_reentrant=False)
+                    H = torch.utils.checkpoint.checkpoint(layer, H, mask, use_reentrant=False)
                 else:
-                    H = layer(H, self.mask)
+                    H = layer(H, mask)
             x = H.sum(dim=2)
             return self.layer_norm(x)
         x = self.embeddings(x)
@@ -830,9 +832,9 @@ class Model(nn.Module):
         x = self.dropout(x)
         for i, layer in enumerate(self.transformer_layers):
             if self.training and self.config.gradient_checkpointing and i % 2 == 0:
-                x = torch.utils.checkpoint.checkpoint(layer, x, self.mask, use_reentrant=False)
+                x = torch.utils.checkpoint.checkpoint(layer, x, mask, use_reentrant=False)
             else:
-                x = layer(x, self.mask)
+                x = layer(x, mask)
         return self.layer_norm(x)
 
     @torch.no_grad()

@@ -67,15 +67,33 @@ jobs:
     script: autoparam.py
     args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
-    slot_minutes: 480
+    slot_minutes: 1200
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
-      TRAINING_TIME_MINUTES: "475"
+      TRAINING_TIME_MINUTES: "1195"
   - name: finetune
     script: autoparam_finetune.py
     args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
-    slot_minutes: 480
+    slot_minutes: 240
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
-      TRAINING_TIME_MINUTES: "475"
+      TRAINING_TIME_MINUTES: "235"
+  - name: preset-baseline
+    script: autoparam.py
+    args: ["--preset-config", "presets/baseline_fineweb.json", "--max-experiments", "1", "--random-only", "--max-consecutive-failures", "5"]
+    gpus: -1
+    slot_minutes: 1200
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "1195"
+  - name: continue-from-path
+    script: autoparam.py
+    args: ["--preset-config", "presets/baseline_fineweb.json", "--init-from-path", "checkpoints/DATE/RUN_ID/step_STEP", "--max-experiments", "1", "--random-only", "--max-consecutive-failures", "5"]
+    gpus: -1
+    slot_minutes: 1200
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "1195"

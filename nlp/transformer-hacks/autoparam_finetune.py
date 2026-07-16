@@ -139,7 +139,6 @@ class FinetuneAutoparamLoop(AutoparamLoopBase):
         super().__init__(
             dataset=NAMED_DATASETS["smoltalk-256"],
             state_path=state_path,
-            plot_subdir=CHAT_TAG,
             **kwargs,
         )
 

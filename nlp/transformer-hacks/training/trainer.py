@@ -564,6 +564,8 @@ class Trainer(BaseTrainer):
                 fully_shard(self.model, mp_policy=mp_policy)
                 self.model.to(training_options.device)
                 self.optimizer = training_options.optimizer.create_optimizer(self.model.parameters())
+                if self.lr_scheduler is not None:
+                    self.lr_scheduler.create_scheduler(self.optimizer)
             else:
                 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
                 mp_policy = MixedPrecision(param_dtype=mp_dtype, reduce_dtype=mp_dtype, buffer_dtype=mp_dtype)
@@ -573,6 +575,27 @@ class Trainer(BaseTrainer):
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
                     state[k] = v.to(training_options.device)
+        resume = getattr(self, "resume", None)
+        if resume is not None:
+            opt_state = resume.get("optimizer_state")
+            if opt_state is not None:
+                from torch.distributed.checkpoint.state_dict import (
+                    set_optimizer_state_dict,
+                    StateDictOptions,
+                )
+                set_optimizer_state_dict(
+                    self.model, self.optimizer, opt_state,
+                    options=StateDictOptions(full_state_dict=True, cpu_offload=True),
+                )
+                for st in self.optimizer.state.values():
+                    for k, v in st.items():
+                        if isinstance(v, torch.Tensor):
+                            st[k] = v.to(training_options.device)
+            step = int(resume.get("step", 0))
+            self.total_batch_num = step
+            training_options.metadata.total_batch_num = step
+            self.log(f"resumed optimizer + step from {step}")
+            self.resume = None
         if is_fsdp:
             resident_mb = torch.cuda.memory_allocated(training_options.device) / 1024**2
             self.log(f"[fsdp] world_size={dist.get_world_size()} fsdp2={_FSDP2_AVAILABLE} blocks={len(blocks)} resident_after_shard={resident_mb:.0f}MB")
@@ -728,55 +751,55 @@ class GradScalerTrainer(Trainer):
                     y_predicted,
                     y,
                 )
-            with self.metrics_tracker.span("optimize"):
-                self.scaler.scale(loss / training_options.accumulation_steps).backward()
-                if (
-                    self.total_batch_num + 1
-                ) % training_options.accumulation_steps == 0:
-                    max_grad_norm = getattr(training_options.optimizer, "max_grad_norm", 0)
-                    if max_grad_norm > 0:
-                        self.scaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
-                    prev_scale = self.scaler.get_scale()
-                    self.scaler.step(self.optimizer)
-                    self.scaler.update()
-                    stepped = self.scaler.get_scale() >= prev_scale
-                    self.optimizer.zero_grad(set_to_none=True)
-                    if stepped and self.lr_scheduler is not None:
-                        self.lr_scheduler.step()
-                    if self._rho_selector is not None:
-                        self._rho_selector.update(self._original_model)
+        with self.metrics_tracker.span("optimize"):
+            self.scaler.scale(loss / training_options.accumulation_steps).backward()
+            if (
+                self.total_batch_num + 1
+            ) % training_options.accumulation_steps == 0:
+                max_grad_norm = getattr(training_options.optimizer, "max_grad_norm", 0)
+                if max_grad_norm > 0:
+                    self.scaler.unscale_(self.optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+                prev_scale = self.scaler.get_scale()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                stepped = self.scaler.get_scale() >= prev_scale
+                self.optimizer.zero_grad(set_to_none=True)
+                if stepped and self.lr_scheduler is not None:
+                    self.lr_scheduler.step()
+                if self._rho_selector is not None:
+                    self._rho_selector.update(self._original_model)
 
-            self.total_batch_num += 1
+        self.total_batch_num += 1
 
-            if objective.has_evaluator:
-                with self.metrics_tracker.span("evaluator"):
-                    (accuracy, rows) = objective.evaluator(y_predicted, y)
+        if objective.has_evaluator:
+            with self.metrics_tracker.span("evaluator"):
+                (accuracy, rows) = objective.evaluator(y_predicted, y)
 
-                if dist.is_initialized():
-                    if not torch.isfinite(loss).all():
-                        raise RuntimeError(f"non-finite loss: {loss.item()}")
-                    accuracy_tensor = accuracy.detach().float().reshape(1)
-                    rows_tensor = rows.detach().float().reshape(1)
-                    loss_tensor = loss.detach().float().reshape(1)
+            if dist.is_initialized():
+                if not torch.isfinite(loss).all():
+                    raise RuntimeError(f"non-finite loss: {loss.item()}")
+                accuracy_tensor = accuracy.detach().float().reshape(1)
+                rows_tensor = rows.detach().float().reshape(1)
+                loss_tensor = loss.detach().float().reshape(1)
 
-                    dist.all_reduce(accuracy_tensor, op=dist.ReduceOp.SUM)
-                    dist.all_reduce(rows_tensor, op=dist.ReduceOp.SUM)
-                    dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
+                dist.all_reduce(accuracy_tensor, op=dist.ReduceOp.SUM)
+                dist.all_reduce(rows_tensor, op=dist.ReduceOp.SUM)
+                dist.all_reduce(loss_tensor, op=dist.ReduceOp.SUM)
 
-                    accuracy = accuracy_tensor
-                    rows = rows_tensor
-                    loss = loss_tensor / dist.get_world_size()
+                accuracy = accuracy_tensor
+                rows = rows_tensor
+                loss = loss_tensor / dist.get_world_size()
 
-                metrics = {
-                    "loss": loss,
-                    "accuracy": accuracy / rows * 100,
-                }
-                if self.last_time is not None:
-                    elapsed = now - self.last_time
-                    metrics["samples_per_second"] = rows / elapsed
-                    metrics["batches_per_second"] = 1 / (now - self.last_time)
-                self.metrics_tracker.log(**metrics)
-                self.last_time = now
-                return loss, accuracy, rows
-            return loss, 0, 0
+            metrics = {
+                "loss": loss,
+                "accuracy": accuracy / rows * 100,
+            }
+            if self.last_time is not None:
+                elapsed = now - self.last_time
+                metrics["samples_per_second"] = rows / elapsed
+                metrics["batches_per_second"] = 1 / (now - self.last_time)
+            self.metrics_tracker.log(**metrics)
+            self.last_time = now
+            return loss, accuracy, rows
+        return loss, 0, 0

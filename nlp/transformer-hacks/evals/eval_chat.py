@@ -6,6 +6,7 @@ DATASET = "fineweb-256"
 PIN = {}
 
 TAGS = [
+    "autoparam-pretrain",
     "autoparam-finetune",
 ]
 
@@ -41,7 +42,7 @@ def predict(model_path, prompt):
     )
     if r.status_code != 200:
         raise SystemExit(f"{r.status_code}: {r.text}")
-    return r.json()[0]["model_argmax_sampling"]
+    return r.json()[0]["model_temperature_sampling"]
 
 
 def answer(raw):

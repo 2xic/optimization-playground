@@ -49,9 +49,11 @@ class RotaryPositionalEncoding(nn.Module):
         Args:
             x: Tensor, shape [seq_len, batch_size, embedding_dim]
         """
+        seq_len = x.shape[-2]
+        pos = self.position_encodings[:seq_len]
         cos_enc, sin_enc = (
-            self.position_encodings[..., 0::2],
-            self.position_encodings[..., 1::2],
+            pos[..., 0::2],
+            pos[..., 1::2],
         )
         x_even = x[..., 0::2].clone()
         x_odd = x[..., 1::2].clone()

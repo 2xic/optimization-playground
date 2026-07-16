@@ -291,6 +291,7 @@ def predict():
             yield f"tokenizing {i + 1}/{len(documents)}"
             tokenized = dataloader.tokenize(
                 [text],
+                padding=False,
                 apply_transform=apply_transform,
                 add_special_tokens=add_special_tokens,
             )
@@ -343,6 +344,7 @@ def classify():
             yield f"tokenizing {i + 1}/{len(documents)}"
             tokenized = dataloader.tokenize(
                 [text],
+                padding=False,
                 apply_transform=apply_transform,
                 add_special_tokens=add_special_tokens,
             )

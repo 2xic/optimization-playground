@@ -66,6 +66,7 @@ def load_model_from_path(base_model_path):
             if k.startswith("base.")
         }
     model.load_state_dict(weights)
+    model.eval()
     print("Model loaded!")
     return (model, model_config)
 

@@ -139,7 +139,6 @@ class FeedbackAutoparamLoop(AutoparamLoopBase):
         super().__init__(
             dataset=NAMED_DATASETS[dataset_name],
             state_path=state_path,
-            plot_subdir=FEEDBACK_TAG if version == "v1" else dataset_name,
             **kwargs,
         )
 

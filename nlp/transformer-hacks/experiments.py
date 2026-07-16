@@ -356,6 +356,7 @@ def execute(
     ),
     objective_factory=None,
     batch_adapter=None,
+    resume=None,
 ):
     import gc
 
@@ -394,6 +395,8 @@ def execute(
             )
             if batch_adapter is not None:
                 trainer.batch_adapter = batch_adapter
+            if resume is not None:
+                trainer.resume = resume
             (accuracy, loss, step_acc, step_ls, epoch_at_step,
              val_acc, val_ls, val_at_step) = trainer.train(
                 dataset,
