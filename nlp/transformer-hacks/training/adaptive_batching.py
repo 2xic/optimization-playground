@@ -27,7 +27,7 @@ class AdaptiveBatchSizer:
         min_batch=8,
         max_batch=512,
         window_size=10,
-        target_utilization=0.75,
+        target_utilization=0.85,
         safety_margin=0.1,
     ):
         self.current_batch = initial_batch
@@ -55,7 +55,7 @@ class AdaptiveBatchSizer:
         # )
         return self.has_sample
 
-    def get_batch_size(self, increment=2):
+    def get_batch_size(self, increment=16):
         if not self.has_sample:
             return self.current_batch
 

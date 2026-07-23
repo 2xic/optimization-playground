@@ -78,7 +78,7 @@ import matplotlib.pyplot as plt
 STABILITY_TAIL_FRACTION = 0.25
 STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
 
-SCORING_VERSION = 2
+SCORING_VERSION = 4
 
 
 _GPU_MEMORY_HEADROOM = 0.85
@@ -849,7 +849,7 @@ def _pick_extension_candidate(state) -> Optional[dict]:
     return None
 
 
-def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy: float, metadata: Optional[dict] = None) -> bool:
+def _promote_best_tag(dataset_name: str, source_tag: str, score: float, objective: float, metadata: Optional[dict] = None, val_accuracy: Optional[float] = None, train_accuracy: Optional[float] = None) -> bool:
     from utils.checkpoints import StorageBox
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
@@ -861,22 +861,22 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
     dst_latest = os.path.join("checkpoints", "tags", dataset_name, "latest.json")
 
     prev_score = None
-    prev_accuracy = None
+    prev_objective = None
     prev_payload = None
     try:
         prev_payload = json.loads(storage.load_bytes(dst_best, use_cache=False))
         prev_score = float(prev_payload.get("score", float("-inf")))
-        prev_accuracy = float(prev_payload.get("accuracy", float("-inf")))
+        prev_objective = float(prev_payload.get("objective", float("-inf")))
     except Exception:
         prev_payload = None
 
     if prev_payload is not None and prev_payload.get("scoring_version") != SCORING_VERSION:
         prev_score = None
-        prev_accuracy = None
+        prev_objective = None
 
-    accuracy_ok = prev_accuracy is None or accuracy >= prev_accuracy
+    objective_ok = prev_objective is None or objective >= prev_objective
     score_ok = prev_score is None or score > prev_score
-    is_new_best = accuracy_ok and score_ok
+    is_new_best = objective_ok and score_ok
 
     try:
         latest_payload = json.loads(storage.load_bytes(src, use_cache=False))
@@ -887,9 +887,11 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
         payload = {
             "scoring_version": SCORING_VERSION,
             "score": float(score),
-            "accuracy": float(accuracy),
+            "objective": float(objective),
+            "val_accuracy": float(val_accuracy) if val_accuracy is not None else None,
+            "train_accuracy": float(train_accuracy) if train_accuracy is not None else None,
             "previous_score": prev_score,
-            "previous_accuracy": prev_accuracy,
+            "previous_objective": prev_objective,
             "source_tag": source_tag,
             "promoted_at": datetime.now().isoformat(),
             "pointer": latest_payload,
@@ -900,9 +902,9 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
         payload["scoring_version"] = SCORING_VERSION
         payload["last_checked_at"] = datetime.now().isoformat()
         payload["last_checked_score"] = float(score)
-        payload["last_checked_accuracy"] = float(accuracy)
+        payload["last_checked_objective"] = float(objective)
         payload["last_checked_rejected_reason"] = (
-            "accuracy_regression" if not accuracy_ok else "score_not_better"
+            "objective_regression" if not objective_ok else "score_not_better"
         )
     storage.save_bytes(json.dumps(payload, indent=2).encode(), dst_best)
     if latest_payload is not None:
@@ -916,9 +918,11 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, accuracy
             "run_id": (latest_payload or {}).get("run_id"),
             "step": (latest_payload or {}).get("step"),
             "score": float(score),
-            "accuracy": float(accuracy),
+            "objective": float(objective),
+            "val_accuracy": float(val_accuracy) if val_accuracy is not None else None,
+            "train_accuracy": float(train_accuracy) if train_accuracy is not None else None,
             "previous_score": prev_score,
-            "previous_accuracy": prev_accuracy,
+            "previous_objective": prev_objective,
         }
         try:
             existing = storage.load_bytes(dst_history, use_cache=False)
@@ -1250,7 +1254,7 @@ class AutoparamLoopBase:
       LOG_PREFIX, EXP_NAME_PREFIX, EXECUTOR_SCRIPT, PROMOTE_NAMESPACE,
       INCLUDES_DATASET_NAME_IN_CONFIG, BASELINE_BATCH_SIZE,
       _make_proposer, _post_init, _apply_locks_to_dict, _apply_locks_to_config,
-      _run_tag, _extra_config_data, _extract_accuracy,
+      _run_tag, _extra_config_data, _extract_objective,
       _format_success_log, _format_best_log, _summary_sort_key, _format_summary_line.
     """
 
@@ -1340,7 +1344,10 @@ class AutoparamLoopBase:
     def _extra_config_data(self) -> dict:
         return {}
 
-    def _extract_accuracy(self, score: dict) -> float:
+    def _extract_objective(self, score: dict) -> float:
+        val_loss = score.get("val_loss")
+        if val_loss is not None and math.isfinite(val_loss):
+            return -float(val_loss)
         return float(score.get("final_accuracy", -1.0))
 
     def _format_success_log(self, score: dict) -> str:
@@ -1425,6 +1432,340 @@ class AutoparamLoopBase:
             for e in self.state.experiments
         )
 
+    def _launch_and_collect(self, config_data, training_dict, timeout_minutes):
+        score, status, error_message = {}, "failed", None
+        config_path = None
+        result_path = None
+        oom_attempt = 0
+        try:
+            while True:
+                oom_detected = False
+                with tempfile.NamedTemporaryFile(
+                    mode="w", suffix=".json", delete=False, dir="/tmp"
+                ) as f:
+                    json.dump(config_data, f)
+                    config_path = f.name
+                result_path = config_path.replace(".json", "_result.json")
+                stop_file = config_path.replace(".json", ".stop")
+
+                executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), self.EXECUTOR_SCRIPT)
+                cmd = [
+                    "torchrun",
+                    f"--nproc_per_node={self.nproc_per_node}",
+                    "--standalone",
+                    "--max-restarts=0",
+                    "--monitor-interval=5",
+                    executor,
+                    "--config", config_path,
+                    "--result", result_path,
+                ]
+                log_path = result_path.replace("_result.json", "_run.log")
+                log_file = open(log_path, "w")
+                current_link = "/tmp/autoparam_current.log"
+                try:
+                    if os.path.islink(current_link) or os.path.exists(current_link):
+                        os.unlink(current_link)
+                    os.symlink(log_path, current_link)
+                except OSError:
+                    pass
+                print(f"{self.LOG_PREFIX} subprocess log: {log_path}", flush=True)
+                env = os.environ.copy()
+                env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+                env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
+                env.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
+                env.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
+                env["AUTOPARAM_STOP_FILE"] = stop_file
+                proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True, env=env)
+                log_file.close()
+                self._active_proc = proc
+                pgid = os.getpgid(proc.pid)
+                self._active_pgid = pgid
+                self._active_stop_file = stop_file
+                self._stop_requested_at = None
+                hard_deadline = time.time() + (timeout_minutes + 5) * 60
+                try:
+                    while True:
+                        try:
+                            proc.wait(timeout=5)
+                            break
+                        except subprocess.TimeoutExpired:
+                            pass
+                        now = time.time()
+                        if _log_has_oom(log_path):
+                            print(
+                                f"{self.LOG_PREFIX} Detected CUDA OOM in subprocess log, killing early",
+                                flush=True,
+                            )
+                            oom_detected = True
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except OSError:
+                                pass
+                            break
+                        if now >= hard_deadline:
+                            print(
+                                f"Experiment subprocess past hard deadline ({timeout_minutes + 5} min), killing",
+                                flush=True,
+                            )
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except OSError:
+                                pass
+                            break
+                        if shutdown_requested() and not os.path.exists(stop_file):
+                            try:
+                                open(stop_file, "w").close()
+                            except OSError:
+                                pass
+                            try:
+                                os.killpg(pgid, signal.SIGUSR1)
+                            except OSError:
+                                pass
+                            if self._stop_requested_at is None:
+                                self._stop_requested_at = now
+                        if self._stop_requested_at and now - self._stop_requested_at >= self._stop_grace_seconds:
+                            self._log(
+                                f"Stop requested >{self._stop_grace_seconds}s ago, escalating to SIGKILL"
+                            )
+                            try:
+                                os.killpg(pgid, signal.SIGKILL)
+                            except OSError:
+                                pass
+                            break
+                except KeyboardInterrupt:
+                    os.killpg(pgid, signal.SIGKILL)
+                    proc.wait()
+                    raise
+                finally:
+                    if proc.poll() is None:
+                        try:
+                            os.killpg(pgid, signal.SIGKILL)
+                        except OSError:
+                            pass
+                    try:
+                        proc.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    self._active_proc = None
+                    self._active_pgid = None
+                    self._active_stop_file = None
+                    self._stop_requested_at = None
+                    if os.path.exists(stop_file):
+                        try:
+                            os.unlink(stop_file)
+                        except OSError:
+                            pass
+                    time.sleep(15)
+
+                if os.path.exists(result_path):
+                    with open(result_path) as f:
+                        result_data = json.load(f)
+                    score = result_data.get("score", {})
+                    status = result_data.get("status", "failed")
+                    error_message = result_data.get("error_message")
+                else:
+                    status = "failed"
+                    error_message = f"Executor exited with code {proc.returncode}, no result written"
+
+                if not oom_detected and error_message:
+                    _em = error_message.lower()
+                    oom_detected = "out of memory" in _em or "outofmemoryerror" in _em
+                cur_bs = int(training_dict.get("batch_size", 0) or 0)
+                if (
+                    oom_detected
+                    and oom_attempt < self.OOM_MAX_RETRIES
+                    and cur_bs > self.OOM_BATCH_FLOOR
+                ):
+                    new_bs = max(self.OOM_BATCH_FLOOR, cur_bs // 2)
+                    oom_attempt += 1
+                    self._log(
+                        f"OOM detected, retrying with batch_size {cur_bs} -> {new_bs} "
+                        f"(attempt {oom_attempt}/{self.OOM_MAX_RETRIES})"
+                    )
+                    training_dict["batch_size"] = new_bs
+                    config_data["training_config"] = training_dict
+                    for _p in [config_path, result_path]:
+                        if _p and os.path.exists(_p):
+                            try:
+                                os.unlink(_p)
+                            except OSError:
+                                pass
+                    config_path = None
+                    result_path = None
+                    continue
+                break
+
+            if status == "failed":
+                self._log(f"Training failed: {error_message}")
+            else:
+                self._log(self._format_success_log(score))
+        except Exception as e:
+            import traceback
+            error_message = str(e)
+            self._log(f"Failed to launch executor: {e}\n{traceback.format_exc()}")
+        finally:
+            for p in [config_path, result_path]:
+                if p and os.path.exists(p):
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
+        return score, status, error_message
+
+    def _finalize_experiment(self, exp_id, exp_name, model_dict, training_dict,
+                             score, status, error_message, reasoning, timestamp_start):
+        self.state.add_experiment(
+            ExperimentRecord(
+                experiment_id=exp_id,
+                name=exp_name,
+                model_config=model_dict,
+                training_config=training_dict,
+                score=score,
+                status=status,
+                error_message=error_message,
+                timestamp_start=timestamp_start,
+                timestamp_end=datetime.now().isoformat(),
+                llm_reasoning=reasoning,
+            )
+        )
+        if status == "success":
+            try:
+                acc = self._extract_objective(score)
+                val_loss = score.get("val_loss")
+                composite = acc
+                if val_loss is not None and math.isfinite(val_loss):
+                    composite -= 0.01 * float(val_loss)
+                promoted = _promote_best_tag(
+                    self.PROMOTE_NAMESPACE,
+                    self._run_tag(),
+                    composite,
+                    objective=float(acc),
+                    metadata={"experiment_id": exp_id, "exp_name": exp_name, "score": score},
+                    val_accuracy=score.get("val_accuracy"),
+                    train_accuracy=score.get("final_accuracy"),
+                )
+                if promoted:
+                    self._log(f"Promoted #{exp_id} to {self.PROMOTE_NAMESPACE} (score={composite:.4f})")
+                else:
+                    self._log(f"#{exp_id} not promoted (score={composite:.4f} did not beat stored best)")
+            except Exception as e:
+                self._log(f"Failed to promote best tag: {e}")
+        plot_progress(self.state, self.plot_path)
+
+        best = self.state.best_record
+        if best:
+            self._log(self._format_best_log(best))
+
+    # ---- Resume framework ----
+    def _storage_box(self):
+        from utils.checkpoints import StorageBox
+        return StorageBox(
+            host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+            username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+            password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+        )
+
+    def _resume_manifest_path(self):
+        return os.path.join("checkpoints", "tags", self.PROMOTE_NAMESPACE, "resume.json")
+
+    def _read_tag_runid(self):
+        try:
+            tag_file = json.loads(self._storage_box().load_bytes(
+                os.path.join("checkpoints", "tags", self._run_tag(), "latest.json"),
+                use_cache=False,
+            ))
+            return tag_file.get("run_id")
+        except Exception:
+            return None
+
+    def _write_resume_manifest(self, exp_id, exp_name, config_data, prev_runid):
+        try:
+            storage = self._storage_box()
+            try:
+                tag_file = json.loads(storage.load_bytes(
+                    os.path.join("checkpoints", "tags", self._run_tag(), "latest.json"),
+                    use_cache=False,
+                ))
+                checkpoint_path = tag_file.get("path")
+                step = tag_file.get("step")
+                run_id = tag_file.get("run_id")
+            except Exception as e:
+                self._log(f"Resume manifest: no checkpoint tag to resume from ({e}); not writing manifest.")
+                return
+            if run_id == prev_runid:
+                self._log("Resume manifest: this experiment flushed no fresh checkpoint (stale tag); not writing manifest.")
+                return
+            manifest = {
+                "scoring_version": SCORING_VERSION,
+                "namespace": self.PROMOTE_NAMESPACE,
+                "dataset": self.dataset.name,
+                "experiment_id": exp_id,
+                "exp_name": exp_name,
+                "config_data": config_data,
+                "checkpoint_path": checkpoint_path,
+                "step": step,
+            }
+            storage.save_bytes(json.dumps(manifest).encode(), self._resume_manifest_path())
+            self._log(f"Wrote resume manifest for exp #{exp_id} at step {step} -> {checkpoint_path}")
+        except Exception as e:
+            self._log(f"Failed to write resume manifest: {e}")
+
+    def _read_resume_manifest(self):
+        try:
+            raw = self._storage_box().load_bytes(self._resume_manifest_path(), use_cache=False)
+        except Exception:
+            return None
+        try:
+            manifest = json.loads(raw)
+        except Exception:
+            return None
+        if manifest.get("scoring_version") != SCORING_VERSION:
+            self._log(
+                f"Resume manifest scoring_version {manifest.get('scoring_version')} "
+                f"!= current {SCORING_VERSION}; discarding."
+            )
+            self._clear_resume_manifest()
+            return None
+        if manifest.get("namespace") != self.PROMOTE_NAMESPACE:
+            return None
+        return manifest
+
+    def _clear_resume_manifest(self):
+        try:
+            self._storage_box().delete(self._resume_manifest_path())
+        except Exception:
+            pass
+
+    def _resume_from_manifest(self, manifest):
+        exp_id = manifest["experiment_id"]
+        exp_name = manifest["exp_name"]
+        config_data = dict(manifest["config_data"])
+        checkpoint_path = manifest.get("checkpoint_path")
+        if not checkpoint_path:
+            self._log("Resume manifest has no checkpoint_path; discarding.")
+            self._clear_resume_manifest()
+            return
+        config_data["init_from_path"] = checkpoint_path
+        config_data["resume_optimizer"] = True
+        config_data.pop("init_from_tag", None)
+        model_dict = config_data.get("model_config", {})
+        training_dict = config_data.get("training_config", {})
+        timeout_minutes = config_data.get("timeout_minutes", self.timeout)
+        timestamp_start = datetime.now().isoformat()
+        self._log(f"Resuming interrupted experiment #{exp_id} ({exp_name}) from {checkpoint_path}")
+        prev_runid = self._read_tag_runid()
+        score, status, error_message = self._launch_and_collect(
+            config_data, training_dict, timeout_minutes
+        )
+        if shutdown_requested() and status != "success":
+            self._write_resume_manifest(exp_id, exp_name, config_data, prev_runid)
+            self._log("Re-interrupted while resuming — resume manifest refreshed; exiting.")
+            return
+        self._finalize_experiment(exp_id, exp_name, model_dict, training_dict,
+                                  score, status, error_message,
+                                  "Resumed interrupted experiment", timestamp_start)
+        self._clear_resume_manifest()
+
     def run(self):
         start_id = len(self.state.experiments)
         budget_msg = f"  Budget: ${self.budget_usd:.2f}" if self.budget_usd else ""
@@ -1440,6 +1781,11 @@ class AutoparamLoopBase:
                 )
         consecutive_failures = 0
         stopped_early = False
+
+        manifest = self._read_resume_manifest()
+        if manifest is not None:
+            self._resume_from_manifest(manifest)
+            start_id = len(self.state.experiments)
 
         import itertools
         loop_range = itertools.count(start_id) if self.max_experiments is None else range(start_id, start_id + self.max_experiments)
@@ -1615,186 +1961,27 @@ class AutoparamLoopBase:
             if self.init_from_tag:
                 config_data["init_from_tag"] = self.init_from_tag
             config_data.update(self._extra_config_data())
-            config_path = None
-            result_path = None
-            oom_attempt = 0
-            try:
-                while True:
-                    oom_detected = False
-                    with tempfile.NamedTemporaryFile(
-                        mode="w", suffix=".json", delete=False, dir="/tmp"
-                    ) as f:
-                        json.dump(config_data, f)
-                        config_path = f.name
-                    result_path = config_path.replace(".json", "_result.json")
-                    stop_file = config_path.replace(".json", ".stop")
 
-                    executor = os.path.join(os.path.dirname(os.path.abspath(__file__)), self.EXECUTOR_SCRIPT)
-                    cmd = [
-                        "torchrun",
-                        f"--nproc_per_node={self.nproc_per_node}",
-                        "--standalone",
-                        "--max-restarts=0",
-                        "--monitor-interval=5",
-                        executor,
-                        "--config", config_path,
-                        "--result", result_path,
-                    ]
-                    log_path = result_path.replace("_result.json", "_run.log")
-                    log_file = open(log_path, "w")
-                    current_link = "/tmp/autoparam_current.log"
-                    try:
-                        if os.path.islink(current_link) or os.path.exists(current_link):
-                            os.unlink(current_link)
-                        os.symlink(log_path, current_link)
-                    except OSError:
-                        pass
-                    print(f"{self.LOG_PREFIX} subprocess log: {log_path}", flush=True)
-                    env = os.environ.copy()
-                    env.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
-                    env.setdefault("NCCL_ASYNC_ERROR_HANDLING", "1")
-                    env.setdefault("TORCH_NCCL_BLOCKING_WAIT", "1")
-                    env.setdefault("PYTORCH_ALLOC_CONF", "expandable_segments:True")
-                    env["AUTOPARAM_STOP_FILE"] = stop_file
-                    proc = subprocess.Popen(cmd, stdout=log_file, stderr=log_file, start_new_session=True, env=env)
-                    log_file.close()
-                    self._active_proc = proc
-                    pgid = os.getpgid(proc.pid)
-                    self._active_pgid = pgid
-                    self._active_stop_file = stop_file
-                    self._stop_requested_at = None
-                    hard_deadline = time.time() + (training_options.training_timeout_minutes + 5) * 60
-                    try:
-                        while True:
-                            try:
-                                proc.wait(timeout=5)
-                                break
-                            except subprocess.TimeoutExpired:
-                                pass
-                            now = time.time()
-                            if _log_has_oom(log_path):
-                                print(
-                                    f"{self.LOG_PREFIX} Detected CUDA OOM in subprocess log, killing early",
-                                    flush=True,
-                                )
-                                oom_detected = True
-                                try:
-                                    os.killpg(pgid, signal.SIGKILL)
-                                except OSError:
-                                    pass
-                                break
-                            if now >= hard_deadline:
-                                print(
-                                    f"Experiment subprocess past hard deadline ({training_options.training_timeout_minutes + 5} min), killing",
-                                    flush=True,
-                                )
-                                try:
-                                    os.killpg(pgid, signal.SIGKILL)
-                                except OSError:
-                                    pass
-                                break
-                            if shutdown_requested() and not os.path.exists(stop_file):
-                                try:
-                                    open(stop_file, "w").close()
-                                except OSError:
-                                    pass
-                                try:
-                                    os.killpg(pgid, signal.SIGUSR1)
-                                except OSError:
-                                    pass
-                                if self._stop_requested_at is None:
-                                    self._stop_requested_at = now
-                            if self._stop_requested_at and now - self._stop_requested_at >= self._stop_grace_seconds:
-                                self._log(
-                                    f"Stop requested >{self._stop_grace_seconds}s ago, escalating to SIGKILL"
-                                )
-                                try:
-                                    os.killpg(pgid, signal.SIGKILL)
-                                except OSError:
-                                    pass
-                                break
-                    except KeyboardInterrupt:
-                        os.killpg(pgid, signal.SIGKILL)
-                        proc.wait()
-                        raise
-                    finally:
-                        if proc.poll() is None:
-                            try:
-                                os.killpg(pgid, signal.SIGKILL)
-                            except OSError:
-                                pass
-                        try:
-                            proc.wait(timeout=10)
-                        except subprocess.TimeoutExpired:
-                            pass
-                        self._active_proc = None
-                        self._active_pgid = None
-                        self._active_stop_file = None
-                        self._stop_requested_at = None
-                        if os.path.exists(stop_file):
-                            try:
-                                os.unlink(stop_file)
-                            except OSError:
-                                pass
-                        time.sleep(15)
+            prev_runid = self._read_tag_runid()
+            score, status, error_message = self._launch_and_collect(
+                config_data, training_dict, training_options.training_timeout_minutes
+            )
 
-                    if os.path.exists(result_path):
-                        with open(result_path) as f:
-                            result_data = json.load(f)
-                        score = result_data.get("score", {})
-                        status = result_data.get("status", "failed")
-                        error_message = result_data.get("error_message")
-                    else:
-                        status = "failed"
-                        error_message = f"Executor exited with code {proc.returncode}, no result written"
-
-                    if not oom_detected and error_message:
-                        _em = error_message.lower()
-                        oom_detected = "out of memory" in _em or "outofmemoryerror" in _em
-                    cur_bs = int(training_dict.get("batch_size", 0) or 0)
-                    if (
-                        oom_detected
-                        and oom_attempt < self.OOM_MAX_RETRIES
-                        and cur_bs > self.OOM_BATCH_FLOOR
-                    ):
-                        new_bs = max(self.OOM_BATCH_FLOOR, cur_bs // 2)
-                        oom_attempt += 1
-                        self._log(
-                            f"OOM detected, retrying with batch_size {cur_bs} -> {new_bs} "
-                            f"(attempt {oom_attempt}/{self.OOM_MAX_RETRIES})"
-                        )
-                        training_dict["batch_size"] = new_bs
-                        config_data["training_config"] = training_dict
-                        for _p in [config_path, result_path]:
-                            if _p and os.path.exists(_p):
-                                try:
-                                    os.unlink(_p)
-                                except OSError:
-                                    pass
-                        config_path = None
-                        result_path = None
-                        continue
-                    break
-
-                if status == "failed":
-                    self._log(f"Training failed: {error_message}")
-                    consecutive_failures += 1
+            if shutdown_requested():
+                if status == "success":
+                    self._finalize_experiment(
+                        exp_id, exp_name, model_dict, training_dict,
+                        score, status, error_message, reasoning, timestamp_start,
+                    )
+                    self._log("Shutdown after experiment completed — recorded; exiting.")
                 else:
-                    self._log(self._format_success_log(score))
-            except Exception as e:
-                import traceback
-                error_message = str(e)
-                self._log(f"Failed to launch executor: {e}\n{traceback.format_exc()}")
-                consecutive_failures += 1
-            finally:
-                for p in [config_path, result_path]:
-                    if p and os.path.exists(p):
-                        try:
-                            os.unlink(p)
-                        except OSError:
-                            pass
+                    self._write_resume_manifest(exp_id, exp_name, config_data, prev_runid)
+                    self._log("Interrupted mid-experiment — resume manifest written; exiting.")
+                break
 
-            if status == "success":
+            if status == "failed":
+                consecutive_failures += 1
+            elif status == "success":
                 consecutive_failures = 0
 
             if consecutive_failures >= self.max_consecutive_failures:
@@ -1804,45 +1991,10 @@ class AutoparamLoopBase:
                 stopped_early = True
                 break
 
-            self.state.add_experiment(
-                ExperimentRecord(
-                    experiment_id=exp_id,
-                    name=exp_name,
-                    model_config=model_dict,
-                    training_config=training_dict,
-                    score=score,
-                    status=status,
-                    error_message=error_message,
-                    timestamp_start=timestamp_start,
-                    timestamp_end=datetime.now().isoformat(),
-                    llm_reasoning=reasoning,
-                )
+            self._finalize_experiment(
+                exp_id, exp_name, model_dict, training_dict,
+                score, status, error_message, reasoning, timestamp_start,
             )
-            if status == "success":
-                try:
-                    acc = self._extract_accuracy(score)
-                    val_loss = score.get("val_loss")
-                    composite = acc
-                    if val_loss is not None and math.isfinite(val_loss):
-                        composite -= 0.01 * float(val_loss)
-                    promoted = _promote_best_tag(
-                        self.PROMOTE_NAMESPACE,
-                        self._run_tag(),
-                        composite,
-                        accuracy=float(acc),
-                        metadata={"experiment_id": exp_id, "exp_name": exp_name, "score": score},
-                    )
-                    if promoted:
-                        self._log(f"Promoted #{exp_id} to {self.PROMOTE_NAMESPACE} (score={composite:.4f})")
-                    else:
-                        self._log(f"#{exp_id} not promoted (score={composite:.4f} did not beat stored best)")
-                except Exception as e:
-                    self._log(f"Failed to promote best tag: {e}")
-            plot_progress(self.state, self.plot_path)
-
-            best = self.state.best_record
-            if best:
-                self._log(self._format_best_log(best))
 
         self._print_summary()
 

@@ -287,8 +287,7 @@ class BaseTrainer(ABC):
                 sum_correct = sum_correct.item()
                 sum_tokens = sum_tokens.item()
                 sum_batches = sum_batches.item()
-            world = dist.get_world_size() if dist.is_initialized() else 1
-            avg_loss = sum_loss / max(sum_batches, 1.0) / max(world, 1)
+            avg_loss = sum_loss / max(sum_batches, 1.0)
             acc_pct = (sum_correct / sum_tokens * 100.0) if sum_tokens > 0 else 0.0
             training_options.metadata.plots.record_val(
                 loss=avg_loss, accuracy=acc_pct, train_step=self.total_batch_num

@@ -105,7 +105,7 @@ class SelectorAutoparamLoop(AutoparamLoopBase):
             return f"autoparam-evm-selector-{self.dataset.name}"
         return f"autoparam-{self.dataset.name}"
 
-    def _extract_accuracy(self, score: dict) -> float:
+    def _extract_objective(self, score: dict) -> float:
         return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
 
     def _format_success_log(self, score: dict) -> str:

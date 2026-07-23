@@ -12,6 +12,7 @@ Usage:
 
 import argparse
 import json
+import math
 import os
 import sys
 from typing import Optional
@@ -187,7 +188,10 @@ class FeedbackAutoparamLoop(AutoparamLoopBase):
     def _extra_config_data(self) -> dict:
         return {"init_from_tag": self.init_tag} if self.init_tag else {}
 
-    def _extract_accuracy(self, score: dict) -> float:
+    def _extract_objective(self, score: dict) -> float:
+        val_loss = score.get("val_loss")
+        if val_loss is not None and not math.isnan(val_loss):
+            return -float(val_loss)
         return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
 
     def _format_success_log(self, score: dict) -> str:

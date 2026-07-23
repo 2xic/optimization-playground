@@ -11,10 +11,137 @@ from tqdm import tqdm
 
 # from training.layers import MultiheadAttention
 from utils.web_dataloader import WebDataloader
+import io
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
+
+import gzip
+import json
+import math
+import uuid
+from dataclasses import asdict
+
+from utils.checkpoints import StorageBox, StorageBoxCheckpoint, Stats, TrainingMetadata
+from scheduler.cooperative import install_shutdown_handler, shutdown_requested
+
+install_shutdown_handler()
+
+TTS_TAG = "tts-ljspeech"
+
+
+def _storage() -> StorageBox:
+    return StorageBox(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+    )
+
+
+def _ckpt_writer() -> StorageBoxCheckpoint:
+    return StorageBoxCheckpoint(
+        host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
+        username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
+        password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
+        run_id=f"tts-ljspeech-{uuid.uuid4().hex[:8]}",
+    )
+
+
+def _make_stats(global_step, epoch, loss_average, dataset_name) -> Stats:
+    meta = TrainingMetadata()
+    meta.epoch = epoch
+    return Stats(
+        accuracy_pct=0.0,
+        loss_average=float(loss_average),
+        runtime_seconds=0,
+        steps=global_step,
+        dataset=dataset_name,
+        metadata=meta,
+    )
+
+
+def _best_path():
+    return os.path.join("checkpoints", "tags", TTS_TAG, "best.json")
+
+
+def _history_path():
+    return os.path.join("checkpoints", "tags", TTS_TAG, "history.jsonl")
+
+
+def _read_best_loss(box):
+    if not box._path_exists(_best_path()):
+        return None
+    try:
+        return json.loads(box.load_bytes(_best_path())).get("loss_average")
+    except Exception:
+        return None
+
+
+def _write_best(sbx, box, stats):
+    tag_data = {
+        "run_id": sbx.run_id,
+        "step": stats.steps,
+        "path": os.path.join(sbx.base_name, f"step_{stats.steps}"),
+        "loss_average": float(stats.loss_average),
+    }
+    box.save_bytes(json.dumps(tag_data, indent=2).encode(), _best_path())
+
+
+def _append_history(box, stats):
+    prev = b""
+    if box._path_exists(_history_path()):
+        try:
+            prev = box.load_bytes(_history_path())
+        except Exception:
+            prev = b""
+    line = json.dumps(stats.to_json()).encode() + b"\n"
+    box.save_bytes(prev + line, _history_path())
+
+
+def _save_checkpoint(sbx, model, optimizer, stats):
+    sbx.checkpoint(model, optimizer, asdict(model.config), stats).result()
+    sbx.tag(TTS_TAG, stats).result()
+    print(f"Saved checkpoint at step={stats.steps} epoch={stats.metadata.epoch}", flush=True)
+    box = _storage()
+    prev_best = _read_best_loss(box)
+    if prev_best is None or stats.loss_average < prev_best:
+        _write_best(sbx, box, stats)
+        print(f"New best loss={stats.loss_average:.4f} (prev={prev_best})", flush=True)
+    _append_history(box, stats)
+
+
+def _save_sample(sbx, local_path, stats):
+    with open(local_path, "rb") as f:
+        data = f.read()
+    step_dir = os.path.join(sbx.base_name, f"step_{stats.steps}")
+    sbx.save_bytes(data, os.path.join(step_dir, "sample.wav"))
+    print(f"Uploaded sample at step={stats.steps}", flush=True)
+
+
+def _load_checkpoint(model, optimizer, device):
+    box = _storage()
+    tag_path = os.path.join("checkpoints", "tags", TTS_TAG, "latest.json")
+    if not box._path_exists(tag_path):
+        print("No existing checkpoint; starting fresh", flush=True)
+        return 0, 0
+    path = json.loads(box.load_bytes(tag_path))["path"]
+    raw_model = torch.load(
+        io.BytesIO(box.load_bytes(os.path.join(path, "model.pt"))),
+        map_location=device, weights_only=False,
+    )
+    raw_opt = torch.load(
+        io.BytesIO(box.load_bytes(os.path.join(path, "optimizer.pt"))),
+        map_location=device, weights_only=False,
+    )
+    model.load_state_dict(raw_model.state_dict() if isinstance(raw_model, nn.Module) else raw_model)
+    optimizer.load_state_dict(raw_opt.state_dict() if hasattr(raw_opt, "state_dict") else raw_opt)
+    stats = json.loads(box.load_bytes(os.path.join(path, "stats.json")))
+    step = stats.get("steps", 0)
+    epoch = stats.get("metadata", {}).get("epoch", 0)
+    print(f"Resumed checkpoint at step={step} epoch={epoch}", flush=True)
+    return step, epoch
 
 
 @dataclass
@@ -263,10 +390,13 @@ def bucketed_iter(dataloader, batch_size, text_pad_idx=0, audio_pad_idx=1024):
         bucketed_iter._cache.sort(key=lambda x: len(x["audio_tokens"]))
         print(f"Cached {len(bucketed_iter._cache)} samples")
 
-    for i in range(0, len(bucketed_iter._cache), batch_size):
-        b = bucketed_iter._cache[i : i + batch_size]
-        if len(b) == batch_size:
-            yield collate_tts_batch(b, text_pad_idx, audio_pad_idx)
+    batches = [
+        bucketed_iter._cache[i : i + batch_size]
+        for i in range(0, len(bucketed_iter._cache), batch_size)
+        if len(bucketed_iter._cache[i : i + batch_size]) == batch_size
+    ]
+    for idx in torch.randperm(len(batches)).tolist():
+        yield collate_tts_batch(batches[idx], text_pad_idx, audio_pad_idx)
 
 
 def train(model, dataset, epochs=100, device="cuda"):
@@ -276,13 +406,32 @@ def train(model, dataset, epochs=100, device="cuda"):
     criterion = nn.CrossEntropyLoss(ignore_index=1024)
     optimizer = optim.AdamW(model.parameters(), lr=3e-4)
 
+    global_step, start_epoch = _load_checkpoint(model, optimizer, device)
+    sbx = _ckpt_writer()
+    dataset_name = getattr(dataset, "name", "ljspeech")
+
+    budget_min = float(os.environ.get("TRAINING_TIME_MINUTES", 0) or 0)
+    deadline = time.time() + budget_min * 60 if budget_min > 0 else None
+    if deadline:
+        print(f"Time budget: {budget_min:.0f} min", flush=True)
+
     print(f"total_samples: {dataset.total_samples}")
     print(f"total_batches: {dataset.total_batches}")
     print(f"batch_size: {dataset.batch_size}")
     print(dataset.info)
 
-    for epoch in range(epochs):
+    def _stop():
+        return (deadline and time.time() > deadline) or shutdown_requested()
+
+    stopped = False
+    for epoch in range(start_epoch, epochs):
+        if stopped:
+            break
         total_loss = 0
+        total_correct = 0
+        total_tokens = 0
+        total_grad_norm = 0.0
+        num_batches = 0
 
         dataloader = bucketed_iter(
             dataset,
@@ -292,6 +441,9 @@ def train(model, dataset, epochs=100, device="cuda"):
         )
 
         for batch in dataloader:
+            if _stop():
+                stopped = True
+                break
             text = batch["text_tokens"].to(device)
             audio = batch["audio_tokens"].to(device)
 
@@ -306,17 +458,49 @@ def train(model, dataset, epochs=100, device="cuda"):
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            total_loss += loss.item()
+            with torch.no_grad():
+                mask = audio_target != 1024
+                preds = logits.argmax(dim=-1)
+                total_correct += ((preds == audio_target) & mask).sum().item()
+                total_tokens += mask.sum().item()
 
-        # print(f"Epoch {epoch}: {total_loss:.4f}")
-        print(f"Epoch {epoch}: {total_loss / (len(bucketed_iter._cache) // 32):.4f}")
+            global_step += 1
+            total_loss += loss.item()
+            total_grad_norm += float(grad_norm)
+            num_batches += 1
+
+        avg = total_loss / max(num_batches, 1)
+        token_acc = 100.0 * total_correct / max(total_tokens, 1)
+        grad_norm_avg = total_grad_norm / max(num_batches, 1)
+        perplexity = math.exp(min(avg, 20))
         print(
-            f"text: {text.shape}, audio: {audio.shape}, text_max: {text.max()}, audio_max: {audio.max()}"
+            f"Epoch {epoch}: loss={avg:.4f} ppl={perplexity:.2f} "
+            f"tok_acc={token_acc:.2f}% grad_norm={grad_norm_avg:.3f}",
+            flush=True,
         )
-        generate_audio(model, "Hello world.", f"generated/hello_{epoch}.wav")
+        stats = _make_stats(global_step, epoch if stopped else epoch + 1, avg, dataset_name)
+        stats.accuracy_pct = token_acc
+        stats.metadata["perplexity"] = perplexity
+        stats.metadata["grad_norm"] = grad_norm_avg
+        stats.metadata["token_accuracy"] = token_acc
+        stats.metadata["learning_rate"] = optimizer.param_groups[0]["lr"]
+        stats.metadata["tokens_seen"] = total_tokens
+        stats.metadata["batches"] = num_batches
+        _save_checkpoint(sbx, model, optimizer, stats)
+        try:
+            sample_path = f"generated/hello_{epoch}.wav"
+            gen_metrics = generate_audio(model, "Hello world.", sample_path)
+            stats.metadata.update(gen_metrics)
+            step_dir = os.path.join(sbx.base_name, f"step_{stats.steps}")
+            sbx.save_bytes(sbx._serialize_json(stats), os.path.join(step_dir, "stats.json"))
+            _save_sample(sbx, sample_path, stats)
+        except Exception as e:
+            print(f"generate_audio failed: {e}", flush=True)
+
+    print(f"Training slot done at step={global_step}", flush=True)
 
 
 import os
@@ -450,8 +634,23 @@ def generate_audio(
 
     codes = audio_tokens[0, 1:]
     eos_mask = codes == 1026
-    if eos_mask.any():
+    did_stop = bool(eos_mask.any())
+    if did_stop:
         codes = codes[: eos_mask.nonzero()[0, 0]]
+    gen_len = int(codes.numel())
+    if gen_len > 0:
+        unique_ratio = float(codes.unique().numel()) / gen_len
+        repeat_ratio = float((codes[1:] == codes[:-1]).sum().item()) / max(gen_len - 1, 1)
+    else:
+        unique_ratio = 0.0
+        repeat_ratio = 0.0
+    gen_metrics = {
+        "gen_did_stop": did_stop,
+        "gen_len": gen_len,
+        "gen_hit_max": not did_stop,
+        "gen_unique_ratio": unique_ratio,
+        "gen_repeat_ratio": repeat_ratio,
+    }
     codes = codes.clamp(0, 1023)
     codes = codes.unsqueeze(0).unsqueeze(0).cpu()
 
@@ -459,8 +658,9 @@ def generate_audio(
         audio = encodec.decode([(codes, None)])
 
     sf.write(output_path, audio[0].cpu().numpy().T, 24000)
-    print(f"Saved {output_path}")
+    print(f"Saved {output_path} {gen_metrics}")
     model = model.train()
+    return gen_metrics
 
 
 if __name__ == "__main__":
@@ -480,7 +680,6 @@ if __name__ == "__main__":
             audio_padding_idx=dataset.info["training_metadata"]["audio_padding_idx"],
         )
     )
-    generate_audio(model, "Hello world.", "generated/hello.wav")
     train(
         model,
         dataset,
