@@ -18,7 +18,7 @@ from .layers import (
     BidirectionalAttention,
     SimpleMultiHeadAttention,
 )
-from dataclasses import dataclass, asdict, fields, replace
+from dataclasses import asdict, fields, replace
 from typing import Optional
 
 
@@ -619,7 +619,7 @@ class OlmoTransformerLayerHyperConnectivity(nn.Module):
 
 class TransformerDecoderWrapper(nn.Module):
     def __init__(self, layer: nn.TransformerDecoderLayer) -> None:
-        super(TransformerDecoderWrapper, self).__init__()
+        super().__init__()
         self.layer = layer
 
     def forward(self, x, mask):

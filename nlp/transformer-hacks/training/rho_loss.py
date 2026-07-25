@@ -85,7 +85,7 @@ class RhoLossSelector:
 
     def select(self, X: torch.Tensor, y: torch.Tensor, main_model: nn.Module, objective):
         B = X.shape[0]
-        k = max(1, int(round(B * self.ratio)))
+        k = max(1, round(B * self.ratio))
         warmup = getattr(self.config, "warmup_steps", 0)
         if k >= B or self._step < warmup:
             self._step += 1
@@ -119,9 +119,8 @@ class RhoLossSelector:
     def update(self, main_model: nn.Module):
         if isinstance(self.config, RhoLossEmaConfig):
             self._copy_into_il(main_model, alpha=1.0 - self.config.decay, decay=self.config.decay)
-        elif isinstance(self.config, RhoLossSnapshotConfig):
-            if self._step > 0 and self._step % self.config.snapshot_steps == 0:
-                self._copy_into_il(main_model, alpha=1.0, decay=0.0)
+        elif isinstance(self.config, RhoLossSnapshotConfig) and self._step > 0 and self._step % self.config.snapshot_steps == 0:
+            self._copy_into_il(main_model, alpha=1.0, decay=0.0)
 
     def _copy_into_il(self, main_model: nn.Module, alpha: float, decay: float):
         il_params = dict(self.il_model.named_parameters())

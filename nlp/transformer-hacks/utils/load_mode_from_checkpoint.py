@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from training.model import Config, Model
 import torch
 import io
-from typing import Tuple
 
 load_dotenv()
 
@@ -127,7 +126,7 @@ def iterate_over_dataset(target_dataset, max_age_days):
 
 def load_best_model_from_checkpoint(
     target_dataset, max_age_days=3
-) -> Tuple[Model, Config]:
+) -> tuple[Model, Config]:
     best_model_path = BestModelResult()
     for model_dir, data in iterate_over_dataset(target_dataset, max_age_days):
         # TODO: was some older entries which had a corrupted values, they can probably soon be disregarded.

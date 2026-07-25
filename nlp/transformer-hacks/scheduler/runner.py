@@ -6,6 +6,7 @@ Usage:
 """
 import argparse
 import atexit
+import hashlib
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import yaml
+import contextlib
 
 PKG_DIR = Path(__file__).resolve().parent
 APP_DIR = PKG_DIR.parent
@@ -26,9 +28,10 @@ LOG_DIR = PKG_DIR / "logs"
 STATUS_FILE = PKG_DIR / "status.json"
 DEFAULT_CONFIG = PKG_DIR / "scheduler.yaml"
 SCHEDULER_LOG = PKG_DIR / "scheduler.log"
+CURRENT_LOG_LINK = "/tmp/autoparam_current.log"
 INBOX_DIR = PKG_DIR / "inbox"
-INBOX_DONE = INBOX_DIR / "done"
 INBOX_FAILED = INBOX_DIR / "failed"
+INBOX_LEDGER = PKG_DIR / "inbox_processed.txt"
 
 _logger = None
 
@@ -37,10 +40,8 @@ def log(msg):
     line = f"[scheduler {time.strftime('%Y-%m-%d %H:%M:%S')}] {msg}"
     print(line, flush=True)
     if _logger is not None:
-        try:
+        with contextlib.suppress(Exception):
             _logger.info(msg)
-        except Exception:
-            pass
 
 
 def _init_logger():
@@ -58,10 +59,8 @@ def _prune_job_logs(job_name: str, keep: int):
     try:
         files = sorted(LOG_DIR.glob(f"{job_name}-*.log"))
         for old in files[:-keep]:
-            try:
+            with contextlib.suppress(Exception):
                 old.unlink()
-            except Exception:
-                pass
     except Exception:
         pass
 
@@ -69,7 +68,7 @@ def _prune_job_logs(job_name: str, keep: int):
 def detect_gpus_total() -> int:
     try:
         out = subprocess.check_output(["nvidia-smi", "-L"], text=True)
-        return len([l for l in out.splitlines() if l.strip()])
+        return len([ln for ln in out.splitlines() if ln.strip()])
     except Exception as e:
         log(f"nvidia-smi -L failed: {e} — assuming 0 GPUs")
         return 0
@@ -99,6 +98,7 @@ def load_config(path: Path) -> dict:
     cfg.setdefault("quarantine_hours", 1.0)
     cfg.setdefault("keep_job_logs", 20)
     cfg.setdefault("stop_grace_seconds", 1800)
+    cfg.setdefault("version", 0)
     return cfg
 
 
@@ -185,7 +185,7 @@ def extract_error_excerpt(path: Path, tail_lines: int = 30) -> str:
             if "Traceback (most recent call last)" in lines[i]:
                 return "\n".join(lines[i:])
         keywords = ("Error", "error:", "Exception", "FAILED", "CUDA out of memory", "RuntimeError")
-        hits = [l for l in lines if any(k in l for k in keywords)]
+        hits = [ln for ln in lines if any(k in ln for k in keywords)]
         if hits:
             return "\n".join(hits[-tail_lines:])
         return "\n".join(lines[-tail_lines:])
@@ -203,6 +203,7 @@ def log_error_excerpt(job_name: str, log_path: Path, rc: int, ran_seconds: float
 
 
 _active_proc = {"proc": None}
+_grace = {"seconds": 120}
 
 
 def _terminate_active(sig=signal.SIGTERM):
@@ -229,6 +230,20 @@ def _shutdown_handler(signum, _frame):
     sys.exit(0)
 
 
+def _reload_handler(signum, _frame):
+    log(f"received signal {signum} — cooperative stop of active job for code reload")
+    proc = _active_proc.get("proc")
+    if proc is not None and proc.poll() is None:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGUSR1)
+        try:
+            proc.wait(timeout=_grace["seconds"])
+        except Exception:
+            log("grace expired — SIGKILL before reload")
+            _terminate_active(signal.SIGKILL)
+    sys.exit(0)
+
+
 def build_cmd_env(job: dict, gpus: int, slot_minutes: float):
     cuda_visible = ",".join(str(i) for i in range(gpus))
     env = os.environ.copy()
@@ -244,6 +259,13 @@ def build_cmd_env(job: dict, gpus: int, slot_minutes: float):
         extra = [f"--nproc-per-node={gpus}"]
     cmd = ["python3", "-u", job["script"]] + [str(a) for a in job["args"]] + extra
     return cmd, env, cuda_visible
+
+
+def _point_current_log(log_path: Path):
+    with contextlib.suppress(OSError):
+        if os.path.islink(CURRENT_LOG_LINK) or os.path.exists(CURRENT_LOG_LINK):
+            os.unlink(CURRENT_LOG_LINK)
+        os.symlink(str(log_path), CURRENT_LOG_LINK)
 
 
 def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int,
@@ -274,6 +296,7 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
                 start_new_session=True,
             )
         _active_proc["proc"] = proc
+        _point_current_log(log_path)
         status.current = {
             "job": job["name"],
             "pid": proc.pid,
@@ -294,18 +317,14 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
                 now = time.time()
                 if not sigusr1_sent and now >= slot_deadline:
                     log(f"slot deadline reached — sending SIGUSR1 to pgid {proc.pid} (cooperative)")
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         os.killpg(proc.pid, signal.SIGUSR1)
-                    except ProcessLookupError:
-                        pass
                     sigusr1_sent = True
                     sigusr1_time = now
                 elif not sigusr1_sent and preempt_check is not None and preempt_check():
                     log(f"inbox job queued — preempting {job['name']} early (SIGUSR1 pgid {proc.pid})")
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         os.killpg(proc.pid, signal.SIGUSR1)
-                    except ProcessLookupError:
-                        pass
                     sigusr1_sent = True
                     sigusr1_time = now
                     preempted = True
@@ -313,10 +332,8 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
                     log(
                         f"grace period {stop_grace_seconds}s expired — escalating to SIGKILL on pgid {proc.pid}"
                     )
-                    try:
+                    with contextlib.suppress(ProcessLookupError):
                         os.killpg(proc.pid, signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
                     killed = True
 
         _active_proc["proc"] = None
@@ -371,11 +388,36 @@ def cleanup(job: dict, mem_threshold: int, cleanup_timeout: int):
     log(f"WARNING: cleanup timeout — GPU memory still: {gpu_memory_used_mb()}")
 
 
+def _file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _ledger_load() -> set:
+    if not INBOX_LEDGER.exists():
+        return set()
+    return set(INBOX_LEDGER.read_text().split())
+
+
+def _ledger_add(h: str):
+    with open(INBOX_LEDGER, "a") as f:
+        f.write(h + "\n")
+
+
 def next_inbox_file():
     if not INBOX_DIR.exists():
         return None
+    ledger = _ledger_load()
     mtimes = []
     for p in INBOX_DIR.glob("*.yaml"):
+        try:
+            h = _file_hash(p)
+        except FileNotFoundError:
+            continue
+        if h in ledger:
+            log(f"[inbox] {p.name} already processed (rsync re-drop) — purging")
+            with contextlib.suppress(FileNotFoundError):
+                p.unlink()
+            continue
         try:
             mtimes.append((p.stat().st_mtime, p))
         except FileNotFoundError:
@@ -385,14 +427,16 @@ def next_inbox_file():
     return min(mtimes, key=lambda t: t[0])[1]
 
 
-def _move_inbox(path: Path, dest_dir: Path):
+def _move_inbox(path: Path, dest_dir: Path) -> bool:
     dest_dir.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y%m%d-%H%M%S")
     target = dest_dir / f"{ts}-{path.name}"
     try:
         path.replace(target)
+        return True
     except Exception as e:
         log(f"[inbox] move {path.name} failed: {e}")
+        return False
 
 
 def run_inbox_job(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int,
@@ -414,6 +458,7 @@ def run_inbox_job(job: dict, status: Status, mem_threshold: int, cleanup_timeout
             stderr=subprocess.STDOUT, start_new_session=True,
         )
     _active_proc["proc"] = proc
+    _point_current_log(log_path)
     status.current = {
         "job": f"inbox:{job['name']}",
         "pid": proc.pid,
@@ -434,18 +479,14 @@ def run_inbox_job(job: dict, status: Status, mem_threshold: int, cleanup_timeout
             now = time.time()
             if not sigusr1_sent and now >= deadline:
                 log(f"[inbox] {job['name']} hit slot cap — SIGUSR1 pgid {proc.pid}")
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     os.killpg(proc.pid, signal.SIGUSR1)
-                except ProcessLookupError:
-                    pass
                 sigusr1_sent = True
                 sigusr1_time = now
             elif sigusr1_sent and not killed and now - sigusr1_time >= stop_grace_seconds:
                 log(f"[inbox] grace expired — SIGKILL pgid {proc.pid}")
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     os.killpg(proc.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
                 killed = True
 
     _active_proc["proc"] = None
@@ -498,6 +539,7 @@ def process_inbox_file(path: Path, status: Status, cfg: dict, gpus_total: int):
         log(f"[inbox] invalid job in {path.name}: {e} — moving to failed/")
         _move_inbox(path, INBOX_FAILED)
         return
+    h = _file_hash(path)
     all_ok = True
     for j in jobs:
         ok = run_inbox_job(
@@ -505,9 +547,14 @@ def process_inbox_file(path: Path, status: Status, cfg: dict, gpus_total: int):
             cfg["keep_job_logs"], cfg["stop_grace_seconds"],
         )
         all_ok = all_ok and ok
-    dest = INBOX_DONE if all_ok else INBOX_FAILED
-    _move_inbox(path, dest)
-    log(f"=== inbox done: {path.name} → {dest.name}/ ({'ok' if all_ok else 'had failures'}) ===")
+    if all_ok:
+        _ledger_add(h)
+        with contextlib.suppress(FileNotFoundError):
+            path.unlink()
+        log(f"=== inbox done: {path.name} → ledger (ok) ===")
+    else:
+        moved = _move_inbox(path, INBOX_FAILED)
+        log(f"=== inbox done: {path.name} → failed/ (had failures{'' if moved else ', MOVE FAILED'}) ===")
 
 
 def main():
@@ -522,12 +569,15 @@ def main():
     _init_logger()
 
     cfg = load_config(args.config)
+    start_version = cfg["version"]
     gpus_total = detect_gpus_total()
     validate(cfg, gpus_total)
     log(f"detected {gpus_total} GPUs; {len(cfg['jobs'])} jobs configured")
 
+    _grace["seconds"] = cfg["stop_grace_seconds"]
     signal.signal(signal.SIGTERM, _shutdown_handler)
     signal.signal(signal.SIGINT, _shutdown_handler)
+    signal.signal(signal.SIGHUP, _reload_handler)
     atexit.register(_terminate_active, signal.SIGTERM)
 
     status = Status()
@@ -587,8 +637,11 @@ def main():
                     raise SystemExit("no enabled jobs")
             except Exception as e:
                 log(f"FATAL: config reload failed — fix scheduler.yaml and restart: {e}")
-                raise SystemExit(f"invalid config on reload: {e}")
+                raise SystemExit(f"invalid config on reload: {e}") from e
             else:
+                if new_cfg["version"] != start_version:
+                    log(f"version {start_version} → {new_cfg['version']}: cooperative reload for new code")
+                    _reload_handler(0, None)
                 base = min(runs.values()) if runs else 0
                 cfg, jobs, cfg_mtime = new_cfg, new_jobs, new_mtime
                 quarantine_sec = cfg["quarantine_hours"] * 3600

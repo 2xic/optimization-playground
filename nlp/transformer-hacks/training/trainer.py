@@ -1,7 +1,6 @@
 from .model import Config, TransformerLayerType
 import torch
 import torch.distributed as dist
-from contextlib import nullcontext
 from torch.amp import autocast, GradScaler
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, MixedPrecision
 try:
@@ -11,7 +10,7 @@ try:
 except ImportError:
     _FSDP2_AVAILABLE = False
 from torch.nn.parallel import DistributedDataParallel as DDP
-from typing import Callable, Tuple, Optional, List
+from typing import Callable, Optional, Union
 from tqdm import tqdm
 from dataclasses import dataclass, field
 from enum import Enum
@@ -19,13 +18,12 @@ import os
 import time
 import shutil
 from abc import ABC
-from utils.performance_benchmarker import Timer
 from .objectives import BaseObjective
 from .rho_loss import RhoLossConfig, RhoLossTagConfig, RhoLossEmaConfig, RhoLossSnapshotConfig  # noqa: F401
 from .optimizer import BaseOptimizerConfig, AdamConfig, Scheduler
 from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
-from scheduler.cooperative import shutdown_requested, install_shutdown_handler
+from scheduler.cooperative import shutdown_requested
 import signal as _signal
 
 def _trainer_sigusr1(_signum, _frame):
@@ -37,6 +35,7 @@ _signal.signal(_signal.SIGUSR1, _trainer_sigusr1)
 from datetime import datetime
 from .adaptive_batching import AdaptiveBatchSizer
 from utils.web_dataloader import WebDataloader
+from utils.mixture_dataloader import WebDataloaderMixture
 
 _torch_version = tuple(int(x) for x in torch.__version__.split("+")[0].split(".")[:2])
 assert _torch_version >= (2, 4), f"PyTorch >= 2.4 required (got {torch.__version__}); needed for DTensor-aware clip_grad_norm_ and FSDP2."
@@ -154,13 +153,13 @@ class TrainingOptions:
     training_timeout_minutes: Optional[int] = None
     # Optimizer configuration
     lr_scheduler: Optional[Scheduler] = None
-    optimizer: BaseOptimizerConfig = field(default_factory=lambda: AdamConfig())
+    optimizer: BaseOptimizerConfig = field(default_factory=AdamConfig)
     # accumulation_steps
     accumulation_steps: int = 1
     record_interval_steps: int = 0
     val_interval_steps: int = 0
     val_max_batches: int = 50
-    val_loader: Optional["WebDataloader"] = None
+    val_loader: Optional[Union["WebDataloader", "WebDataloaderMixture"]] = None
     # misc
     enable_checkpoints: bool = False
     checkpoint_tag: Optional[str] = None
@@ -175,7 +174,7 @@ class TrainingOptions:
         return self.training_timeout_minutes  # * 3
 
     # Additional metadata
-    metadata: TrainingMetadata = field(default_factory=lambda: TrainingMetadata())
+    metadata: TrainingMetadata = field(default_factory=TrainingMetadata)
 
 
 def debug_print(*args):
@@ -729,7 +728,7 @@ class GradScalerTrainer(Trainer):
 
     def forward(
         self, model, objective, X, y, training_options: TrainingOptions
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         now = time.time()
         with autocast("cuda", dtype=self.type):
             with self.metrics_tracker.span("to_device"):

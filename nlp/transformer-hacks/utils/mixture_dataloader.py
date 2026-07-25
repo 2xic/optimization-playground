@@ -1,12 +1,12 @@
 import random
-from typing import List, Iterator
+from collections.abc import Iterator
 from .web_dataloader import WebDataloader
 
 
 class WebDataloaderMixture:
     def __init__(
         self,
-        dataloaders: List[WebDataloader],
+        dataloaders: list[WebDataloader],
         seed: int = 42,
     ):
         self.dataloaders = dataloaders

@@ -10,9 +10,9 @@ import paramiko
 import io
 from datetime import date
 import stat
-from tqdm import tqdm
 import hashlib
 from functools import cache
+from typing import ClassVar, Optional
 
 
 def should_checkpoint(is_extension: bool) -> bool:
@@ -27,15 +27,13 @@ def apply_checkpoint_tag(training_options, cfg: dict):
 from concurrent.futures import ThreadPoolExecutor, Future
 import atexit
 import time
-from typing import Dict
 from datetime import datetime
-from tqdm import tqdm
-from concurrent.futures import wait, FIRST_COMPLETED
 import gzip
 from paramiko.common import MAX_WINDOW_SIZE
 import subprocess
 import tempfile
 import shutil
+import contextlib
 
 assert shutil.which("rsync"), "rsync not installed (apt install rsync)"
 assert shutil.which("sshpass"), "sshpass not installed (apt install sshpass)"
@@ -49,7 +47,7 @@ Path("/tmp/sftp_cache").mkdir(parents=True, exist_ok=True)
 
 
 class SingletonMeta(type):
-    _instances = {}
+    _instances: ClassVar[dict] = {}
 
     def __call__(cls, *args, **kwargs):
         key = (cls, args, tuple(sorted(kwargs.items())))
@@ -136,10 +134,8 @@ class StorageBox(metaclass=SingletonMeta):
         if use_cache:
             cache_path = self.cache_dir / self._cache_key(path)
             if cache_path.exists():
-                try:
+                with contextlib.suppress(OSError):
                     os.utime(cache_path, None)
-                except OSError:
-                    pass
                 data = cache_path.read_bytes()
                 if data[:2] == b"\x1f\x8b":
                     data = gzip.decompress(data)
@@ -227,9 +223,7 @@ class StorageBox(metaclass=SingletonMeta):
             mtime = self.sftp.stat(item).st_mtime
             if max_age_cutoff is not None and mtime < max_age_cutoff:
                 return True
-            if min_age_cutoff is not None and mtime > min_age_cutoff:
-                return True
-            return False
+            return bool(min_age_cutoff is not None and mtime > min_age_cutoff)
 
         while queue:
             current = queue.pop()
@@ -246,7 +240,7 @@ class StorageBox(metaclass=SingletonMeta):
         key_str = f"{path}:{stat.st_size}:{stat.st_mtime}"
         return hashlib.sha256(key_str.encode()).hexdigest()
 
-    def append_index_entry(self, run_id: str, step: int, path: str, stats: dict = None):
+    def append_index_entry(self, run_id: str, step: int, path: str, stats: Optional[dict] = None):
         entry = {
             "run_id": run_id,
             "step": step,
@@ -439,7 +433,7 @@ class StorageBoxCheckpoint(StorageBox):
         files = {"latest.json": self._serialize_json(tag_data)}
         return self._submit(self._upload, files, tag_path, stats)
 
-    def checkpoint_files(self, files: Dict[str, bytes], stats: Stats) -> Future:
+    def checkpoint_files(self, files: dict[str, bytes], stats: Stats) -> Future:
         full_path = os.path.join(self.base_name, f"step_{stats.steps}")
         serialized_files = {}
         for key, value in files.items():
@@ -479,7 +473,7 @@ class StorageBoxCheckpoint(StorageBox):
 
     def _track(self, future: Future) -> Future:
         self._futures.append(future)
-        future.add_done_callback(lambda f: self._futures.remove(f))
+        future.add_done_callback(self._futures.remove)
         future.add_done_callback(self._handle_upload_error)
         return future
 

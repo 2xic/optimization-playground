@@ -8,7 +8,8 @@ import threading
 import queue
 import requests
 import torch
-from typing import Iterator, List, Optional
+from typing import Optional
+from collections.abc import Iterator
 import aiohttp
 from aiohttp_retry import RetryClient, JitterRetry
 import ormsgpack
@@ -38,7 +39,7 @@ class WebDataloader:
         split="train",
         rank=0,
         world_size=1,
-        columns: Optional[List[str]] = None,
+        columns: Optional[list[str]] = None,
         batch_size: int = 32,
         prefetch_factor: int = 16,
         max_workers: int = 8,
@@ -183,7 +184,7 @@ class WebDataloader:
 
         except queue.Empty:
             logger.warning("Timeout waiting for batch")
-            raise StopIteration
+            raise StopIteration from None
 
     def _run_async_loop(self):
         loop = asyncio.new_event_loop()
@@ -280,10 +281,11 @@ class WebDataloader:
             for col in self.column_names:
                 if isinstance(col, FloatColumn):
                     arr = np.array([item[col.name] for item in batch], dtype=np.float32)
-                    col = col.name
+                    key = col.name
                 else:
                     arr = np.array([item[col] for item in batch], dtype=np.int64)
-                result[col] = (
+                    key = col
+                result[key] = (
                     torch.from_numpy(arr).pin_memory()
                     if torch.cuda.is_available()
                     else torch.from_numpy(arr)
@@ -317,7 +319,7 @@ class WebDataloader:
         assert len(tokenized[0]) == 1
         return tokenized[0][0]
 
-    def tokenize(self, documents: List[bytes], padding=True, apply_transform=True, add_special_tokens=False):
+    def tokenize(self, documents: list[bytes], padding=True, apply_transform=True, add_special_tokens=False):
         assert isinstance(documents, list)
 
         response = self.session.post(
@@ -349,7 +351,7 @@ class WebDataloader:
 
         return results
 
-    def detokenize(self, token_ids: List[int]):
+    def detokenize(self, token_ids: list[int]):
         assert isinstance(token_ids, list)
         token_ids = list(filter(lambda x: x != self.padding_index, token_ids))
         assert isinstance(token_ids, list)

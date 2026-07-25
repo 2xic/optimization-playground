@@ -2,8 +2,8 @@ import warnings
 warnings.filterwarnings("ignore", message="Unable to import Axes3D")
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import Dict, List
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass
@@ -43,7 +43,7 @@ class ConfidenceInterval:
 
 class MinMaxAvgArray:
     def __init__(self):
-        self.min_max_avg: List[ConfidenceInterval] = []
+        self.min_max_avg: list[ConfidenceInterval] = []
 
     def add(self, entries):
         is_new = len(self.min_max_avg) == 0
@@ -70,10 +70,10 @@ class Results:
     loss: MinMaxAvgArray
     step_accuracy: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
     step_loss: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
-    epoch_at_step: List[int] = field(default_factory=list)
+    epoch_at_step: list[int] = field(default_factory=list)
     step_val_accuracy: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
     step_val_loss: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
-    val_at_step: List[int] = field(default_factory=list)
+    val_at_step: list[int] = field(default_factory=list)
 
     @property
     def has_step_data(self):
@@ -89,7 +89,7 @@ def running_average(data):
         yield running_avg
 
 
-def _plot_series(ax, key, color, primary: MinMaxAvgArray, epoch_markers: MinMaxAvgArray = None, epoch_positions: List[int] = None, smooth=False):
+def _plot_series(ax, key, color, primary: MinMaxAvgArray, epoch_markers: Optional[MinMaxAvgArray] = None, epoch_positions: Optional[list[int]] = None, smooth=False):
     (lo, hi, avg) = primary.get_arrays()
     if smooth:
         lo = list(running_average(lo))
@@ -107,7 +107,7 @@ def _plot_series(ax, key, color, primary: MinMaxAvgArray, epoch_markers: MinMaxA
         ax.scatter(epoch_x, epoch_avg, color=color, marker="o", s=40, zorder=5)
 
 
-def plot_accuracy_loss(results: Dict[str, Results], file_path: str):
+def plot_accuracy_loss(results: dict[str, Results], file_path: str):
     items = list(results.values())
     if len(items[0].accuracy) == 1 and not items[0].has_step_data:
         plot_single_result_bar_chart(results, file_path)
@@ -143,7 +143,7 @@ def plot_accuracy_loss(results: Dict[str, Results], file_path: str):
     plt.close("all")
 
 
-def plot_single_result_bar_chart(results: Dict[str, Results], file_path: str):
+def plot_single_result_bar_chart(results: dict[str, Results], file_path: str):
     _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 
     for key, value in results.items():

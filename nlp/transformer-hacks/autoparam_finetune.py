@@ -17,7 +17,6 @@ import argparse
 import json
 import os
 import sys
-from typing import Optional
 
 import torch
 
@@ -33,7 +32,6 @@ from autoparam import (
     AutoparamLoopBase,
     LLMProposer,
     SEARCH_SPACE_DESCRIPTION,
-    LLM_MODEL,
     fetch_openrouter_daily_usage,
 )
 from utils.load_mode_from_checkpoint import load_modeL_tag
@@ -157,7 +155,6 @@ class FinetuneAutoparamLoop(AutoparamLoopBase):
             cand[k] = v
 
     def _apply_locks_to_config(self, cfg_obj):
-        from enum import Enum
         from training.model import (
             TransformerLayerType, PositionalEmbeddingType, NormalizationLayerType,
             AttentionType, FFNActivation, NormPlacement,

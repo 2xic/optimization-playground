@@ -1,0 +1,17 @@
+version: 1
+mem_free_threshold_mb: 500
+cleanup_timeout_sec: 60
+stop_grace_seconds: 1800
+jobs:
+  - name: residual-connections
+    script: experiments.py
+    args: []
+    gpus: 1
+    slot_minutes: 120
+    pass_nproc_per_node: false
+    enabled: true
+    env:
+      EXPERIMENT: residual_connections
+      TARGET_DATASET: small-web
+      NUM_PROCESS: "2"
+      TRAINING_TIME_MINUTES: "30"

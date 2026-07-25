@@ -1,3 +1,4 @@
+version: 1
 mem_free_threshold_mb: 500
 cleanup_timeout_sec: 60
 jobs:
@@ -63,6 +64,25 @@ jobs:
     enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: tts-ljspeech
+    script: sequence_to_sequence.py
+    args: []
+    gpus: 1
+    slot_minutes: 60
+    pass_nproc_per_node: false
+    enabled: true
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+  - name: tts-ljspeech-burst
+    script: sequence_to_sequence.py
+    args: []
+    gpus: 1
+    slot_minutes: 1440
+    pass_nproc_per_node: false
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "1435"
   - name: pretrain
     script: autoparam.py
     args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]

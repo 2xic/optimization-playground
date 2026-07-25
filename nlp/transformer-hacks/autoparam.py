@@ -30,7 +30,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, asdict
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 import torch
 import pynvml
@@ -74,6 +74,7 @@ from training.optimizer import (
 from utils.plot import Results
 from utils.checkpoints import should_checkpoint
 import matplotlib.pyplot as plt
+import contextlib
 
 STABILITY_TAIL_FRACTION = 0.25
 STEPS_TO_ACCURACY_THRESHOLD = 50.0  # percent — convergence speed marker
@@ -346,7 +347,7 @@ class ConfigSerializer:
         config.num_transformer_layers = int(d["num_transformer_layers"])
         config.dropout = float(d["dropout"])
         if "ffn_ratio" in d and "feed_forward_layer" not in d:
-            config.feed_forward_layer = int(round(config.dim_embeddings * float(d["ffn_ratio"])))
+            config.feed_forward_layer = round(config.dim_embeddings * float(d["ffn_ratio"]))
         else:
             config.feed_forward_layer = int(d["feed_forward_layer"])
         config.bias = bool(d.get("bias", False))
@@ -439,7 +440,7 @@ class ConfigSerializer:
             val_max_batches=int(d.get("val_max_batches", 50)),
             distributed_strategy=distributed_strategy,
         )
-        if "rho_loss" in d and d["rho_loss"]:
+        if d.get("rho_loss"):
             from training.rho_loss import RhoLossTagConfig, RhoLossEmaConfig, RhoLossSnapshotConfig
             rl = d["rho_loss"]
             mode = rl.get("mode", "ema")
@@ -479,9 +480,8 @@ class ConfigSerializer:
             TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
             TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS,
         }
-        if config.transformer_layer in rope_layers:
-            if config.normalization_layer == NormalizationLayerType.LAYER_NORM:
-                config.normalization_layer = NormalizationLayerType.RMS_NORM
+        if config.transformer_layer in rope_layers and config.normalization_layer == NormalizationLayerType.LAYER_NORM:
+            config.normalization_layer = NormalizationLayerType.RMS_NORM
         return config
 
 
@@ -583,7 +583,7 @@ class ExperimentRecord:
 class AutoparamState:
     def __init__(self, state_path: str):
         self.state_path = state_path
-        self.experiments: List[ExperimentRecord] = []
+        self.experiments: list[ExperimentRecord] = []
         self.best_experiment_id: Optional[int] = None
         self.best_score: float = -1.0
         self.session_start: str = datetime.now().isoformat()
@@ -649,10 +649,10 @@ class AutoparamState:
             None,
         )
 
-    def successful_experiments(self) -> List[ExperimentRecord]:
+    def successful_experiments(self) -> list[ExperimentRecord]:
         return [e for e in self.experiments if e.status == "success"]
 
-    def recent_experiments(self, n: int = HISTORY_WINDOW) -> List[ExperimentRecord]:
+    def recent_experiments(self, n: int = HISTORY_WINDOW) -> list[ExperimentRecord]:
         return self.experiments[-n:]
 
 
@@ -792,10 +792,9 @@ def mutate_config_dict(parent: dict) -> dict:
         fn()
         applied.append(name)
 
-    if cfg.get("dim_embeddings") and cfg.get("num_attention_heads"):
-        if cfg["dim_embeddings"] % cfg["num_attention_heads"] != 0:
-            valid = [h for h in [4, 6, 8, 12, 16, 24, 32] if cfg["dim_embeddings"] % h == 0]
-            cfg["num_attention_heads"] = random.choice(valid) if valid else 4
+    if cfg.get("dim_embeddings") and cfg.get("num_attention_heads") and cfg["dim_embeddings"] % cfg["num_attention_heads"] != 0:
+        valid = [h for h in [4, 6, 8, 12, 16, 24, 32] if cfg["dim_embeddings"] % h == 0]
+        cfg["num_attention_heads"] = random.choice(valid) if valid else 4
 
     cfg["reasoning"] = f"mutated parent: {', '.join(applied)}"
     return cfg
@@ -1164,7 +1163,7 @@ def plot_progress(state: AutoparamState, output_path: str):
     ]
     time_pts = [p for p in time_pts if p[0] is not None]
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 11))
+    _fig, axes = plt.subplots(2, 2, figsize=(16, 11))
     ax_acc, ax_val, ax_params, ax_time = axes[0, 0], axes[0, 1], axes[1, 0], axes[1, 1]
 
     ax_acc.plot(ids, accuracy, "b-o", label="Train Accuracy (%)", markersize=5)
@@ -1395,10 +1394,8 @@ class AutoparamLoopBase:
         pgid = self._active_pgid
         if pgid is None:
             return
-        try:
+        with contextlib.suppress(OSError):
             os.killpg(pgid, signal.SIGKILL)
-        except OSError:
-            pass
 
     def _signal_handler(self, signum, frame):
         self._kill_active_proc()
@@ -1497,40 +1494,30 @@ class AutoparamLoopBase:
                                 flush=True,
                             )
                             oom_detected = True
-                            try:
+                            with contextlib.suppress(OSError):
                                 os.killpg(pgid, signal.SIGKILL)
-                            except OSError:
-                                pass
                             break
                         if now >= hard_deadline:
                             print(
                                 f"Experiment subprocess past hard deadline ({timeout_minutes + 5} min), killing",
                                 flush=True,
                             )
-                            try:
+                            with contextlib.suppress(OSError):
                                 os.killpg(pgid, signal.SIGKILL)
-                            except OSError:
-                                pass
                             break
                         if shutdown_requested() and not os.path.exists(stop_file):
-                            try:
+                            with contextlib.suppress(OSError):
                                 open(stop_file, "w").close()
-                            except OSError:
-                                pass
-                            try:
+                            with contextlib.suppress(OSError):
                                 os.killpg(pgid, signal.SIGUSR1)
-                            except OSError:
-                                pass
                             if self._stop_requested_at is None:
                                 self._stop_requested_at = now
                         if self._stop_requested_at and now - self._stop_requested_at >= self._stop_grace_seconds:
                             self._log(
                                 f"Stop requested >{self._stop_grace_seconds}s ago, escalating to SIGKILL"
                             )
-                            try:
+                            with contextlib.suppress(OSError):
                                 os.killpg(pgid, signal.SIGKILL)
-                            except OSError:
-                                pass
                             break
                 except KeyboardInterrupt:
                     os.killpg(pgid, signal.SIGKILL)
@@ -1538,23 +1525,17 @@ class AutoparamLoopBase:
                     raise
                 finally:
                     if proc.poll() is None:
-                        try:
+                        with contextlib.suppress(OSError):
                             os.killpg(pgid, signal.SIGKILL)
-                        except OSError:
-                            pass
-                    try:
+                    with contextlib.suppress(subprocess.TimeoutExpired):
                         proc.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        pass
                     self._active_proc = None
                     self._active_pgid = None
                     self._active_stop_file = None
                     self._stop_requested_at = None
                     if os.path.exists(stop_file):
-                        try:
+                        with contextlib.suppress(OSError):
                             os.unlink(stop_file)
-                        except OSError:
-                            pass
                     time.sleep(15)
 
                 if os.path.exists(result_path):
@@ -1586,10 +1567,8 @@ class AutoparamLoopBase:
                     config_data["training_config"] = training_dict
                     for _p in [config_path, result_path]:
                         if _p and os.path.exists(_p):
-                            try:
+                            with contextlib.suppress(OSError):
                                 os.unlink(_p)
-                            except OSError:
-                                pass
                     config_path = None
                     result_path = None
                     continue
@@ -1606,10 +1585,8 @@ class AutoparamLoopBase:
         finally:
             for p in [config_path, result_path]:
                 if p and os.path.exists(p):
-                    try:
+                    with contextlib.suppress(OSError):
                         os.unlink(p)
-                    except OSError:
-                        pass
         return score, status, error_message
 
     def _finalize_experiment(self, exp_id, exp_name, model_dict, training_dict,
@@ -1731,10 +1708,8 @@ class AutoparamLoopBase:
         return manifest
 
     def _clear_resume_manifest(self):
-        try:
+        with contextlib.suppress(Exception):
             self._storage_box().delete(self._resume_manifest_path())
-        except Exception:
-            pass
 
     def _resume_from_manifest(self, manifest):
         exp_id = manifest["experiment_id"]
@@ -1745,9 +1720,7 @@ class AutoparamLoopBase:
             self._log("Resume manifest has no checkpoint_path; discarding.")
             self._clear_resume_manifest()
             return
-        config_data["init_from_path"] = checkpoint_path
-        config_data["resume_optimizer"] = True
-        config_data.pop("init_from_tag", None)
+        config_data["resume_from_path"] = checkpoint_path
         model_dict = config_data.get("model_config", {})
         training_dict = config_data.get("training_config", {})
         timeout_minutes = config_data.get("timeout_minutes", self.timeout)
