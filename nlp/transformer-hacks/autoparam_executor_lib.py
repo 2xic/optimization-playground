@@ -150,21 +150,39 @@ def val_series(results):
     return val_accs, val_losses
 
 
+VAL_WINDOW_FRAC = 0.5
+
+
 def apply_val_metrics(score, val_accs, val_losses):
     if val_accs:
-        score["val_accuracy"] = tail_mean(val_accs)
+        score["val_accuracy"] = tail_mean(val_accs, VAL_WINDOW_FRAC)
         score["val_accuracy_last"] = float(val_accs[-1])
     if val_losses:
-        score["val_loss"] = tail_mean(val_losses)
+        score["val_loss"] = tail_mean(val_losses, VAL_WINDOW_FRAC)
         score["val_loss_last"] = float(val_losses[-1])
     return score
 
 
+OBJECTIVE_LOSS_WEIGHT = 1.0
+
+
+def extract_objective(score: dict) -> float:
+    acc = score.get("val_accuracy", score.get("final_accuracy"))
+    val_loss = score.get("val_loss", score.get("final_loss"))
+    has_acc = acc is not None and not math.isnan(acc)
+    has_loss = val_loss is not None and not math.isnan(val_loss)
+    if has_acc:
+        return float(acc) - (OBJECTIVE_LOSS_WEIGHT * float(val_loss) if has_loss else 0.0)
+    if has_loss:
+        return -float(val_loss)
+    return -1.0
+
+
 def base_val_score(results, params_count) -> dict[str, Any]:
     val_accs, val_losses = val_series(results)
-    final_acc = tail_mean(val_accs) if val_accs else 0.0
+    final_acc = tail_mean(val_accs, VAL_WINDOW_FRAC) if val_accs else 0.0
     acc_slope = slope(val_accs) if val_accs else 0.0
-    final_loss = tail_mean(val_losses) if val_losses else 0.0
+    final_loss = tail_mean(val_losses, VAL_WINDOW_FRAC) if val_losses else 0.0
     try:
         perplexity = float(math.exp(final_loss)) if final_loss > 0 else 0.0
     except OverflowError:

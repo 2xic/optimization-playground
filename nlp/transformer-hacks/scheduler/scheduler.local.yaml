@@ -2,16 +2,45 @@ version: 1
 mem_free_threshold_mb: 500
 cleanup_timeout_sec: 60
 stop_grace_seconds: 1800
+inbox: false
 jobs:
+  - name: qk-norm
+    script: experiments.py
+    args: []
+    gpus: 2
+    weight: 5
+    slot_minutes: 15
+    pass_nproc_per_node: false
+    enabled: true
+    env:
+      EXPERIMENT: qk_norm
+      TARGET_DATASET: fineweb-256
+      NUM_PROCESS: "2"
+      BATCH_SIZE: "32"
+      TRAINING_TIME_MINUTES: "5"
+  - name: attention-residuals
+    script: experiments.py
+    args: []
+    gpus: 2
+    slot_minutes: 15
+    pass_nproc_per_node: false
+    enabled: true
+    env:
+      EXPERIMENT: attention_residuals
+      TARGET_DATASET: medium-web
+      NUM_PROCESS: "2"
+      BATCH_SIZE: "128"
+      TRAINING_TIME_MINUTES: "5"
   - name: residual-connections
     script: experiments.py
     args: []
-    gpus: 1
-    slot_minutes: 120
+    gpus: 2
+    slot_minutes: 15
     pass_nproc_per_node: false
     enabled: true
     env:
       EXPERIMENT: residual_connections
-      TARGET_DATASET: small-web
+      TARGET_DATASET: medium-web
       NUM_PROCESS: "2"
-      TRAINING_TIME_MINUTES: "30"
+      BATCH_SIZE: "128"
+      TRAINING_TIME_MINUTES: "5"

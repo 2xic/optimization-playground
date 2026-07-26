@@ -117,6 +117,14 @@ def _validate_job(j: dict, gpus_total: int):
     j["slot_minutes"] = float(j["slot_minutes"])
     if j["slot_minutes"] <= 0:
         raise SystemExit(f"job '{j['name']}' has non-positive slot_minutes")
+    np_env = (j.get("env") or {}).get("NUM_PROCESS")
+    if np_env is not None:
+        try:
+            np_val = int(np_env)
+        except (TypeError, ValueError):
+            raise SystemExit(f"job '{j['name']}' has non-integer NUM_PROCESS: {np_env!r}")
+        if np_val <= 0:
+            raise SystemExit(f"job '{j['name']}' has non-positive NUM_PROCESS")
     j.setdefault("args", [])
     j.setdefault("pass_nproc_per_node", True)
     j.setdefault("enabled", True)
@@ -257,7 +265,8 @@ def build_cmd_env(job: dict, gpus: int, slot_minutes: float):
         for a in job["args"]
     ):
         extra = [f"--nproc-per-node={gpus}"]
-    cmd = ["python3", "-u", job["script"]] + [str(a) for a in job["args"]] + extra
+    launcher = job.get("launcher") or ["python3", "-u"]
+    cmd = [str(x) for x in launcher] + [job["script"]] + [str(a) for a in job["args"]] + extra
     return cmd, env, cuda_visible
 
 
@@ -270,7 +279,7 @@ def _point_current_log(log_path: Path):
 
 def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int,
              max_quick_exits: int, quick_exit_seconds: int, keep_job_logs: int,
-             stop_grace_seconds: int, preempt_check=None):
+             stop_grace_seconds: int, preempt_check=None, once=False):
     slot_deadline = time.time() + job["slot_minutes"] * 60
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     _prune_job_logs(job["name"], keep_job_logs)
@@ -278,6 +287,9 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
     preempted = False
 
     while time.time() < slot_deadline:
+        if not wait_gpu_free(job, mem_threshold, cleanup_timeout):
+            log(f"skip launch {job['name']}: GPUs busy after {cleanup_timeout}s: {gpu_memory_used_mb()}")
+            break
         ts = time.strftime("%Y%m%d-%H%M%S")
         log_path = LOG_DIR / f"{job['name']}-{ts}.log"
         cmd, env, cuda_visible = build_cmd_env(job, job["gpus"], job["slot_minutes"])
@@ -296,6 +308,7 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
                 start_new_session=True,
             )
         _active_proc["proc"] = proc
+        _active_proc["pgid"] = proc.pid
         _point_current_log(log_path)
         status.current = {
             "job": job["name"],
@@ -358,6 +371,11 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
         if sigusr1_sent:
             break
 
+        if once and rc == 0:
+            log(f"{job['name']} completed (once mode) — not relaunching")
+            cleanup(job, mem_threshold, cleanup_timeout)
+            return False, preempted
+
         if ran_seconds < quick_exit_seconds:
             quick_exits += 1
             log(f"quick exit ({quick_exits}/{max_quick_exits}) — ran <{quick_exit_seconds}s")
@@ -372,20 +390,75 @@ def run_slot(job: dict, status: Status, mem_threshold: int, cleanup_timeout: int
     return False, preempted
 
 
+def wait_gpu_free(job: dict, mem_threshold: int, cleanup_timeout: int):
+    deadline = time.time() + cleanup_timeout
+    while time.time() < deadline:
+        mem = gpu_memory_used_mb()
+        n = job["gpus"] if job["gpus"] and job["gpus"] > 0 else len(mem)
+        if mem and all(m < mem_threshold for m in mem[:n]):
+            return True
+        time.sleep(2)
+    return False
+
+
+def gpu_compute_pids():
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,nounits,noheader"],
+            text=True,
+        )
+        return sorted({int(x.strip()) for x in out.splitlines() if x.strip()})
+    except Exception as e:
+        log(f"nvidia-smi compute-apps query failed: {e}")
+        return []
+
+
+def our_gpu_pids(pgid):
+    if not pgid:
+        return []
+    ours = []
+    for pid in gpu_compute_pids():
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            if os.getpgid(pid) == pgid:
+                ours.append(pid)
+    return ours
+
+
+def kill_our_gpu_pids(pgid, sig):
+    for pid in our_gpu_pids(pgid):
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(pid, sig)
+
+
 def cleanup(job: dict, mem_threshold: int, cleanup_timeout: int):
     script_basename = os.path.basename(job["script"])
     pattern = script_basename.replace(".py", "")
-    log(f"cleanup after {job['name']}: pkill -f {pattern} + wait for GPU memory < {mem_threshold} MB")
+    pgid = _active_proc.get("pgid")
+    log(f"cleanup after {job['name']}: pkill -f {pattern} + reap job pgid {pgid} + wait for GPU memory < {mem_threshold} MB")
     subprocess.run(["pkill", "-9", "-f", pattern], check=False)
+    if pgid:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(pgid, signal.SIGTERM)
+    kill_our_gpu_pids(pgid, signal.SIGTERM)
     deadline = time.time() + cleanup_timeout
+    escalated = False
     while time.time() < deadline:
         mem = gpu_memory_used_mb()
         n = job["gpus"] if job["gpus"] and job["gpus"] > 0 else len(mem)
         if mem and all(m < mem_threshold for m in mem[:n]):
             log(f"GPUs clean: {mem[:n]} MB")
             return
+        if not our_gpu_pids(pgid):
+            log("job GPU pids gone; remaining memory held by other processes — leaving them alone")
+            return
+        if not escalated and time.time() - (deadline - cleanup_timeout) >= cleanup_timeout / 2:
+            log(f"cleanup: job GPU pids still alive {our_gpu_pids(pgid)} — escalating to SIGKILL")
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(pgid, signal.SIGKILL)
+            kill_our_gpu_pids(pgid, signal.SIGKILL)
+            escalated = True
         time.sleep(2)
-    log(f"WARNING: cleanup timeout — GPU memory still: {gpu_memory_used_mb()}")
+    log(f"WARNING: cleanup timeout — job GPU pids {our_gpu_pids(pgid)} mem {gpu_memory_used_mb()}")
 
 
 def _file_hash(path: Path) -> str:
@@ -562,6 +635,8 @@ def main():
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--max-cycles", type=int, default=0,
                         help="exit cleanly after this many job slots (0 = run forever)")
+    parser.add_argument("--once", action="store_true",
+                        help="run each enabled job once until it completes, then exit")
     args = parser.parse_args()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -589,15 +664,22 @@ def main():
     quarantine_until = {j["name"]: 0.0 for j in jobs}
     quarantine_sec = cfg["quarantine_hours"] * 3600
     runs = {j["name"]: 0 for j in jobs}
+    done = set()
+    inbox_enabled = cfg.get("inbox", True)
     cycles = 0
     while True:
-        inbox = next_inbox_file()
+        inbox = next_inbox_file() if inbox_enabled else None
         if inbox is not None:
             process_inbox_file(inbox, status, cfg, gpus_total)
             continue
         now = time.time()
         order = {j["name"]: k for k, j in enumerate(jobs)}
         eligible = [j for j in jobs if quarantine_until.get(j["name"], 0.0) <= now]
+        if args.once:
+            eligible = [j for j in eligible if j["name"] not in done]
+            if not eligible:
+                log("all jobs completed (once mode) — exiting")
+                return
         if not eligible:
             sleep_for = min(quarantine_until[j["name"]] for j in jobs) - now
             log(f"all jobs quarantined — sleeping {sleep_for:.0f}s")
@@ -610,18 +692,25 @@ def main():
                 job, status, cfg["mem_free_threshold_mb"], cfg["cleanup_timeout_sec"],
                 cfg["max_quick_exits"], cfg["quick_exit_seconds"],
                 cfg["keep_job_logs"], cfg["stop_grace_seconds"],
-                preempt_check=lambda: next_inbox_file() is not None)
+                preempt_check=lambda: (inbox_enabled and next_inbox_file() is not None)
+                or _config_mtime(args.config) not in (None, cfg_mtime),
+                once=args.once)
         except Exception as e:
             log(f"run_slot raised: {e}")
             cleanup(job, cfg["mem_free_threshold_mb"], cfg["cleanup_timeout_sec"])
             abandoned, preempted = True, False
         if preempted:
-            log(f"{job['name']} preempted by inbox — will resume after draining inbox")
-            continue
+            if _config_mtime(args.config) not in (None, cfg_mtime):
+                log(f"{job['name']} preempted by config change — reloading")
+            else:
+                log(f"{job['name']} preempted by inbox — will resume after draining inbox")
+                continue
         runs[job["name"]] += 1
         if abandoned:
             quarantine_until[job["name"]] = time.time() + quarantine_sec
             log(f"quarantining {job['name']} for {cfg['quarantine_hours']}h")
+        elif args.once:
+            done.add(job["name"])
         cycles += 1
         if args.max_cycles and cycles >= args.max_cycles:
             log(f"reached --max-cycles={args.max_cycles}, exiting cleanly")

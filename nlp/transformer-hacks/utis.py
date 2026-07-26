@@ -11,7 +11,7 @@ from optimization_playground_shared.nlp.utils.sampling import (
 
 _last_gpu_log_time = 0
 
-def get_best_gpu(model_size_gb, margins_gb=4):
+def get_best_gpu(model_size_gb, margins_gb=4, prefer=None):
     global _last_gpu_log_time
     try:
         pynvml.nvmlInit()
@@ -24,10 +24,12 @@ def get_best_gpu(model_size_gb, margins_gb=4):
         now = time.time()
         should_log = (now - _last_gpu_log_time) >= 300
 
+        free_by_gpu = {}
         for i in range(device_count):
             handle = pynvml.nvmlDeviceGetHandleByIndex(i)
             info = pynvml.nvmlDeviceGetMemoryInfo(handle)
             free_gb = info.free / (1024**3)
+            free_by_gpu[i] = free_gb
 
             if should_log:
                 print(f"GPU {i}: {free_gb:.2f} GB free")
@@ -35,6 +37,13 @@ def get_best_gpu(model_size_gb, margins_gb=4):
             if free_gb >= minimum_free_memory and info.free > max_free_memory:
                 max_free_memory = info.free
                 best_gpu = i
+
+        if (
+            prefer is not None
+            and prefer in free_by_gpu
+            and free_by_gpu[prefer] >= minimum_free_memory
+        ):
+            best_gpu = prefer
 
         if should_log:
             _last_gpu_log_time = now

@@ -8,7 +8,7 @@ from training.model import (
     SamplingMethod,
 )
 from training.layers_mixture_of_experts import MoE
-from utils.plot import plot_accuracy_loss, Results, MinMaxAvgArray
+from utils.plot import plot_accuracy_loss, plot_scaling_laws, Results, MinMaxAvgArray
 from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
@@ -523,6 +523,7 @@ def GET_DEFAULT_TRAINING_OPTIONS():
         batch_size=32,
         training_timeout_minutes=TRAINING_TIME_MINUTES,
         optimizer=AdamConfig(),
+        record_interval_steps=100,
     )
 
 
@@ -559,15 +560,17 @@ class ExperimentMultiProcess:
 
     def _execute_plots(self):
         results = []
-        for (
+        for run_idx, (
             model_config,
             experiment_variant,
             training_options,
-        ) in self.queue_runs:
+        ) in enumerate(self.queue_runs):
             model = model_config()
             device_id = None
             while device_id is None:
-                device_id = get_best_gpu(estimate_cuda_size(model))
+                device_id = get_best_gpu(
+                    estimate_cuda_size(model), prefer=run_idx % torch.cuda.device_count()
+                )
                 time.sleep(5)
             training_options.device = torch.device(f"cuda:{device_id}")
             del model
@@ -608,14 +611,14 @@ class ExperimentMultiProcess:
     def plot(self, name: str):
         self._execute_plots()
         if self.pool is not None:
-            self.pool.terminate()
+            self.pool.close()
             self.pool.join()
         plot_accuracy_loss(self.experiments, get_output_path(self.dataset.name, name))
 
     def plot_tag(self, name):
         self._execute_plots()
         if self.pool is not None:
-            self.pool.terminate()
+            self.pool.close()
             self.pool.join()
         plot_accuracy_loss(self.experiments, get_output_path("tags", name))
 
@@ -712,29 +715,68 @@ def embedding_training():
 
 def residual_connections():
     for dataset in DATASETS:
-        experiment = get_experiment_instance(dataset)
-        for name, transformer_layer in [
-            ("hyper connections", TransformerLayerType.OLMO_HYPER_CONNECTIONS),
-            ("residual connections", TransformerLayerType.OLMO),
-            (
-                "constrained hyper connection",
-                TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
-            ),
-            (
-                "identity hyper connection",
-                TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS,
-            ),
-        ]:
-            config = create_default_config(
-                dataset,
-            ).with_transformer_layer(transformer_layer)
-            options = GET_DEFAULT_TRAINING_OPTIONS()
-            experiment.queue(
-                LazyModelConstruction(config),
-                name + f"_{dataset.name}",
-                training_options=options,
-            )
-        experiment.plot("residual_connections.png")
+        for depth in [4, 8, 16, 32, 64]:
+            experiment = get_experiment_instance(dataset)
+            for name, transformer_layer in [
+                ("hyper connections", TransformerLayerType.OLMO_HYPER_CONNECTIONS),
+                ("residual connections", TransformerLayerType.OLMO),
+                (
+                    "constrained hyper connection",
+                    TransformerLayerType.OLMO_CONSTRAINED_HYPER_CONNECTIONS,
+                ),
+                (
+                    "identity hyper connection",
+                    TransformerLayerType.OLMO_IDENTITY_HYPER_CONNECTIONS,
+                ),
+            ]:
+                config = create_default_config(
+                    dataset,
+                ).with_transformer_layer(transformer_layer)
+                config.num_transformer_layers = depth
+                options = GET_DEFAULT_TRAINING_OPTIONS()
+                options.batch_size = 8
+                options.accumulation_steps = 4
+                experiment.queue(
+                    LazyModelConstruction(config),
+                    name + f"_d{depth}_{dataset.name}",
+                    training_options=options,
+                )
+            experiment.plot(f"residual_connections_d{depth}.png")
+
+
+def qk_norm():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = get_experiment_instance(dataset)
+    for name, use_qk_norm in [("qk norm", True), ("baseline", False)]:
+        config = create_default_config(dataset).with_positional_embedding(
+            PositionalEmbeddingType.ROTARY_POSITION_ENCODING
+        )
+        config.qk_norm = use_qk_norm
+        options = GET_DEFAULT_TRAINING_OPTIONS()
+        options.batch_size = 8
+        options.accumulation_steps = 4
+        experiment.queue(
+            LazyModelConstruction(config),
+            name + f"_{dataset.name}",
+            training_options=options,
+        )
+    experiment.plot("qk_norm.png")
+
+
+def attention_residuals():
+    dataset = NAMED_DATASETS["medium-web"]
+    experiment = get_experiment_instance(dataset)
+    for name, use_attn_res in [("attention residuals", True), ("baseline", False)]:
+        config = create_default_config(dataset).with_positional_embedding(
+            PositionalEmbeddingType.ROTARY_POSITION_ENCODING
+        )
+        config.attention_residuals = use_attn_res
+        experiment.queue(
+            LazyModelConstruction(config),
+            name + f"_{dataset.name}",
+            training_options=GET_DEFAULT_TRAINING_OPTIONS(),
+        )
+    experiment.plot("attention_residuals.png")
 
 
 def test_speedups():
@@ -1315,6 +1357,85 @@ def ff_scaling():
     experiment.plot("ff_scaling.png")
 
 
+def scaling_laws():
+    from autoparam_executor_lib import tail_mean, VAL_WINDOW_FRAC
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = ExperimentMultiProcess(dataset)
+
+    base = create_default_config(dataset)
+    head_dim = 64
+    sizes = [
+        ("d128_l4", 128, 4),
+        ("d256_l6", 256, 6),
+        ("d384_l8", 384, 8),
+        ("d512_l10", 512, 10),
+        ("d768_l12", 768, 12),
+    ]
+    budget_minutes = int(os.environ.get("SCALING_MINUTES_PER_MODEL", 0)) * len(sizes) \
+        or int(os.environ.get("TRAINING_TIME_MINUTES", 60))
+    minutes = max(1, budget_minutes // len(sizes))
+    meta = {}
+    for label, dim, layers in sizes:
+        heads = max(1, dim // head_dim)
+        variant_config = Config(
+            sequence_length=base.sequence_length,
+            vocab_size=base.vocab_size,
+            dim_embeddings=dim,
+            num_attention_heads=heads,
+            num_transformer_layers=layers,
+            padding_index=base.padding_index,
+            positional_embedding=base.positional_embedding,
+            transformer_layer=base.transformer_layer,
+            feed_forward_layer=base.feed_forward_layer,
+            dropout=base.dropout,
+        )
+        options = TrainingOptions(
+            epochs=EPOCHS,
+            batch_size=dataset.batch_size,
+            training_timeout_minutes=minutes,
+            optimizer=AdamConfig(lr=3e-3, max_grad_norm=1.0),
+            lr_scheduler=WarmupExpDecay(
+                warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01
+            ),
+            record_interval_steps=100,
+            val_interval_steps=250,
+            val_max_batches=100,
+        )
+        m = Model(variant_config)
+        params = sum(p.numel() for p in m.parameters())
+        del m
+        torch.cuda.empty_cache()
+        meta[label] = {
+            "params": params,
+            "seq_len": variant_config.sequence_length,
+            "batch_size": options.batch_size,
+            "accum": options.accumulation_steps,
+            "record_interval": options.record_interval_steps,
+        }
+        experiment.queue(
+            LazyModelConstruction(variant_config), label, training_options=options
+        )
+    experiment.plot("scaling_laws_curves.png")
+
+    points = []
+    for label, result in experiment.experiments.items():
+        val_losses = [c.mean for c in result.step_val_loss.min_max_avg]
+        if not val_losses:
+            continue
+        md = meta[label]
+        final_loss = tail_mean(val_losses, VAL_WINDOW_FRAC)
+        steps = len(result.step_loss.min_max_avg) * md["record_interval"]
+        tokens = steps * md["batch_size"] * md["accum"] * md["seq_len"]
+        points.append({
+            "label": label,
+            "params": md["params"],
+            "tokens": tokens,
+            "val_loss": final_loss,
+            "flops": 6 * md["params"] * tokens,
+        })
+    plot_scaling_laws(points, get_output_path(dataset.name, "scaling_laws.png"))
+
+
 def long_running_training_v2():
     dataset = NAMED_DATASETS["fineweb-256"]
     experiment = get_experiment_instance(dataset)
@@ -1356,26 +1477,41 @@ def long_running_training_v2():
     experiment.plot("long_running_training_v2.png")
 
 
+EXPERIMENTS = {
+    fn.__name__: fn
+    for fn in (
+        positional_embeddings,
+        transformer_layer,
+        normalization_layer,
+        mixture_of_expert_model_vs_standard,
+        embedding_training,
+        residual_connections,
+        qk_norm,
+        attention_residuals,
+        test_speedups,
+        benchmark,
+        long_running_training,
+        embedding_sizes_functions,
+        fine_tuning,
+        continue_training_from_checkpoint,
+        lr_sweep,
+        lr_sweep_v2,
+        lr_sweep_v3,
+        layer_scaling,
+        embedding_scaling,
+        ff_scaling,
+        scaling_laws,
+        long_running_training_v2,
+    )
+}
+
+
 def train():
-    residual_connections()
-    # long_running_training()
-    # lr_sweep()
-    # lr_sweep_v2()
-    # lr_sweep_v3()
-    # layer_scaling()
-    # embedding_scaling()
-    # ff_scaling()
-    # long_running_training_v2()
-    # continue_training_from_checkpoint()
-    # fine_tuning()
-    # benchmark()
-    # mixture_of_expert_model_vs_standard()
-    # transformer_layer()
-    #   positional_embeddings()
-    #    normalization_layer()
-    # embedding_training()
-    # test_speedups()
-    # embedding_sizes_functions()
+    name = os.environ.get("EXPERIMENT", "residual_connections")
+    fn = EXPERIMENTS.get(name)
+    if fn is None:
+        raise SystemExit(f"unknown EXPERIMENT '{name}'; choose from {sorted(EXPERIMENTS)}")
+    fn()
     print("Closing down ...")
 
 

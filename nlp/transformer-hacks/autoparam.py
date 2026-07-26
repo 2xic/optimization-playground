@@ -161,7 +161,6 @@ LLM_MODEL = "anthropic/claude-opus-4-5"
 LLM_MAX_TOKENS = 1024
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 HISTORY_WINDOW = 15
-MAX_TRAINING_MINUTES = 480
 
 SEARCH_SPACE_DESCRIPTION = """
 Searchable hyperparameter space (use ONLY the values listed):
@@ -432,12 +431,12 @@ class ConfigSerializer:
         opts = TrainingOptions(
             batch_size=int(d.get("batch_size", 32)),
             accumulation_steps=int(d.get("accumulation_steps", 1)),
-            training_timeout_minutes=min(int(os.environ.get("TRAINING_TIME_MINUTES", d.get("training_minutes", timeout_minutes))), MAX_TRAINING_MINUTES),
+            training_timeout_minutes=int(os.environ.get("TRAINING_TIME_MINUTES", d.get("training_minutes", timeout_minutes))),
             optimizer=optimizer,
             lr_scheduler=scheduler,
             record_interval_steps=50,
             val_interval_steps=int(d.get("val_interval_steps", 250)),
-            val_max_batches=int(d.get("val_max_batches", 50)),
+            val_max_batches=int(d.get("val_max_batches", 100)),
             distributed_strategy=distributed_strategy,
         )
         if d.get("rho_loss"):
@@ -908,26 +907,27 @@ def _promote_best_tag(dataset_name: str, source_tag: str, score: float, objectiv
     storage.save_bytes(json.dumps(payload, indent=2).encode(), dst_best)
     if latest_payload is not None:
         storage.save_bytes(json.dumps(latest_payload, indent=2).encode(), dst_latest)
-    if is_new_best:
-        dst_history = os.path.join("checkpoints", "tags", dataset_name, "history.jsonl")
-        entry = {
-            "promoted_at": payload["promoted_at"],
-            "source_tag": source_tag,
-            "path": (latest_payload or {}).get("path"),
-            "run_id": (latest_payload or {}).get("run_id"),
-            "step": (latest_payload or {}).get("step"),
-            "score": float(score),
-            "objective": float(objective),
-            "val_accuracy": float(val_accuracy) if val_accuracy is not None else None,
-            "train_accuracy": float(train_accuracy) if train_accuracy is not None else None,
-            "previous_score": prev_score,
-            "previous_objective": prev_objective,
-        }
-        try:
-            existing = storage.load_bytes(dst_history, use_cache=False)
-        except Exception:
-            existing = b""
-        storage.save_bytes(existing + (json.dumps(entry) + "\n").encode(), dst_history)
+    dst_history = os.path.join("checkpoints", "tags", dataset_name, "history.jsonl")
+    entry = {
+        "promoted_at": datetime.now().isoformat(),
+        "promoted": is_new_best,
+        "rejected_reason": None if is_new_best else ("objective_regression" if not objective_ok else "score_not_better"),
+        "source_tag": source_tag,
+        "path": (latest_payload or {}).get("path"),
+        "run_id": (latest_payload or {}).get("run_id"),
+        "step": (latest_payload or {}).get("step"),
+        "score": float(score),
+        "objective": float(objective),
+        "val_accuracy": float(val_accuracy) if val_accuracy is not None else None,
+        "train_accuracy": float(train_accuracy) if train_accuracy is not None else None,
+        "previous_score": prev_score,
+        "previous_objective": prev_objective,
+    }
+    try:
+        existing = storage.load_bytes(dst_history, use_cache=False)
+    except Exception:
+        existing = b""
+    storage.save_bytes(existing + (json.dumps(entry) + "\n").encode(), dst_history)
     return is_new_best
 
 

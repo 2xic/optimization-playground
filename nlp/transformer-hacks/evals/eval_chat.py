@@ -6,7 +6,7 @@ DATASET = "fineweb-256"
 PIN = {}
 
 TAGS = [
-    "autoparam-pretrain",
+    #  "autoparam-pretrain",
     "autoparam-finetune",
 ]
 
@@ -56,9 +56,7 @@ def degenerate(text):
     toks = text.split()
     if len(toks) < 2:
         return True
-    if len(set(toks)) <= max(1, len(toks) // 5):
-        return True
-    return False
+    return len(set(toks)) <= max(1, len(toks) // 5)
 
 
 def main():

@@ -114,7 +114,7 @@ def plot_accuracy_loss(results: dict[str, Results], file_path: str):
         return
 
     has_steps = any(v.has_step_data for v in results.values())
-    x_label = "Step" if has_steps else "Epoch"
+    x_label = "Recorded step (sampled)" if has_steps else "Epoch"
     _, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 8))
     colors = ["blue", "green", "red", "yellow", "orange", "purple"]
 
@@ -138,6 +138,59 @@ def plot_accuracy_loss(results: dict[str, Results], file_path: str):
     ax2.legend(loc="upper right")
 
     file_path = file_path.split(".")[0]
+    print(f"Output: {file_path}.png")
+    plt.savefig(f"{file_path}.png")
+    plt.close("all")
+
+
+def plot_scaling_laws(points: list[dict], file_path: str):
+    import json
+    pts = [p for p in points if p.get("val_loss") and p.get("flops")]
+    pts.sort(key=lambda p: p["flops"])
+    file_path = file_path.split(".")[0]
+    with open(f"{file_path}.json", "w") as f:
+        json.dump(pts, f, indent=2)
+    if not pts:
+        print(f"No scaling points for {file_path}")
+        return
+
+    flops = np.array([p["flops"] for p in pts])
+    losses = np.array([p["val_loss"] for p in pts])
+
+    frontier_x, frontier_y = [], []
+    best = float("inf")
+    for x, y in zip(flops, losses):
+        if y < best:
+            best = y
+            frontier_x.append(x)
+            frontier_y.append(y)
+
+    _, ax = plt.subplots(figsize=(10, 7))
+    ax.scatter(flops, losses, s=60, color="blue", zorder=5)
+    ax.plot(frontier_x, frontier_y, color="red", linestyle="--",
+            label="compute-optimal frontier")
+    for p in pts:
+        params_m = p["params"] / 1e6
+        ax.annotate(f"{p['label']} ({params_m:.1f}M)",
+                    (p["flops"], p["val_loss"]),
+                    textcoords="offset points", xytext=(6, 6), fontsize=8)
+
+    lx = np.log10(flops)
+    if len(pts) >= 2 and np.ptp(lx) > 1e-6:
+        ly = np.log10(losses)
+        a, b = np.polyfit(lx, ly, 1)
+        fit_x = np.array([flops.min(), flops.max()])
+        fit_y = 10 ** (a * np.log10(fit_x) + b)
+        ax.plot(fit_x, fit_y, color="green", alpha=0.5,
+                label=f"fit: loss ~ C^{a:.3f}")
+
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Compute (FLOPs = 6 * N * D)")
+    ax.set_ylabel("Val loss")
+    ax.set_title("Scaling laws: val loss vs compute")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend()
     print(f"Output: {file_path}.png")
     plt.savefig(f"{file_path}.png")
     plt.close("all")

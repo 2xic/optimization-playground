@@ -1,5 +1,8 @@
 import warnings
 from cryptography.utils import CryptographyDeprecationWarning
+
+warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
+
 from pathlib import Path
 from dotenv import load_dotenv
 import os
@@ -38,7 +41,6 @@ import contextlib
 assert shutil.which("rsync"), "rsync not installed (apt install rsync)"
 assert shutil.which("sshpass"), "sshpass not installed (apt install sshpass)"
 
-warnings.filterwarnings("ignore", category=CryptographyDeprecationWarning)
 load_dotenv()
 
 INDEX_PATH = "checkpoints/index.ndjson"
@@ -79,12 +81,27 @@ class StorageBox(metaclass=SingletonMeta):
         self.transport.connect(username=username, password=password)
         self.sftp = paramiko.SFTPClient.from_transport(self.transport)
 
-    def _evict_stale_cache(self, max_age_seconds: int = 86400):
+    def _evict_stale_cache(self, max_age_seconds: int = 86400, max_bytes: int = 10 * 1024**3):
         cutoff = time.time() - max_age_seconds
+        entries = []
         for entry in self.cache_dir.iterdir():
             try:
-                if entry.is_file() and entry.stat().st_mtime < cutoff:
+                if not entry.is_file():
+                    continue
+                stat = entry.stat()
+                if stat.st_mtime < cutoff:
                     entry.unlink()
+                else:
+                    entries.append((stat.st_mtime, stat.st_size, entry))
+            except OSError:
+                pass
+        total = sum(size for _, size, _ in entries)
+        for _, size, entry in sorted(entries):
+            if total <= max_bytes:
+                break
+            try:
+                entry.unlink()
+                total -= size
             except OSError:
                 pass
 
@@ -170,6 +187,7 @@ class StorageBox(metaclass=SingletonMeta):
         if use_cache:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
             cache_path.write_bytes(data)
+            self._evict_stale_cache()
 
         if data[:2] == b"\x1f\x8b":
             data = gzip.decompress(data)

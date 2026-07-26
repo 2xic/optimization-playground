@@ -4,6 +4,7 @@ Loads in tensor from a hosted server
 
 import asyncio
 import base64
+import os
 import threading
 import queue
 import requests
@@ -59,6 +60,9 @@ class WebDataloader:
 
         self.session = requests.Session()
         self._info = None
+        self._cache_base = os.environ.get("BATCH_CACHE")
+        if self._cache_base:
+            self._cache_base = self._cache_base.rstrip("/")
 
         # Iterator state
         self.epoch = 0
@@ -268,6 +272,22 @@ class WebDataloader:
         end_idx = min(start_idx + self.batch_size, self.total_samples)
 
         columns = ",".join(list(map(str, self.column_names)))
+
+        if self._cache_base:
+            dtypes = ",".join(
+                "f4" if isinstance(c, FloatColumn) else "i8"
+                for c in self.column_names
+            )
+            url = f"{self._cache_base}/datasets/{self.dataset_name}/{self.split}/getb?start={start_idx}&end={end_idx}&columns={columns}&dtypes={dtypes}"
+            try:
+                async with session.get(url) as response:
+                    response.raise_for_status()
+                    content = await response.read()
+                return self._decode_binary(content)
+            except Exception:
+                logger.exception("Cache fetch failed for url=%s", url)
+                return self._empty_batch()
+
         url = f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/get?start={start_idx}&end={end_idx}&columns={columns}"
 
         try:
@@ -277,25 +297,46 @@ class WebDataloader:
 
             batch = ormsgpack.unpackb(content)
             result = {"dataset": self.name}
+            pin = torch.cuda.is_available()
 
-            for col in self.column_names:
-                if isinstance(col, FloatColumn):
-                    arr = np.array([item[col.name] for item in batch], dtype=np.float32)
-                    key = col.name
-                else:
-                    arr = np.array([item[col] for item in batch], dtype=np.int64)
-                    key = col
-                result[key] = (
-                    torch.from_numpy(arr).pin_memory()
-                    if torch.cuda.is_available()
-                    else torch.from_numpy(arr)
-                )
+            specs = [
+                (col.name, col.name, np.float32)
+                if isinstance(col, FloatColumn)
+                else (col, col, np.int64)
+                for col in self.column_names
+            ]
+            cols = {key: [] for key, _, _ in specs}
+            for item in batch:
+                for key, src, _ in specs:
+                    cols[key].append(item[src])
+
+            for key, _, dt in specs:
+                tensor = torch.from_numpy(np.asarray(cols[key], dtype=dt))
+                result[key] = tensor.pin_memory() if pin else tensor
 
             return result
 
         except Exception:
             logger.exception("Fetch failed for url=%s", url)
             return self._empty_batch()
+
+    def _decode_binary(self, content):
+        hlen = int.from_bytes(content[:4], "big")
+        header = ormsgpack.unpackb(content[4 : 4 + hlen])
+        off = 4 + hlen
+        result = {"dataset": self.name}
+        for col, dt, shape, nb in zip(
+            header["cols"], header["dtypes"], header["shapes"], header["nbytes"]
+        ):
+            arr = np.frombuffer(content[off : off + nb], dtype=np.dtype(dt)).reshape(
+                shape
+            )
+            off += nb
+            tensor = torch.from_numpy(arr.copy())
+            result[col] = (
+                tensor.pin_memory() if torch.cuda.is_available() else tensor
+            )
+        return result
 
     def _empty_batch(self):
         return {col: torch.tensor([]) for col in self.column_names}

@@ -21,6 +21,7 @@ from abc import ABC
 from .objectives import BaseObjective
 from .rho_loss import RhoLossConfig, RhoLossTagConfig, RhoLossEmaConfig, RhoLossSnapshotConfig  # noqa: F401
 from .optimizer import BaseOptimizerConfig, AdamConfig, Scheduler
+from .device_caps import supports_bf16, supports_amp, supports_torch_compile
 from utils.metrics import MetricsTracker
 from utils.checkpoints import StorageBoxCheckpoint, Stats, TrainingMetadata
 from scheduler.cooperative import shutdown_requested
@@ -530,25 +531,13 @@ class Trainer(BaseTrainer):
         self.optimizer = optimizer
         self.state_saver = ModelStateSaver(name) if name is not None else None
 
-    def train(
-        self,
-        dataloader: WebDataloader,
-        training_options: TrainingOptions,
-        progress=lambda x: tqdm(x, mininterval=1),
-    ):
-        self.log(f"Training on {training_options.device}")
-        is_fsdp = (
-            training_options.distributed_strategy == DistributedStrategy.FSDP
-            and dist.is_initialized()
-        )
-        if not is_fsdp:
-            self.model.to(training_options.device)
-        self._maybe_init_rho_loss(training_options)
+    def apply_distributed_strategy(self, training_options: TrainingOptions, is_fsdp: bool):
+        blocks = []
         if training_options.distributed_strategy == DistributedStrategy.DDP and dist.is_initialized():
             self.model = DDP(self.model, device_ids=[dist.get_rank()])
         elif is_fsdp:
-            bf16 = check_bf16_support()
-            mp_dtype = torch.bfloat16 if bf16 else torch.float16
+            mp_dtype = best_autocast_dtype()
+            bf16 = mp_dtype == torch.bfloat16
             blocks = [
                 layer
                 for mod in self.model.modules()
@@ -569,6 +558,24 @@ class Trainer(BaseTrainer):
                 mp_policy = MixedPrecision(param_dtype=mp_dtype, reduce_dtype=mp_dtype, buffer_dtype=mp_dtype)
                 wrap_policy = ModuleWrapPolicy({type(layer) for layer in blocks}) if blocks else None
                 self.model = FSDP(self.model, device_id=dist.get_rank(), mixed_precision=mp_policy, use_orig_params=True, auto_wrap_policy=wrap_policy)
+        return blocks
+
+    def train(
+        self,
+        dataloader: WebDataloader,
+        training_options: TrainingOptions,
+        progress=lambda x: tqdm(x, mininterval=1),
+    ):
+        self.log(f"Training on {training_options.device}")
+        apply_runtime_optimizations()
+        is_fsdp = (
+            training_options.distributed_strategy == DistributedStrategy.FSDP
+            and dist.is_initialized()
+        )
+        if not is_fsdp:
+            self.model.to(training_options.device)
+        self._maybe_init_rho_loss(training_options)
+        blocks = self.apply_distributed_strategy(training_options, is_fsdp)
         for state in self.optimizer.state.values():
             for k, v in state.items():
                 if isinstance(v, torch.Tensor):
@@ -612,9 +619,6 @@ class Trainer(BaseTrainer):
             accuracy_pct = sum_epoch_accuracy / max(sum_epoch_rows, 1) * 100
             avg_loss = sum_epoch_loss / max(epoch_batch_count, 1)
             self.log(f"Epoch {epoch} | acc={accuracy_pct:.2f}% loss={avg_loss:.4f}")
-            training_options.metadata.plots.record_epoch(
-                loss=avg_loss, accuracy=accuracy_pct
-            )
             timeout = int(self.has_timeout(training_options) or shutdown_requested())
             if dist.is_initialized():
                 t = torch.tensor(timeout, device=training_options.device)
@@ -623,6 +627,9 @@ class Trainer(BaseTrainer):
             if timeout:
                 self.log("Hit timeout or shutdown")
                 break
+            training_options.metadata.plots.record_epoch(
+                loss=avg_loss, accuracy=accuracy_pct
+            )
         if training_options.enable_checkpoints:
             self.log("Storing checkpoints ...")
             self.checkpoint(
@@ -652,8 +659,7 @@ def check_bf16_support():
         return False
 
     major, minor = torch.cuda.get_device_capability()
-    # Ampere (8.0) or newer supports BF16
-    if major >= 8:
+    if supports_bf16():
         print(f"✅ BF16 supported (Compute Capability: {major}.{minor})")
         return True
     else:
@@ -661,6 +667,20 @@ def check_bf16_support():
             f"❌ BF16 not supported (Compute Capability: {major}.{minor}, need >= 8.0)"
         )
         return False
+
+
+def apply_runtime_optimizations():
+    torch.backends.cuda.enable_flash_sdp(True)
+    torch.backends.cuda.enable_mem_efficient_sdp(True)
+    torch.set_float32_matmul_precision("high")
+
+
+def best_autocast_dtype(device=None):
+    if supports_bf16(device):
+        return torch.bfloat16
+    if supports_amp(device):
+        return torch.float16
+    return torch.float32
 
 
 class GradScalerTrainer(Trainer):
@@ -675,7 +695,7 @@ class GradScalerTrainer(Trainer):
         super().__init__(model, objective, optimizer, lr_scheduler, name)
         self._original_model = model
         self.scaler = GradScaler("cuda")
-        self.type = torch.bfloat16 if check_bf16_support() else torch.float16
+        self.type = best_autocast_dtype()
         self.last_time = None
         self._training_options: Optional[TrainingOptions] = None
 
@@ -700,13 +720,15 @@ class GradScalerTrainer(Trainer):
             self._original_model.to(training_options.device).to(self.type)
         il_dtype = None if self.use_fsdp else self.type
         self._maybe_init_rho_loss(training_options, main_model=self._original_model, dtype=il_dtype)
-        torch.backends.cuda.enable_flash_sdp(True)
-        torch.backends.cuda.enable_mem_efficient_sdp(True)
-        torch.set_float32_matmul_precision("high")
+        apply_runtime_optimizations()
+        self.maybe_compile(training_options)
+        return super().train(dataset, training_options, progress)
+
+    def maybe_compile(self, training_options: TrainingOptions):
         can_compile = shutil.which("cc") or shutil.which("gcc")
-        if not self.use_fsdp and can_compile and torch.cuda.is_available():
-            capability = torch.cuda.get_device_capability(training_options.device)
-            if capability[0] >= 7:
+        fsdp_compile_disabled = self.use_fsdp and os.environ.get("DISABLE_FSDP_COMPILE") == "1"
+        if can_compile and torch.cuda.is_available() and not fsdp_compile_disabled:
+            if supports_torch_compile(training_options.device):
                 try:
                     compiled = torch.compile(self.model, dynamic=not self.static_shapes)
                     warm_batch = training_options.batch_size if self.static_shapes else 1
@@ -721,10 +743,10 @@ class GradScalerTrainer(Trainer):
                     torch.cuda.empty_cache()
                     self.model = self._original_model
             else:
-                tqdm.write(f"Skipping torch.compile: CUDA Capability {capability[0]}.{capability[1]} < 7.0")
+                cap = torch.cuda.get_device_capability(training_options.device)
+                tqdm.write(f"Skipping torch.compile: CUDA Capability {cap[0]}.{cap[1]} < 7.0")
         elif not can_compile:
             tqdm.write("Skipping torch.compile: no C compiler found")
-        return super().train(dataset, training_options, progress)
 
     def forward(
         self, model, objective, X, y, training_options: TrainingOptions

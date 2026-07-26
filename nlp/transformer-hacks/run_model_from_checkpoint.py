@@ -1,3 +1,7 @@
+import warnings
+
+warnings.filterwarnings("ignore", message=".*TripleDES.*")
+
 from utils.checkpoints import StorageBox
 import os
 import base64
@@ -25,6 +29,11 @@ from optimization_playground_shared.nlp.utils.sampling import (
 load_dotenv()
 
 logger = logging.getLogger(__name__)
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
+
+import flask.cli
+
+flask.cli.show_server_banner = lambda *a, **k: None
 
 app = Flask(__name__)
 

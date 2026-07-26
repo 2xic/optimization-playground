@@ -3,6 +3,8 @@ import math
 import torch.nn as nn
 import torch
 import torch.utils.checkpoint
+from torch.amp import autocast
+from .device_caps import supports_amp, supports_bf16
 from optimization_playground_shared.nlp.PositionalEncoding import (
     SinusoidalPositionalEncoding,
     RotaryPositionalEncoding,
@@ -110,6 +112,7 @@ class Config:
     hc_n: int = 4
     attention_type: AttentionType = AttentionType.DEFAULT
     qk_norm: bool = False
+    attention_residuals: bool = False
     label_smoothing: float = 0.0
     tie_embeddings: bool = True
     init_std: float = 0.02
@@ -722,6 +725,20 @@ class PositionalEmbeddings(nn.Module):
         return self.positional_embeddings(x)
 
 
+class AttentionResiduals(nn.Module):
+    def __init__(self, num_layers, dim):
+        super().__init__()
+        self.queries = nn.Parameter(torch.zeros(num_layers + 1, dim))
+        self.norm = nn.RMSNorm(dim, elementwise_affine=False)
+
+    def mix(self, outputs, query):
+        V = torch.stack(outputs)
+        K = self.norm(V)
+        logits = (K * query).sum(-1)
+        alpha = logits.softmax(0).unsqueeze(-1)
+        return (alpha * V).sum(0)
+
+
 class Model(nn.Module):
     def __init__(self, config: Config):
         super().__init__()
@@ -750,6 +767,11 @@ class Model(nn.Module):
                 for layer_idx in range(self.config.num_transformer_layers)
             ]
         )
+        if config.attention_residuals:
+            self.attention_residuals = AttentionResiduals(
+                self.config.num_transformer_layers,
+                self.config.dim_embeddings,
+            )
         self.dropout = nn.Dropout(config.dropout)
         self.layer_norm = NormalizationLayer(config, self.config.dim_embeddings)
         self.output_layer = nn.Linear(
@@ -821,23 +843,29 @@ class Model(nn.Module):
             H = x.unsqueeze(2).expand(-1, -1, self.config.hc_n, -1).contiguous()
             H = self.dropout(H)
             for i, layer in enumerate(self.transformer_layers):
-                if self.training and self.config.gradient_checkpointing and i % 2 == 0:
-                    H = torch.utils.checkpoint.checkpoint(layer, H, mask, use_reentrant=False)
-                else:
-                    H = layer(H, mask)
+                H = self._run_layer(layer, H, mask, i)
             x = H.sum(dim=2)
             return self.layer_norm(x)
         x = self.embeddings(x)
         x = self.positional_embeddings(x)
         x = self.dropout(x)
+        if self.config.attention_residuals:
+            outputs = [x]
+            for i, layer in enumerate(self.transformer_layers):
+                h = self.attention_residuals.mix(outputs, self.attention_residuals.queries[i])
+                outputs.append(self._run_layer(layer, h, mask, i))
+            x = self.attention_residuals.mix(outputs, self.attention_residuals.queries[-1])
+            return self.layer_norm(x)
         for i, layer in enumerate(self.transformer_layers):
-            if self.training and self.config.gradient_checkpointing and i % 2 == 0:
-                x = torch.utils.checkpoint.checkpoint(layer, x, mask, use_reentrant=False)
-            else:
-                x = layer(x, mask)
+            x = self._run_layer(layer, x, mask, i)
         return self.layer_norm(x)
 
-    @torch.no_grad()
+    def _run_layer(self, layer, x, mask, i):
+        if self.training and self.config.gradient_checkpointing and i % 2 == 0:
+            return torch.utils.checkpoint.checkpoint(layer, x, mask, use_reentrant=False)
+        return layer(x, mask)
+
+    @torch.inference_mode()
     def generate(
         self,
         input_tokens: torch.Tensor,
@@ -848,8 +876,11 @@ class Model(nn.Module):
         output = input_tokens
         output = output.unsqueeze(0)
 
+        use_amp = supports_amp(output.device)
+        amp_dtype = torch.bfloat16 if supports_bf16(output.device) else torch.float16
         for _ in range(num_tokens_generate):
-            logits = self.forward(output[:, -self.config.sequence_length :])
+            with autocast("cuda", dtype=amp_dtype, enabled=use_amp):
+                logits = self.forward(output[:, -self.config.sequence_length :])
             last_token = logits[:, -1, :]
             next_token = sampler(last_token).unsqueeze(0)
             output = torch.cat((output, next_token), dim=1)
@@ -858,32 +889,37 @@ class Model(nn.Module):
                 break
         return output[0].tolist()
 
+    @torch.inference_mode()
     def beam_search(self, input_ids, max_len=50, beam_width=3, end_token_id=None):
+        device = input_ids.device
+        use_amp = supports_amp(device)
+        amp_dtype = torch.bfloat16 if supports_bf16(device) else torch.float16
         # (score, seq, is_finished)
         beams = [(0.0, input_ids, False)]
 
         for _ in range(max_len):
-            candidates = []
+            active = [(s, seq) for s, seq, fin in beams if not fin]
+            candidates = [(s, seq, True) for s, seq, fin in beams if fin]
 
-            for score, seq, finished in beams:
-                if finished:
-                    candidates.append((score, seq, True))
-                    continue
+            if not active:
+                break
 
-                # logits = self.forward(seq.unsqueeze(0))[:, -1, :]
-                logits = self.forward(seq[-self.config.sequence_length :].unsqueeze(0))[
-                    :, -1, :
-                ]
-                log_probs = F.log_softmax(logits, dim=-1).squeeze(0)
+            seqs = torch.stack(
+                [seq[-self.config.sequence_length :] for _, seq in active]
+            )
+            with autocast("cuda", dtype=amp_dtype, enabled=use_amp):
+                logits = self.forward(seqs)[:, -1, :]
+            log_probs = F.log_softmax(logits, dim=-1)
+            top_log_probs, top_ids = log_probs.topk(beam_width, dim=-1)
 
-                top_log_probs, top_ids = log_probs.topk(beam_width)
-
-                for log_p, token_id in zip(top_log_probs, top_ids):
-                    new_seq = torch.cat([seq, token_id.unsqueeze(0)])
-                    is_eos = (
-                        end_token_id is not None and token_id.item() == end_token_id
-                    )
-                    candidates.append((score + log_p.item(), new_seq, is_eos))
+            top_log_probs = top_log_probs.tolist()
+            top_ids = top_ids.tolist()
+            for (score, seq), lp_row, id_row in zip(active, top_log_probs, top_ids):
+                for log_p, token_id in zip(lp_row, id_row):
+                    tok = torch.tensor([token_id], device=device)
+                    new_seq = torch.cat([seq, tok])
+                    is_eos = end_token_id is not None and token_id == end_token_id
+                    candidates.append((score + log_p, new_seq, is_eos))
 
             beams = sorted(candidates, key=lambda x: x[0], reverse=True)[:beam_width]
 

@@ -36,6 +36,7 @@ from autoparam import (
 )
 from utils.load_mode_from_checkpoint import load_modeL_tag
 from utils.checkpoints import StorageBox
+from autoparam_executor_lib import extract_objective
 from scheduler.cooperative import install_shutdown_handler
 
 _LOCKED_ARCH_FIELDS = (
@@ -189,10 +190,7 @@ class FeedbackAutoparamLoop(AutoparamLoopBase):
         return {"init_from_tag": self.init_tag} if self.init_tag else {}
 
     def _extract_objective(self, score: dict) -> float:
-        val_loss = score.get("val_loss")
-        if val_loss is not None and not math.isnan(val_loss):
-            return -float(val_loss)
-        return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
+        return extract_objective(score)
 
     def _format_success_log(self, score: dict) -> str:
         params_m = score.get("params_count", 0) / 1e6

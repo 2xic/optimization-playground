@@ -127,17 +127,24 @@ def _load_checkpoint(model, optimizer, device):
         print("No existing checkpoint; starting fresh", flush=True)
         return 0, 0
     path = json.loads(box.load_bytes(tag_path))["path"]
-    raw_model = torch.load(
-        io.BytesIO(box.load_bytes(os.path.join(path, "model.pt"))),
-        map_location=device, weights_only=False,
-    )
-    raw_opt = torch.load(
-        io.BytesIO(box.load_bytes(os.path.join(path, "optimizer.pt"))),
-        map_location=device, weights_only=False,
-    )
+    if not box._path_exists(os.path.join(path, "model.pt")):
+        print(f"Checkpoint pointer {path} dangling; starting fresh", flush=True)
+        return 0, 0
+    try:
+        raw_model = torch.load(
+            io.BytesIO(box.load_bytes(os.path.join(path, "model.pt"))),
+            map_location=device, weights_only=False,
+        )
+        raw_opt = torch.load(
+            io.BytesIO(box.load_bytes(os.path.join(path, "optimizer.pt"))),
+            map_location=device, weights_only=False,
+        )
+        stats = json.loads(box.load_bytes(os.path.join(path, "stats.json")))
+    except Exception as e:
+        print(f"Checkpoint {path} unreadable ({e}); starting fresh", flush=True)
+        return 0, 0
     model.load_state_dict(raw_model.state_dict() if isinstance(raw_model, nn.Module) else raw_model)
     optimizer.load_state_dict(raw_opt.state_dict() if hasattr(raw_opt, "state_dict") else raw_opt)
-    stats = json.loads(box.load_bytes(os.path.join(path, "stats.json")))
     step = stats.get("steps", 0)
     epoch = stats.get("metadata", {}).get("epoch", 0)
     print(f"Resumed checkpoint at step={step} epoch={epoch}", flush=True)

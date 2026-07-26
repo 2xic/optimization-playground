@@ -20,6 +20,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from experiments import NAMED_DATASETS, TRAINING_TIME_MINUTES
 from training.trainer import DistributedStrategy
+from autoparam_executor_lib import extract_objective
 from autoparam import (
     AutoparamLoopBase,
     LLMProposer,
@@ -113,7 +114,7 @@ class TripletAutoparamLoop(AutoparamLoopBase):
         return f"autoparam-{self.dataset.name}" + suffix
 
     def _extract_objective(self, score: dict) -> float:
-        return float(score.get("val_accuracy", score.get("final_accuracy", -1.0)))
+        return extract_objective(score)
 
     def _format_success_log(self, score: dict) -> str:
         params_m = score.get("params_count", 0) / 1e6
