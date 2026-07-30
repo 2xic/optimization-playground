@@ -6,6 +6,7 @@ Usage:
 """
 import argparse
 import atexit
+import copy
 import hashlib
 import json
 import logging
@@ -13,6 +14,7 @@ import os
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 from collections import deque
 from datetime import datetime
@@ -27,6 +29,8 @@ APP_DIR = PKG_DIR.parent
 LOG_DIR = PKG_DIR / "logs"
 STATUS_FILE = PKG_DIR / "status.json"
 DEFAULT_CONFIG = PKG_DIR / "scheduler.yaml"
+SANITY_SLOT_MINUTES = 2
+SANITY_TRAIN_MINUTES = 1
 SCHEDULER_LOG = PKG_DIR / "scheduler.log"
 CURRENT_LOG_LINK = "/tmp/autoparam_current.log"
 INBOX_DIR = PKG_DIR / "inbox"
@@ -630,6 +634,19 @@ def process_inbox_file(path: Path, status: Status, cfg: dict, gpus_total: int):
         log(f"=== inbox done: {path.name} → failed/ (had failures{'' if moved else ', MOVE FAILED'}) ===")
 
 
+def _write_sanity_config(cfg: dict) -> Path:
+    c = copy.deepcopy(cfg)
+    for j in c["jobs"]:
+        j["slot_minutes"] = SANITY_SLOT_MINUTES
+        env = dict(j.get("env") or {})
+        env["TRAINING_TIME_MINUTES"] = str(SANITY_TRAIN_MINUTES)
+        j["env"] = env
+    fd, path = tempfile.mkstemp(prefix="scheduler-sanity-", suffix=".yaml")
+    with os.fdopen(fd, "w") as f:
+        yaml.safe_dump(c, f, sort_keys=False)
+    return Path(path)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
@@ -637,6 +654,8 @@ def main():
                         help="exit cleanly after this many job slots (0 = run forever)")
     parser.add_argument("--once", action="store_true",
                         help="run each enabled job once until it completes, then exit")
+    parser.add_argument("--sanity", action="store_true",
+                        help="smoke-test: run each enabled job briefly (no checkpoints), then exit")
     args = parser.parse_args()
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -644,6 +663,11 @@ def main():
     _init_logger()
 
     cfg = load_config(args.config)
+    if args.sanity:
+        args.config = _write_sanity_config(cfg)
+        cfg = load_config(args.config)
+        args.once = True
+        log(f"--sanity: {args.config} (slot={SANITY_SLOT_MINUTES}m train={SANITY_TRAIN_MINUTES}m, no checkpoints)")
     start_version = cfg["version"]
     gpus_total = detect_gpus_total()
     validate(cfg, gpus_total)

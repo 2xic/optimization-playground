@@ -43,6 +43,29 @@ assert shutil.which("sshpass"), "sshpass not installed (apt install sshpass)"
 
 load_dotenv()
 
+RSYNC_MAX_ATTEMPTS = 5
+RSYNC_BACKOFF_BASE = 3.0
+
+
+def _run_rsync_with_retry(cmd, env, label):
+    last = None
+    for attempt in range(1, RSYNC_MAX_ATTEMPTS + 1):
+        try:
+            subprocess.run(cmd, env=env, check=True)
+            return
+        except subprocess.CalledProcessError as e:
+            last = e
+            if attempt == RSYNC_MAX_ATTEMPTS:
+                break
+            delay = RSYNC_BACKOFF_BASE * (2 ** (attempt - 1))
+            print(
+                f"[rsync] {label} failed (exit {e.returncode}) attempt {attempt}/{RSYNC_MAX_ATTEMPTS}, retry in {delay:.0f}s",
+                flush=True,
+            )
+            time.sleep(delay)
+    raise last
+
+
 INDEX_PATH = "checkpoints/index.ndjson"
 
 Path("/tmp/sftp_cache").mkdir(parents=True, exist_ok=True)
@@ -131,7 +154,7 @@ class StorageBox(metaclass=SingletonMeta):
             env = os.environ.copy()
             env["SSHPASS"] = self.password
             # paramiko is so slow ...
-            subprocess.run(
+            _run_rsync_with_retry(
                 [
                     "sshpass",
                     "-e",
@@ -141,8 +164,8 @@ class StorageBox(metaclass=SingletonMeta):
                     tmp_path,
                     f"{self.username}@{self.host}:{path}",
                 ],
-                env=env,
-                check=True,
+                env,
+                f"upload {path}",
             )
         finally:
             os.unlink(tmp_path)
@@ -165,7 +188,7 @@ class StorageBox(metaclass=SingletonMeta):
             env = os.environ.copy()
             env["SSHPASS"] = self.password
 
-            subprocess.run(
+            _run_rsync_with_retry(
                 [
                     "sshpass",
                     "-e",
@@ -176,8 +199,8 @@ class StorageBox(metaclass=SingletonMeta):
                     f"{self.username}@{self.host}:{path}",
                     tmp_path,
                 ],
-                env=env,
-                check=True,
+                env,
+                f"download {path}",
             )
 
             data = Path(tmp_path).read_bytes()
@@ -470,12 +493,9 @@ class StorageBoxCheckpoint(StorageBox):
             print("Checkpoint upload failed", exc_info=exc)
 
     def _upload(self, files, full_path, stats: Stats):
-        self.append_index_entry(self.run_id, stats.steps, full_path, stats.to_json())
         for name, data in files.items():
-            try:
-                self.save_bytes(data, os.path.join(full_path, name))
-            except Exception as e:
-                print(e)
+            self.save_bytes(data, os.path.join(full_path, name))
+        self.append_index_entry(self.run_id, stats.steps, full_path, stats.to_json())
 
     def _serialize_json(self, data) -> bytes:
         if isinstance(data, dict):

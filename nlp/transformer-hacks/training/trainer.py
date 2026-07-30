@@ -227,6 +227,7 @@ class BaseTrainer(ABC):
         # Do a checkpoint each hour.
         self.start = time.time()
         self.checkpoint_interval = 60 * 60
+        self.min_checkpoint_seconds = float(os.environ.get("MIN_CHECKPOINT_MINUTES", "5")) * 60
         self.last_checkpoint = time.time()
         self._val_iter = None
         self._rho_selector = None
@@ -434,6 +435,10 @@ class BaseTrainer(ABC):
     def checkpoint(
         self, training_options: TrainingOptions, model, sum_loss, sum_accuracy, sum_rows, batch_count=1
     ):
+        elapsed = time.time() - self.start
+        if elapsed < self.min_checkpoint_seconds:
+            self.log(f"skip checkpoint: trained {elapsed/60:.1f}m < {self.min_checkpoint_seconds/60:.0f}m")
+            return
         stats = Stats(
             loss_average=(sum_loss / max(batch_count, 1)),
             accuracy_pct=(sum_accuracy / max(sum_rows, 1) * 100),

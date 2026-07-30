@@ -37,10 +37,9 @@ def build_and_run(cfg, rank, log):
     score.update(common_score_extras(
         results, config, training_options, world_size, cfg["model_config"], cfg["training_config"], strategy_name
     ))
-    no_data = (
-        len(results.accuracy.min_max_avg) == 0
-        and len(results.step_accuracy.min_max_avg) == 0
-    )
+    score["batches_seen"] = int(getattr(training_options.metadata, "total_batch_num", 0))
+    score["rows_seen"] = int(getattr(training_options.metadata, "count_rows", 0))
+    no_data = score["rows_seen"] == 0
     if no_data:
         return score, "failed", "No training data collected (dataloader may be failing)"
     return score, "success", None

@@ -92,7 +92,7 @@ def run(
         error_message = str(e)
         _log(f"exception caught:\n{traceback.format_exc()}")
     finally:
-        _log(f"finally | status={status} | error={error_message}")
+        _log(f"finally | status={status} | batches={score.get('batches_seen')} rows={score.get('rows_seen')} | error={error_message}")
         if error_message is not None:
             if rank == 0:
                 try:

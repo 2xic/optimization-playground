@@ -2,6 +2,8 @@ import os
 import sys
 import json
 import argparse
+import tempfile
+import subprocess
 from datetime import date, datetime, timedelta
 from dotenv import load_dotenv
 
@@ -55,12 +57,27 @@ def date_dirs(box):
 
 
 def rmtree(box, path):
-    for name in box.sftp.listdir(path):
-        full = f"{path}/{name}"
-        if box.is_directory(full):
-            rmtree(box, full)
-        else:
-            box.sftp.remove(full)
+    empty = tempfile.mkdtemp()
+    env = os.environ.copy()
+    env["SSHPASS"] = box.password
+    try:
+        subprocess.run(
+            [
+                "sshpass",
+                "-e",
+                "rsync",
+                "-r",
+                "--delete",
+                "-e",
+                "ssh -p 23 -T -o Compression=no -o StrictHostKeyChecking=no",
+                f"{empty}/",
+                f"{box.username}@{box.host}:{path}/",
+            ],
+            env=env,
+            check=True,
+        )
+    finally:
+        os.rmdir(empty)
     box.sftp.rmdir(path)
 
 

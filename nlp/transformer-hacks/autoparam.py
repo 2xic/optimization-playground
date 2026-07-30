@@ -149,11 +149,10 @@ def _estimate_footprint_gb_meta(config, batch_size: int, num_gpus: int = 1) -> t
     grad_gb = num_params * 4 / GB / max(1, num_gpus)
 
     bytes_per_act = 4
-    attn_scores = B * H * S * S * bytes_per_act
     attn_qkv = 4 * B * S * D * bytes_per_act
     ffn_hidden = 3 * B * S * F * bytes_per_act
     residual = 4 * B * S * D * bytes_per_act
-    per_layer = attn_scores + attn_qkv + ffn_hidden + residual
+    per_layer = attn_qkv + ffn_hidden + residual
     activation_gb = (L * per_layer + 2 * B * S * config.vocab_size * bytes_per_act) / GB
     return param_gb + optimizer_gb + grad_gb + activation_gb, num_params
 

@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 from torch.nn import MultiheadAttention
 import torch.optim as optim
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ from scheduler.cooperative import install_shutdown_handler, shutdown_requested
 
 install_shutdown_handler()
 
-TTS_TAG = "tts-ljspeech"
+TTS_TAG = "tts-ljspeech-v2"
 
 
 def _storage() -> StorageBox:
@@ -101,15 +102,29 @@ def _append_history(box, stats):
 
 
 def _save_checkpoint(sbx, model, optimizer, stats):
-    sbx.checkpoint(model, optimizer, asdict(model.config), stats).result()
-    sbx.tag(TTS_TAG, stats).result()
+    try:
+        sbx.checkpoint(model, optimizer, asdict(model.config), stats).result()
+    except Exception as e:
+        print(f"Checkpoint upload failed at step={stats.steps}, not tagging: {e}", flush=True)
+        return
     print(f"Saved checkpoint at step={stats.steps} epoch={stats.metadata.epoch}", flush=True)
+    try:
+        sbx.tag(TTS_TAG, stats).result()
+    except Exception as e:
+        print(f"Tag update failed at step={stats.steps}: {e}", flush=True)
+        return
     box = _storage()
-    prev_best = _read_best_loss(box)
-    if prev_best is None or stats.loss_average < prev_best:
-        _write_best(sbx, box, stats)
-        print(f"New best loss={stats.loss_average:.4f} (prev={prev_best})", flush=True)
-    _append_history(box, stats)
+    try:
+        prev_best = _read_best_loss(box)
+        if prev_best is None or stats.loss_average < prev_best:
+            _write_best(sbx, box, stats)
+            print(f"New best loss={stats.loss_average:.4f} (prev={prev_best})", flush=True)
+    except Exception as e:
+        print(f"Best update failed at step={stats.steps}: {e}", flush=True)
+    try:
+        _append_history(box, stats)
+    except Exception as e:
+        print(f"History append failed at step={stats.steps}: {e}", flush=True)
 
 
 def _save_sample(sbx, local_path, stats):
@@ -121,6 +136,9 @@ def _save_sample(sbx, local_path, stats):
 
 
 def _load_checkpoint(model, optimizer, device):
+    if os.environ.get("TTS_FRESH_START") == "1":
+        print("TTS_FRESH_START=1; ignoring checkpoint, starting fresh", flush=True)
+        return 0, 0
     box = _storage()
     tag_path = os.path.join("checkpoints", "tags", TTS_TAG, "latest.json")
     if not box._path_exists(tag_path):
@@ -159,6 +177,9 @@ class TTSConfig:
     audio_vocab_size: int
     audio_padding_idx: int
 
+    audio_num_codebooks: int = 1
+    audio_codebook_size: int = 1024
+
     # Shared
     dim_embeddings: int = 512
     num_attention_heads: int = 8
@@ -188,10 +209,11 @@ class TransformerEncoderLayer(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x, padding_mask=None):
-        attn_out, _ = self.self_attn(x, x, x, key_padding_mask=padding_mask)
-        x = self.norm1(x + self.dropout(attn_out))
+        a = self.norm1(x)
+        attn_out, _ = self.self_attn(a, a, a, key_padding_mask=padding_mask)
+        x = x + self.dropout(attn_out)
 
-        x = self.norm2(x + self.dropout(self.ffn(x)))
+        x = x + self.dropout(self.ffn(self.norm2(x)))
         return x
 
 
@@ -221,15 +243,17 @@ class TransformerDecoderLayer(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
 
     def forward(self, x, encoder_out, causal_mask=None, encoder_padding_mask=None):
-        attn_out, _ = self.self_attn(x, x, x, attn_mask=causal_mask)
-        x = self.norm1(x + self.dropout(attn_out))
+        a = self.norm1(x)
+        attn_out, _ = self.self_attn(a, a, a, attn_mask=causal_mask, need_weights=False)
+        x = x + self.dropout(attn_out)
 
+        c = self.norm2(x)
         cross_out, _ = self.cross_attn(
-            x, encoder_out, encoder_out, key_padding_mask=encoder_padding_mask
+            c, encoder_out, encoder_out, key_padding_mask=encoder_padding_mask, need_weights=False
         )
-        x = self.norm2(x + self.dropout(cross_out))
+        x = x + self.dropout(cross_out)
 
-        x = self.norm3(x + self.dropout(self.ffn(x)))
+        x = x + self.dropout(self.ffn(self.norm3(x)))
         return x
 
 
@@ -292,7 +316,7 @@ class TTSTransformer(nn.Module):
                 module.weight.data[module.padding_idx].zero_()
 
     def encode(self, text_tokens, text_padding_mask=None):
-        x = self.text_embed(text_tokens)
+        x = self.text_embed(text_tokens) * (self.config.dim_embeddings ** 0.5)
         x = self.text_pos(x)
         x = self.dropout(x)
 
@@ -304,14 +328,20 @@ class TTSTransformer(nn.Module):
     def decode(self, audio_tokens, encoder_out, encoder_padding_mask=None):
         seq_len = audio_tokens.size(1)
 
-        x = self.audio_embed(audio_tokens)
+        x = self.audio_embed(audio_tokens) * (self.config.dim_embeddings ** 0.5)
         x = self.audio_pos(x)
         x = self.dropout(x)
 
         causal_mask = self.causal_mask[:seq_len, :seq_len]
 
         for layer in self.decoder_layers:
-            x = layer(x, encoder_out, causal_mask, encoder_padding_mask)
+            if self.training:
+                x = torch.utils.checkpoint.checkpoint(
+                    layer, x, encoder_out, causal_mask, encoder_padding_mask,
+                    use_reentrant=False,
+                )
+            else:
+                x = layer(x, encoder_out, causal_mask, encoder_padding_mask)
 
         x = self.decoder_norm(x)
         return self.output_proj(x)
@@ -323,8 +353,12 @@ class TTSTransformer(nn.Module):
 
     @torch.no_grad()
     def generate(
-        self, text_tokens, max_len=2000, temperature=1.0, bos_token=1025, eos_token=1026
+        self, text_tokens, max_len=2000, temperature=1.0, bos_token=None, eos_token=None
     ):
+        if bos_token is None:
+            bos_token = self.config.audio_padding_idx + 1
+        if eos_token is None:
+            eos_token = self.config.audio_padding_idx + 2
         self.eval()
         device = text_tokens.device
         batch_size = text_tokens.size(0)
@@ -410,10 +444,29 @@ def train(model, dataset, epochs=100, device="cuda"):
     model = model.to(device)
     model.train()
 
-    criterion = nn.CrossEntropyLoss(ignore_index=1024)
-    optimizer = optim.AdamW(model.parameters(), lr=3e-4)
+    criterion = nn.CrossEntropyLoss(ignore_index=model.config.audio_padding_idx)
+    optimizer = optim.AdamW(model.parameters(), lr=1e-3)
 
     global_step, start_epoch = _load_checkpoint(model, optimizer, device)
+    for g in optimizer.param_groups:
+        g["lr"] = 1e-3
+        g["initial_lr"] = 1e-3
+
+    warmup_steps = 200
+    decay_steps = 20000
+    min_lr_ratio = 0.1
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return (step + 1) / warmup_steps
+        if step >= decay_steps:
+            return min_lr_ratio
+        progress = (step - warmup_steps) / max(1, decay_steps - warmup_steps)
+        return min_lr_ratio + 0.5 * (1 - min_lr_ratio) * (1 + math.cos(math.pi * progress))
+
+    scheduler = optim.lr_scheduler.LambdaLR(
+        optimizer, lr_lambda, last_epoch=global_step - 1
+    )
     sbx = _ckpt_writer()
     dataset_name = getattr(dataset, "name", "ljspeech")
 
@@ -431,6 +484,8 @@ def train(model, dataset, epochs=100, device="cuda"):
         return (deadline and time.time() > deadline) or shutdown_requested()
 
     stopped = False
+    checkpoint_interval = int(os.environ.get("TTS_CHECKPOINT_INTERVAL", str(60 * 60)))
+    last_checkpoint = time.time()
     for epoch in range(start_epoch, epochs):
         if stopped:
             break
@@ -467,9 +522,10 @@ def train(model, dataset, epochs=100, device="cuda"):
             loss.backward()
             grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            scheduler.step()
 
             with torch.no_grad():
-                mask = audio_target != 1024
+                mask = audio_target != model.config.audio_padding_idx
                 preds = logits.argmax(dim=-1)
                 total_correct += ((preds == audio_target) & mask).sum().item()
                 total_tokens += mask.sum().item()
@@ -496,21 +552,18 @@ def train(model, dataset, epochs=100, device="cuda"):
         stats.metadata["learning_rate"] = optimizer.param_groups[0]["lr"]
         stats.metadata["tokens_seen"] = total_tokens
         stats.metadata["batches"] = num_batches
-        _save_checkpoint(sbx, model, optimizer, stats)
-        try:
-            sample_path = f"generated/hello_{epoch}.wav"
-            gen_metrics = generate_audio(model, "Hello world.", sample_path)
-            stats.metadata.update(gen_metrics)
-            step_dir = os.path.join(sbx.base_name, f"step_{stats.steps}")
-            sbx.save_bytes(sbx._serialize_json(stats), os.path.join(step_dir, "stats.json"))
-            _save_sample(sbx, sample_path, stats)
-        except Exception as e:
-            print(f"generate_audio failed: {e}", flush=True)
+        if stopped or epoch == epochs - 1 or time.time() - last_checkpoint >= checkpoint_interval:
+            _save_checkpoint(sbx, model, optimizer, stats)
+            last_checkpoint = time.time()
 
     print(f"Training slot done at step={global_step}", flush=True)
 
 
 import os
+import warnings
+
+warnings.filterwarnings("ignore", message=".*weight_norm.*is deprecated.*", category=FutureWarning)
+
 from encodec import EncodecModel
 from g2p_en import G2p
 import torchaudio
@@ -525,110 +578,7 @@ def generate_audio(
     model = model.to(device)
     model.eval()
 
-    g2p = G2p()
-    special_tokens = ["<pad>", "<bos>", "<eos>", "<unk>", " "]
-    arpabet = [
-        "AA",
-        "AE",
-        "AH",
-        "AO",
-        "AW",
-        "AY",
-        "B",
-        "CH",
-        "D",
-        "DH",
-        "EH",
-        "ER",
-        "EY",
-        "F",
-        "G",
-        "HH",
-        "IH",
-        "IY",
-        "JH",
-        "K",
-        "L",
-        "M",
-        "N",
-        "NG",
-        "OW",
-        "OY",
-        "P",
-        "R",
-        "S",
-        "SH",
-        "T",
-        "TH",
-        "UH",
-        "UW",
-        "V",
-        "W",
-        "Y",
-        "Z",
-        "ZH",
-        "AA0",
-        "AA1",
-        "AA2",
-        "AE0",
-        "AE1",
-        "AE2",
-        "AH0",
-        "AH1",
-        "AH2",
-        "AO0",
-        "AO1",
-        "AO2",
-        "AW0",
-        "AW1",
-        "AW2",
-        "AY0",
-        "AY1",
-        "AY2",
-        "EH0",
-        "EH1",
-        "EH2",
-        "ER0",
-        "ER1",
-        "ER2",
-        "EY0",
-        "EY1",
-        "EY2",
-        "IH0",
-        "IH1",
-        "IH2",
-        "IY0",
-        "IY1",
-        "IY2",
-        "OW0",
-        "OW1",
-        "OW2",
-        "OY0",
-        "OY1",
-        "OY2",
-        "UH0",
-        "UH1",
-        "UH2",
-        "UW0",
-        "UW1",
-        "UW2",
-    ]
-    punctuation = list(".,!?;:'-\"")
-    tokens = special_tokens + arpabet + punctuation
-    token_to_id = {t: i for i, t in enumerate(tokens)}
-
-    phonemes = g2p(text)
-    ids = [token_to_id["<bos>"]]
-    for p in phonemes:
-        if p in token_to_id:
-            ids.append(token_to_id[p])
-        elif p.strip() == "":
-            ids.append(token_to_id[" "])
-        else:
-            ids.append(token_to_id["<unk>"])
-    ids.append(token_to_id["<eos>"])
-
-    text_tokens = torch.tensor([ids], device=device)
+    text_tokens = text_to_tokens(text, device=device)
 
     model.eval()
     with torch.no_grad():
@@ -636,18 +586,39 @@ def generate_audio(
             text_tokens, max_len=max_len, temperature=temperature
         )
 
+    return _decode_audio(audio_tokens, output_path, model.config)
+
+
+def text_to_tokens(text, device="cpu"):
+    char_to_id = {" ": 40, ".": 41, ",": 42, "!": 43, "?": 44, ";": 45,
+                  ":": 46, "'": 47, "-": 48, '"': 49}
+    for i in range(26):
+        char_to_id[chr(ord("a") + i)] = 4 + i
+    bos, eos, unk = 1, 2, 3
+    ids = [bos]
+    for c in text.lower():
+        ids.append(char_to_id.get(c, unk))
+    ids.append(eos)
+    return torch.tensor([ids], device=device)
+
+
+def _decode_audio(audio_tokens, output_path, config):
     encodec = EncodecModel.encodec_model_24khz()
     encodec.eval()
 
-    codes = audio_tokens[0, 1:]
-    eos_mask = codes == 1026
+    nq = config.audio_num_codebooks
+    cb = config.audio_codebook_size
+    eos_token = config.audio_padding_idx + 2
+
+    toks = audio_tokens[0, 1:]
+    eos_mask = toks == eos_token
     did_stop = bool(eos_mask.any())
     if did_stop:
-        codes = codes[: eos_mask.nonzero()[0, 0]]
-    gen_len = int(codes.numel())
+        toks = toks[: eos_mask.nonzero()[0, 0]]
+    gen_len = int(toks.numel())
     if gen_len > 0:
-        unique_ratio = float(codes.unique().numel()) / gen_len
-        repeat_ratio = float((codes[1:] == codes[:-1]).sum().item()) / max(gen_len - 1, 1)
+        unique_ratio = float(toks.unique().numel()) / gen_len
+        repeat_ratio = float((toks[1:] == toks[:-1]).sum().item()) / max(gen_len - 1, 1)
     else:
         unique_ratio = 0.0
         repeat_ratio = 0.0
@@ -658,22 +629,28 @@ def generate_audio(
         "gen_unique_ratio": unique_ratio,
         "gen_repeat_ratio": repeat_ratio,
     }
-    codes = codes.clamp(0, 1023)
-    codes = codes.unsqueeze(0).unsqueeze(0).cpu()
 
+    toks = toks[: gen_len // nq * nq]
+    codes = toks.reshape(-1, nq).T
+    codes = codes - (torch.arange(nq, device=codes.device)[:, None] * cb)
+    codes = codes.clamp(0, cb - 1)
+    codes = codes.unsqueeze(0).cpu()
+
+    if os.environ.get("TTS_COARSE_ONLY") == "1":
+        codes[:, 1:, :] = 0
+    encodec.set_target_bandwidth(nq * 0.75)
     with torch.no_grad():
         audio = encodec.decode([(codes, None)])
 
     sf.write(output_path, audio[0].cpu().numpy().T, 24000)
     print(f"Saved {output_path} {gen_metrics}")
-    model = model.train()
     return gen_metrics
 
 
 if __name__ == "__main__":
     dataset = WebDataloader(
         base_url=os.environ["WEB_DATALOADER"],
-        dataset_name="ljspeech_tts",
+        dataset_name="ljspeech_tts_v2",
         columns=["text_tokens", "audio_tokens"],
         split="train",
         batch_size=1,
@@ -685,6 +662,8 @@ if __name__ == "__main__":
             text_padding_idx=dataset.info["training_metadata"]["text_padding_idx"],
             audio_vocab_size=dataset.info["training_metadata"]["audio_vocab_size"],
             audio_padding_idx=dataset.info["training_metadata"]["audio_padding_idx"],
+            audio_num_codebooks=dataset.info["training_metadata"].get("audio_num_codebooks", 1),
+            audio_codebook_size=dataset.info["training_metadata"].get("audio_codebook_size", 1024),
         )
     )
     train(
