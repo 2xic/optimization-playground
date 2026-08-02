@@ -18,6 +18,7 @@ WARMUP_CLAMP_ENABLED = False
 
 FINETUNE_DATASET_NAMES = [
     "smoltalk-256",
+    "smoltalk2-sft-256",
     "everyday-conversations-256",
     "self-oss-instruct-sc2-H4-256",
 ]

@@ -309,3 +309,24 @@ class AdamWOptimizerWrapper(torch.optim.AdamW):
             if all_params:
                 torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
         return super().step(closure)
+
+
+@dataclass
+class AdamW8bitConfig(BaseOptimizerConfig):
+    lr: float = 3e-4
+    max_grad_norm: float = 0
+    betas: tuple = (BETA_1, BETA_2)
+    eps: float = 1e-8
+    weight_decay: float = 0.01
+
+    def _build_optimizer(self, params):
+        import bitsandbytes as bnb
+
+        opt = bnb.optim.AdamW8bit(
+            params,
+            lr=self.lr,
+            betas=self.betas,
+            eps=self.eps,
+            weight_decay=self.weight_decay,
+        )
+        return _attach_grad_clip(opt, self.max_grad_norm)

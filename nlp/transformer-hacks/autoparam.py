@@ -149,9 +149,9 @@ def _estimate_footprint_gb_meta(config, batch_size: int, num_gpus: int = 1) -> t
     grad_gb = num_params * 4 / GB / max(1, num_gpus)
 
     bytes_per_act = 4
-    attn_qkv = 4 * B * S * D * bytes_per_act
-    ffn_hidden = 3 * B * S * F * bytes_per_act
-    residual = 4 * B * S * D * bytes_per_act
+    attn_qkv = 2 * B * S * D * bytes_per_act
+    ffn_hidden = 2 * B * S * F * bytes_per_act
+    residual = B * S * D * bytes_per_act
     per_layer = attn_qkv + ffn_hidden + residual
     activation_gb = (L * per_layer + 2 * B * S * config.vocab_size * bytes_per_act) / GB
     return param_gb + optimizer_gb + grad_gb + activation_gb, num_params
@@ -1263,7 +1263,7 @@ class AutoparamLoopBase:
     INCLUDES_DATASET_NAME_IN_CONFIG = True
     BASELINE_BATCH_SIZE = 1
     OOM_MAX_RETRIES = 5
-    OOM_BATCH_FLOOR = 4
+    OOM_BATCH_FLOOR = 1
 
     def __init__(
         self,
@@ -1280,7 +1280,12 @@ class AutoparamLoopBase:
         init_from_path: Optional[str] = None,
         init_from_tag: Optional[str] = None,
         preset_config: Optional[dict] = None,
+        resume: bool = False,
+        resume_if_available: bool = False,
+        promote_tag: Optional[str] = None,
     ):
+        if promote_tag:
+            self.PROMOTE_NAMESPACE = promote_tag
         self.dataset = dataset
         self.init_from_path = init_from_path
         self.init_from_tag = init_from_tag
@@ -1318,6 +1323,20 @@ class AutoparamLoopBase:
             **ConfigSerializer.training_options_to_dict(baseline_opts),
         }
         self._post_init()
+        self.resume_requested = resume
+        self.resume_if_available = resume_if_available
+        self._resume_path = None
+        self._manifest_resumed = False
+        if self.resume_requested or self.resume_if_available:
+            from utils.load_mode_from_checkpoint import load_modeL_tag
+            tag = self._run_tag()
+            try:
+                self._resume_path = load_modeL_tag(tag)
+                self._log(f"resume: tag {tag} -> {self._resume_path}")
+            except Exception as e:
+                if self.resume_requested:
+                    raise SystemExit(f"--resume: no checkpoint for tag {tag!r}: {e}")
+                self._log(f"--resume-if-available: no tag {tag!r}; starting fresh")
 
     # ---- Hooks ----
     def _make_proposer(self, model: str):
@@ -1758,6 +1777,7 @@ class AutoparamLoopBase:
         if manifest is not None:
             self._resume_from_manifest(manifest)
             start_id = len(self.state.experiments)
+            self._manifest_resumed = True
 
         import itertools
         loop_range = itertools.count(start_id) if self.max_experiments is None else range(start_id, start_id + self.max_experiments)
@@ -1932,6 +1952,8 @@ class AutoparamLoopBase:
                 config_data["init_from_path"] = self.init_from_path
             if self.init_from_tag:
                 config_data["init_from_tag"] = self.init_from_tag
+            if self._resume_path and not self._manifest_resumed:
+                config_data["resume_from_path"] = self._resume_path
             config_data.update(self._extra_config_data())
 
             prev_runid = self._read_tag_runid()
@@ -2082,6 +2104,21 @@ if __name__ == "__main__":
         default=None,
         help="Path to a JSON config to force-train (bypasses proposer/dedup)",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume this flavor's latest tagged checkpoint (weights+optimizer+step)",
+    )
+    parser.add_argument(
+        "--resume-if-available",
+        action="store_true",
+        help="Resume this flavor's latest tag if it exists, else start fresh (scheduler-safe)",
+    )
+    parser.add_argument(
+        "--promote-tag",
+        default=os.environ.get("PROMOTE_TAG"),
+        help="Override the checkpoint namespace this run promotes best/latest into",
+    )
     args = parser.parse_args()
 
     if args.check_spend:
@@ -2113,4 +2150,7 @@ if __name__ == "__main__":
         init_from_path=args.init_from_path,
         init_from_tag=args.init_from_tag,
         preset_config=preset_config,
+        resume=args.resume,
+        resume_if_available=args.resume_if_available,
+        promote_tag=args.promote_tag,
     ).run()

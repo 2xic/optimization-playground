@@ -46,4 +46,5 @@ def build_and_run(cfg, rank, log):
 
 
 if __name__ == "__main__":
-    run(build_and_run, log_tag="dist")
+    from torch.distributed.elastic.multiprocessing.errors import record
+    record(run)(build_and_run, log_tag="dist")

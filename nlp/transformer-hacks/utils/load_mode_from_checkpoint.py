@@ -28,15 +28,18 @@ class BestModelResult:
             self.path = path
 
 
-def load_modeL_tag(name):
+def load_modeL_tag(name, filename=None):
+    filename = filename or os.environ.get("PRETRAIN_TAG_FILE", "latest.json")
     storage = StorageBox(
         host=os.environ["CHECKPOINT_STORAGE_BOX_HOST"],
         username=os.environ["CHECKPOINT_STORAGE_BOX_USERNAME"],
         password=os.environ["CHECKPOINT_STORAGE_BOX_PASSWORD"],
     )
     tag_file = json.loads(
-        storage.load_bytes(os.path.join("checkpoints", "tags", name, "latest.json"))
+        storage.load_bytes(os.path.join("checkpoints", "tags", name, filename))
     )
+    if "path" not in tag_file and isinstance(tag_file.get("pointer"), dict):
+        return tag_file["pointer"]["path"]
     return tag_file["path"]
 
 

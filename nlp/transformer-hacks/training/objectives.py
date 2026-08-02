@@ -30,12 +30,14 @@ class NextTokenPrediction(BaseObjective):
         vocab_size: int,
         sampler: Optional[Callable[[torch.Tensor], torch.Tensor]],
         label_smoothing: float = 0.0,
+        top_k: int = 5,
     ):
         super().__init__()
         self.padding_index = padding_index
         self.vocab_size = vocab_size
         self.sampler = sampler
         self.label_smoothing = label_smoothing
+        self.top_k = top_k
 
     def forward(self, y_predicted: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         flat_pred = y_predicted.view(-1, y_predicted.shape[-1])[..., :self.vocab_size]
@@ -85,11 +87,16 @@ class NextTokenPrediction(BaseObjective):
         """
         y_pred_flat = y_predicted.view(-1, y_predicted.shape[-1])[..., :self.vocab_size]
         y_flat = y.view(-1)
-
-        y_sample = self.sampler(y_pred_flat)
         valid_mask = y_flat != self.padding_index
 
-        correct_predictions = (y_sample == y_flat) & valid_mask
+        k = min(self.top_k, y_pred_flat.shape[-1])
+        if k <= 1:
+            y_sample = self.sampler(y_pred_flat)
+            correct_predictions = (y_sample == y_flat) & valid_mask
+        else:
+            topk = y_pred_flat.topk(k, dim=-1).indices
+            correct_predictions = (topk == y_flat.unsqueeze(-1)).any(dim=-1) & valid_mask
+
         accuracy = correct_predictions.sum()
         total_valid_tokens = valid_mask.sum()
         return accuracy, total_valid_tokens

@@ -74,6 +74,7 @@ class Results:
     step_val_accuracy: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
     step_val_loss: MinMaxAvgArray = field(default_factory=MinMaxAvgArray)
     val_at_step: list[int] = field(default_factory=list)
+    peak_memory_mb: float = 0.0
 
     @property
     def has_step_data(self):
@@ -192,6 +193,100 @@ def plot_scaling_laws(points: list[dict], file_path: str):
     ax.grid(True, which="both", alpha=0.3)
     ax.legend()
     print(f"Output: {file_path}.png")
+    plt.savefig(f"{file_path}.png")
+    plt.close("all")
+
+
+def plot_accuracy_loss_memory(results: dict[str, Results], file_path: str):
+    has_steps = any(v.has_step_data for v in results.values())
+    x_label = "Recorded step (sampled)" if has_steps else "Epoch"
+    _, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(30, 8))
+    colors = ["blue", "green", "red", "yellow", "orange", "purple"]
+
+    for index, (key, value) in enumerate(results.items()):
+        color = colors[index % len(colors)]
+        if value.has_step_data:
+            _plot_series(ax1, key, color, value.step_accuracy, epoch_markers=value.accuracy, epoch_positions=value.epoch_at_step)
+            _plot_series(ax2, key, color, value.step_loss, epoch_markers=value.loss, epoch_positions=value.epoch_at_step, smooth=True)
+        else:
+            _plot_series(ax1, key, color, value.accuracy)
+            _plot_series(ax2, key, color, value.loss, smooth=True)
+        ax3.bar(str(key), value.peak_memory_mb, color=color, alpha=0.7, label=key)
+        ax3.text(index, value.peak_memory_mb, f"{value.peak_memory_mb:.0f}", ha="center", va="bottom")
+
+    ax1.set_xlabel(x_label)
+    ax1.set_ylabel("Accuracy")
+    ax1.set_title("Accuracy")
+    ax1.legend(loc="lower right")
+
+    ax2.set_xlabel(x_label)
+    ax2.set_ylabel("Loss")
+    ax2.set_title("Loss")
+    ax2.legend(loc="upper right")
+
+    ax3.set_ylabel("Peak GPU memory (MB)")
+    ax3.set_title("Peak GPU memory")
+    ax3.set_xticks(range(len(results)))
+    ax3.set_xticklabels(list(results.keys()), rotation=45, ha="right")
+    ax3.legend(loc="upper right")
+
+    file_path = file_path.split(".")[0]
+    print(f"Output: {file_path}.png")
+    plt.tight_layout()
+    plt.savefig(f"{file_path}.png")
+    plt.close("all")
+
+
+def plot_scaling_laws_compute(budgets: dict[str, list[dict]], file_path: str):
+    _, ax = plt.subplots(figsize=(10, 7))
+    colors = ["blue", "green", "red", "orange", "purple", "brown"]
+    min_x, min_y = [], []
+    for i, (budget_label, pts) in enumerate(sorted(budgets.items())):
+        pts = [p for p in pts if p.get("val_loss")]
+        if not pts:
+            continue
+        pts.sort(key=lambda p: p["params"])
+        color = colors[i % len(colors)]
+        xs = np.array([p["params"] for p in pts])
+        ys = np.array([p["val_loss"] for p in pts])
+        ax.plot(xs, ys, marker="o", color=color, label=budget_label, alpha=0.7)
+        j = int(np.argmin(ys))
+        ax.scatter([xs[j]], [ys[j]], color=color, s=160, marker="*", zorder=6, edgecolors="black")
+        min_x.append(xs[j])
+        min_y.append(ys[j])
+    if len(min_x) >= 2:
+        order = np.argsort(min_x)
+        mx = np.array(min_x)[order]
+        my = np.array(min_y)[order]
+        ax.plot(mx, my, color="black", linestyle="--", label="compute-optimal frontier")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("Params (N)")
+    ax.set_ylabel("Val loss")
+    ax.set_title("Fixed compute: val loss vs params")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend()
+    file_path = file_path.split(".")[0]
+    print(f"Output: {file_path}.png")
+    plt.tight_layout()
+    plt.savefig(f"{file_path}.png")
+    plt.close("all")
+
+
+def plot_memory_usage(results: dict[str, Results], file_path: str):
+    keys = list(results.keys())
+    mem = [results[k].peak_memory_mb for k in keys]
+    _, ax = plt.subplots(figsize=(max(8, len(keys) * 1.5), 6))
+    bars = ax.bar([str(k) for k in keys], mem, alpha=0.7, color="teal")
+    for b, m in zip(bars, mem):
+        ax.text(b.get_x() + b.get_width() / 2, m, f"{m:.0f}", ha="center", va="bottom")
+    ax.set_ylabel("Peak GPU memory (MB)")
+    ax.set_title("Peak GPU memory usage")
+    ax.set_xticks(range(len(keys)))
+    ax.set_xticklabels([str(k) for k in keys], rotation=45, ha="right")
+    file_path = file_path.split(".")[0]
+    print(f"Output: {file_path}.png")
+    plt.tight_layout()
     plt.savefig(f"{file_path}.png")
     plt.close("all")
 

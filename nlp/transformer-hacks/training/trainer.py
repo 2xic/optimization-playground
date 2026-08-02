@@ -15,6 +15,7 @@ from tqdm import tqdm
 from dataclasses import dataclass, field
 from enum import Enum
 import os
+import math
 import time
 import shutil
 from abc import ABC
@@ -152,6 +153,7 @@ class TrainingOptions:
     epoch_callback: Optional[Callable[[EpochData], None]] = None
     batch_callback: Optional[Callable[[BatchData], None]] = None
     training_timeout_minutes: Optional[int] = None
+    max_steps: Optional[int] = None
     # Optimizer configuration
     lr_scheduler: Optional[Scheduler] = None
     optimizer: BaseOptimizerConfig = field(default_factory=AdamConfig)
@@ -293,6 +295,11 @@ class BaseTrainer(ABC):
             training_options.metadata.plots.record_val(
                 loss=avg_loss, accuracy=acc_pct, train_step=self.total_batch_num
             )
+            print(
+                f"[val] step={self.total_batch_num} loss={avg_loss:.4f} "
+                f"ppl={math.exp(min(avg_loss, 20)):.2f} top{getattr(objective, 'top_k', 1)}_acc={acc_pct:.2f}%",
+                flush=True,
+            )
         finally:
             if was_training:
                 model.train()
@@ -364,6 +371,7 @@ class BaseTrainer(ABC):
                 avg_loss = sum_loss / max(epoch_batch_count, 1)
                 postfix = {
                     "loss": f"{avg_loss:.2f}",
+                    "ppl": f"{math.exp(min(avg_loss, 20)):.1f}",
                     "acc": f"{acc_pct:.1f}%",
                     "batch": f"{loader._batches_consumed}/{loader.total_batches}",
                     "time": f"{self.trained_minutes}/{training_options.training_timeout_minutes}m",
@@ -502,6 +510,8 @@ class BaseTrainer(ABC):
         return loss, 0, 0
 
     def has_timeout(self, training_options: TrainingOptions):
+        if training_options.max_steps is not None and self.total_batch_num >= training_options.max_steps:
+            return True
         if training_options.training_timeout_minutes is None:
             return False
         training_time = self.trained_minutes
@@ -557,6 +567,7 @@ class Trainer(BaseTrainer):
                 self.model.to(training_options.device)
                 self.optimizer = training_options.optimizer.create_optimizer(self.model.parameters())
                 if self.lr_scheduler is not None:
+                    self.lr_scheduler.last_epoch = -1
                     self.lr_scheduler.create_scheduler(self.optimizer)
             else:
                 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
@@ -722,7 +733,7 @@ class GradScalerTrainer(Trainer):
         if self.use_fsdp:
             self._original_model.to(training_options.device)
         else:
-            self._original_model.to(training_options.device).to(self.type)
+            self._original_model.to(training_options.device)
         il_dtype = None if self.use_fsdp else self.type
         self._maybe_init_rho_loss(training_options, main_model=self._original_model, dtype=il_dtype)
         apply_runtime_optimizations()
@@ -732,7 +743,8 @@ class GradScalerTrainer(Trainer):
     def maybe_compile(self, training_options: TrainingOptions):
         can_compile = shutil.which("cc") or shutil.which("gcc")
         fsdp_compile_disabled = self.use_fsdp and os.environ.get("DISABLE_FSDP_COMPILE") == "1"
-        if can_compile and torch.cuda.is_available() and not fsdp_compile_disabled:
+        compile_disabled = os.environ.get("DISABLE_TORCH_COMPILE") == "1"
+        if can_compile and torch.cuda.is_available() and not fsdp_compile_disabled and not compile_disabled:
             if supports_torch_compile(training_options.device):
                 try:
                     compiled = torch.compile(self.model, dynamic=not self.static_shapes)

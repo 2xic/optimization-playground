@@ -284,8 +284,8 @@ class WebDataloader:
                     response.raise_for_status()
                     content = await response.read()
                 return self._decode_binary(content)
-            except Exception:
-                logger.exception("Cache fetch failed for url=%s", url)
+            except Exception as exc:
+                logger.warning("Cache fetch failed (%s): %s", type(exc).__name__, url)
                 return self._empty_batch()
 
         url = f"{self.base_url}/datasets/{self.dataset_name}/{self.split}/get?start={start_idx}&end={end_idx}&columns={columns}"
@@ -316,8 +316,8 @@ class WebDataloader:
 
             return result
 
-        except Exception:
-            logger.exception("Fetch failed for url=%s", url)
+        except Exception as exc:
+            logger.warning("Fetch failed (%s): %s", type(exc).__name__, url)
             return self._empty_batch()
 
     def _decode_binary(self, content):

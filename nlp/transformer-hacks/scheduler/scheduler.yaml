@@ -70,7 +70,7 @@ jobs:
     gpus: 1
     slot_minutes: 60
     pass_nproc_per_node: false
-    enabled: true
+    enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
   - name: tts-ljspeech-burst
@@ -83,22 +83,22 @@ jobs:
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
       TRAINING_TIME_MINUTES: "1435"
-  - name: pretrain
-    script: autoparam.py
-    args: ["--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
-    gpus: -1
-    slot_minutes: 1200
-    env:
-      AUTOPARAM_FORCE_CHECKPOINT: "1"
-      TRAINING_TIME_MINUTES: "1195"
   - name: finetune
     script: autoparam_finetune.py
-    args: ["--pretrain-tag", "autoparam-fineweb-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    args: ["--pretrain-tag", "autoparam-pretrain", "--use-best", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
     gpus: -1
     slot_minutes: 240
+    enabled: false
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
-      TRAINING_TIME_MINUTES: "235"
+  - name: pretrain
+    script: autoparam.py
+    args: ["--dataset", "fineweb-mix-256", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 1200
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
   - name: preset-baseline
     script: autoparam.py
     args: ["--preset-config", "presets/baseline_fineweb.json", "--max-experiments", "1", "--random-only", "--max-consecutive-failures", "5"]
@@ -117,3 +117,44 @@ jobs:
     env:
       AUTOPARAM_FORCE_CHECKPOINT: "1"
       TRAINING_TIME_MINUTES: "1195"
+  - name: v100-finetune
+    script: autoparam_finetune.py
+    args: ["--pretrain-tag", "autoparam-finetune", "--use-best", "--distributed-strategy", "fsdp", "--max-experiments", "1", "--random-only", "--max-consecutive-failures", "5"]
+    gpus: -1
+    slot_minutes: 240
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "235"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      TRAINER_STATIC_SHAPES: "1"
+  - name: v100-pretrain
+    script: autoparam.py
+    args: ["--preset-config", "presets/v100_pretrain.json", "--distributed-strategy", "fsdp", "--promote-tag", "llama-v100", "--max-experiments", "1", "--random-only", "--max-consecutive-failures", "5"]
+    gpus: -1
+    slot_minutes: 1200
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"
+      TRAINING_TIME_MINUTES: "1195"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      TRAINER_STATIC_SHAPES: "1"
+  - name: adam-8bit
+    script: experiments.py
+    args: []
+    gpus: 2
+    slot_minutes: 90
+    launcher: ["torchrun", "--nproc-per-node=2"]
+    pass_nproc_per_node: false
+    enabled: true
+    env:
+      EXPERIMENT: adam_8bit
+      TARGET_DATASET: fineweb-256
+      PARALLEL_STRATEGY: "DDP"
+      NUM_PROCESS: "2"
+      BATCH_SIZE: "16"
+      ADAM8BIT_MINUTES: "15"
+      TRAINER_STATIC_SHAPES: "1"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      NCCL_P2P_DISABLE: "1"
+      NCCL_IB_DISABLE: "1"

@@ -11,36 +11,80 @@ jobs:
     weight: 5
     slot_minutes: 15
     pass_nproc_per_node: false
-    enabled: true
+    enabled: false
     env:
       EXPERIMENT: qk_norm
       TARGET_DATASET: fineweb-256
       NUM_PROCESS: "2"
       BATCH_SIZE: "32"
-      TRAINING_TIME_MINUTES: "5"
+      TRAINING_TIME_MINUTES: "15"
   - name: attention-residuals
     script: experiments.py
     args: []
     gpus: 2
     slot_minutes: 15
     pass_nproc_per_node: false
-    enabled: true
+    enabled: false
     env:
       EXPERIMENT: attention_residuals
-      TARGET_DATASET: medium-web
+      TARGET_DATASET: fineweb-256
       NUM_PROCESS: "2"
       BATCH_SIZE: "128"
-      TRAINING_TIME_MINUTES: "5"
+      TRAINING_TIME_MINUTES: "15"
   - name: residual-connections
     script: experiments.py
     args: []
     gpus: 2
     slot_minutes: 15
     pass_nproc_per_node: false
-    enabled: true
+    enabled: false
     env:
       EXPERIMENT: residual_connections
-      TARGET_DATASET: medium-web
+      TARGET_DATASET: fineweb-256
       NUM_PROCESS: "2"
       BATCH_SIZE: "128"
-      TRAINING_TIME_MINUTES: "5"
+      TRAINING_TIME_MINUTES: "15"
+  - name: scaling-laws-tokens
+    script: experiments.py
+    args: []
+    gpus: 2
+    slot_minutes: 1440
+    launcher: ["torchrun", "--nproc-per-node=2"]
+    pass_nproc_per_node: false
+    enabled: false
+    env:
+      EXPERIMENT: scaling_laws_tokens
+      TARGET_DATASET: fineweb-256
+      PARALLEL_STRATEGY: "FSDP"
+      NUM_PROCESS: "2"
+      BATCH_SIZE: "32"
+      SCALING_TOKENS_PER_MODEL: "30000000"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      NCCL_P2P_DISABLE: "1"
+      NCCL_IB_DISABLE: "1"
+  - name: scaling-laws-compute
+    script: experiments.py
+    args: []
+    gpus: 2
+    slot_minutes: 1440
+    launcher: ["torchrun", "--nproc-per-node=2"]
+    pass_nproc_per_node: false
+    enabled: true
+    env:
+      EXPERIMENT: scaling_laws_compute
+      TARGET_DATASET: fineweb-256
+      PARALLEL_STRATEGY: "DDP"
+      NUM_PROCESS: "2"
+      BATCH_SIZE: "32"
+      SCALING_COMPUTE_BUDGETS: "3e14,1e15,3e15"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      NCCL_P2P_DISABLE: "1"
+      NCCL_IB_DISABLE: "1"
+  - name: feedback
+    script: autoparam_feedback.py
+    args: ["--dataset", "feedback-256-v2", "--version", "v2", "--pretrain-tag", "autoparam-pretrain", "--state-file", "autoparam_feedback_v2_state.json", "--max-experiments", "10000", "--budget", "5.00", "--max-consecutive-failures", "5", "--random-only"]
+    gpus: -1
+    slot_minutes: 120
+    enabled: false
+    env:
+      AUTOPARAM_FORCE_CHECKPOINT: "1"

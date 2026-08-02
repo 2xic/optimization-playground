@@ -45,10 +45,11 @@ def _parse_and_init_dist(result_path_holder: list) -> tuple[argparse.Namespace, 
         cfg = json.load(f)
 
     rank = int(os.environ.get("RANK", "0"))
+    local_rank = int(os.environ.get("LOCAL_RANK", rank))
     try:
-        dist.init_process_group("nccl", timeout=timedelta(seconds=120))
+        torch.cuda.set_device(local_rank)
+        dist.init_process_group("nccl", timeout=timedelta(seconds=120), device_id=torch.device(f"cuda:{local_rank}"))
         rank = dist.get_rank()
-        torch.cuda.set_device(rank)
     except Exception as e:
         if rank == 0:
             with open(args.result, "w") as f:
@@ -264,6 +265,13 @@ def apply_resume(cfg, model, training_options, log=None):
         return None
     from utils.load_mode_from_checkpoint import load_raw_from_path
     model_state, optimizer_state, stats = load_raw_from_path(path)
+    msd = model.state_dict()
+    bad = [k for k, v in model_state.items() if k not in msd or msd[k].shape != v.shape]
+    missing = [k for k in msd if k not in model_state]
+    if bad or missing:
+        raise RuntimeError(
+            f"resume arch mismatch for {path}: {len(bad)} incompatible, {len(missing)} missing keys"
+        )
     model.load_state_dict(model_state)
     step = int(stats.get("steps", 0))
     sched = getattr(training_options, "lr_scheduler", None)

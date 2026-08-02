@@ -8,7 +8,7 @@ from training.model import (
     SamplingMethod,
 )
 from training.layers_mixture_of_experts import MoE
-from utils.plot import plot_accuracy_loss, plot_scaling_laws, Results, MinMaxAvgArray
+from utils.plot import plot_accuracy_loss, plot_scaling_laws, plot_accuracy_loss_memory, Results, MinMaxAvgArray
 from training.trainer import Trainer, GradScalerTrainer
 from tqdm import tqdm
 import os
@@ -16,6 +16,7 @@ from training.objectives import NextTokenPrediction, BinaryFeedbackClassificatio
 from training.optimizer import (
     AdamConfig,
     AdamWConfig,
+    AdamW8bitConfig,
     RMSpropConfig,
     NoamScheduler,
     MuonConfig,
@@ -28,6 +29,7 @@ from optimization_playground_shared.nlp.utils.sampling import (
     argmax_sampling,
 )
 import time
+import json
 import torch.multiprocessing as mp
 import torch
 from utils.web_dataloader import WebDataloader, FloatColumn
@@ -183,6 +185,20 @@ NAMED_DATASETS = {
         ),
         WebDataloader(
             os.environ["WEB_DATALOADER"],
+            "fineweb-edu-256",
+            batch_size=_batch_size(32),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
+            "smoltalk2-sft-256",
+            batch_size=_batch_size(110),
+            rank=rank,
+            world_size=world_size,
+        ),
+        WebDataloader(
+            os.environ["WEB_DATALOADER"],
             "feedback_256",
             columns=["input_ids", FloatColumn("feedback")],
             batch_size=_batch_size(64),
@@ -248,6 +264,12 @@ NAMED_DATASETS = {
     ]
 }
 
+_fineweb_mix = WebDataloaderMixture(
+    [NAMED_DATASETS["fineweb-256"], NAMED_DATASETS["fineweb-edu-256"]]
+)
+_fineweb_mix.name = "fineweb-mix-256"
+NAMED_DATASETS[_fineweb_mix.name] = _fineweb_mix
+
 DATASETS = [NAMED_DATASETS[target] for target in TARGET_DATASET.split(",")]
 
 
@@ -300,6 +322,7 @@ def create_next_token_prediction_objective(
             vocab_size=dataset.vocab_size,
             sampler=sampler,
             label_smoothing=getattr(model.config, "label_smoothing", 0.0),
+            top_k=int(os.environ.get("EVAL_TOP_K", "5")),
         ),
         optimizer,
         lr_scheduler=lr_scheduler,
@@ -368,6 +391,10 @@ def execute(
     val_steps_loss = MinMaxAvgArray()
     val_at_step_out: list = []
     trainer = None
+    peak_memory_mb = 0.0
+    _mem_device = getattr(options, "device", None)
+    if torch.cuda.is_available() and _mem_device is not None:
+        torch.cuda.reset_peak_memory_stats(_mem_device)
     if options.val_loader is None and options.val_interval_steps > 0:
         try:
             from utils.web_dataloader import WebDataloader
@@ -424,6 +451,8 @@ def execute(
         traceback.print_exc()
         raise
     finally:
+        if torch.cuda.is_available() and _mem_device is not None:
+            peak_memory_mb = torch.cuda.max_memory_allocated(_mem_device) / 1024**2
         if trainer is not None:
             trainer.metrics_tracker.close()
         if not (dist.is_initialized() and options.distributed_strategy == DistributedStrategy.FSDP):
@@ -441,6 +470,7 @@ def execute(
         step_val_accuracy=val_steps_accuracy,
         step_val_loss=val_steps_loss,
         val_at_step=val_at_step_out,
+        peak_memory_mb=peak_memory_mb,
     )
     return experiment_variant, result
 
@@ -504,6 +534,10 @@ class ExperimentDistributed:
             plot_accuracy_loss(
                 self.experiments, get_output_path(self.dataset.name, name)
             )
+
+    def plot_loss_memory(self, name):
+        if dist.get_rank() == 0:
+            plot_accuracy_loss_memory(self.experiments, get_output_path(self.dataset.name, name))
 
     def plot_tag(self, name):
         if dist.get_rank() == 0:
@@ -614,6 +648,13 @@ class ExperimentMultiProcess:
             self.pool.close()
             self.pool.join()
         plot_accuracy_loss(self.experiments, get_output_path(self.dataset.name, name))
+
+    def plot_loss_memory(self, name):
+        self._execute_plots()
+        if self.pool is not None:
+            self.pool.close()
+            self.pool.join()
+        plot_accuracy_loss_memory(self.experiments, get_output_path(self.dataset.name, name))
 
     def plot_tag(self, name):
         self._execute_plots()
@@ -1357,25 +1398,81 @@ def ff_scaling():
     experiment.plot("ff_scaling.png")
 
 
+def adam_8bit():
+    dataset = NAMED_DATASETS["fineweb-256"]
+    experiment = get_experiment_instance(dataset)
+    base = create_default_config(dataset)
+    minutes = int(os.environ.get("ADAM8BIT_MINUTES", "15"))
+    scales = [
+        ("small_d512_l8", 512, 8),
+        ("large_d768_l12", 768, 12),
+    ]
+    optimizers = [
+        ("adamw", AdamWConfig(lr=3e-4, max_grad_norm=1.0)),
+        ("adamw8bit", AdamW8bitConfig(lr=3e-4, max_grad_norm=1.0)),
+    ]
+    for scale_name, dim, layers in scales:
+        for opt_name, optimizer in optimizers:
+            config = Config(
+                sequence_length=base.sequence_length,
+                vocab_size=base.vocab_size,
+                dim_embeddings=dim,
+                num_attention_heads=max(1, dim // 64),
+                num_transformer_layers=layers,
+                padding_index=base.padding_index,
+                positional_embedding=base.positional_embedding,
+                transformer_layer=base.transformer_layer,
+                feed_forward_layer=base.feed_forward_layer,
+                dropout=base.dropout,
+            )
+            options = TrainingOptions(
+                epochs=EPOCHS,
+                batch_size=_batch_size(16),
+                training_timeout_minutes=minutes,
+                optimizer=optimizer,
+                lr_scheduler=WarmupExpDecay(
+                    warmup_steps=200, decay_steps=50000, min_lr_ratio=0.01
+                ),
+                record_interval_steps=100,
+            )
+            experiment.queue(
+                LazyModelConstruction(config),
+                f"{scale_name}_{opt_name}",
+                training_options=options,
+            )
+    experiment.plot_loss_memory("adam_8bit.png")
+
+
 def scaling_laws():
     from autoparam_executor_lib import tail_mean, VAL_WINDOW_FRAC
     dataset = NAMED_DATASETS["fineweb-256"]
-    experiment = ExperimentMultiProcess(dataset)
+    experiment = get_experiment_instance(dataset)
 
     base = create_default_config(dataset)
     head_dim = 64
     sizes = [
+        ("d64_l3", 64, 3),
+        ("d96_l3", 96, 3),
         ("d128_l4", 128, 4),
+        ("d160_l5", 160, 5),
+        ("d192_l5", 192, 5),
         ("d256_l6", 256, 6),
+        ("d320_l7", 320, 7),
         ("d384_l8", 384, 8),
-        ("d512_l10", 512, 10),
-        ("d768_l12", 768, 12),
     ]
-    budget_minutes = int(os.environ.get("SCALING_MINUTES_PER_MODEL", 0)) * len(sizes) \
-        or int(os.environ.get("TRAINING_TIME_MINUTES", 60))
-    minutes = max(1, budget_minutes // len(sizes))
+    minutes = int(os.environ.get("SCALING_MINUTES_PER_MODEL", 0)) or None
+    target_tokens = int(os.environ.get("SCALING_TOKENS_PER_MODEL", 200_000_000))
+    per_step_tokens = dataset.batch_size * base.sequence_length
+    max_steps = max(1, target_tokens // per_step_tokens)
+    limit = int(os.environ.get("SCALING_MODELS_PER_RUN", 0)) or len(sizes)
+    trained_this_run = 0
     meta = {}
     for label, dim, layers in sizes:
+        cache_path = get_output_path(dataset.name, f"scaling_cache/{label}.json")
+        if os.path.exists(cache_path):
+            continue
+        if trained_this_run >= limit:
+            break
         heads = max(1, dim // head_dim)
         variant_config = Config(
             sequence_length=base.sequence_length,
@@ -1393,9 +1490,10 @@ def scaling_laws():
             epochs=EPOCHS,
             batch_size=dataset.batch_size,
             training_timeout_minutes=minutes,
+            max_steps=max_steps,
             optimizer=AdamConfig(lr=3e-3, max_grad_norm=1.0),
             lr_scheduler=WarmupExpDecay(
-                warmup_steps=2000, decay_steps=50000, min_lr_ratio=0.01
+                warmup_steps=200, decay_steps=50000, min_lr_ratio=0.01
             ),
             record_interval_steps=100,
             val_interval_steps=250,
@@ -1405,27 +1503,52 @@ def scaling_laws():
         params = sum(p.numel() for p in m.parameters())
         del m
         torch.cuda.empty_cache()
-        meta[label] = {
+        md = {
             "params": params,
             "seq_len": variant_config.sequence_length,
             "batch_size": options.batch_size,
             "accum": options.accumulation_steps,
             "record_interval": options.record_interval_steps,
+            "val_interval": options.val_interval_steps,
         }
+        meta[label] = md
         experiment.queue(
             LazyModelConstruction(variant_config), label, training_options=options
         )
+        trained_this_run += 1
+        if rank == 0:
+            result = experiment.experiments[label]
+            os.makedirs(os.path.dirname(cache_path), exist_ok=True)
+            with open(cache_path, "w") as f:
+                json.dump({
+                    "meta": md,
+                    "train_losses": [c.mean for c in result.step_loss.min_max_avg],
+                    "val_losses": [c.mean for c in result.step_val_loss.min_max_avg],
+                }, f)
     experiment.plot("scaling_laws_curves.png")
 
+    if rank != 0:
+        return
+
+    meta = {}
     points = []
-    for label, result in experiment.experiments.items():
-        val_losses = [c.mean for c in result.step_val_loss.min_max_avg]
+    curves = {}
+    for label, _, _ in sizes:
+        cache_path = get_output_path(dataset.name, f"scaling_cache/{label}.json")
+        if not os.path.exists(cache_path):
+            continue
+        with open(cache_path) as f:
+            cached = json.load(f)
+        md = cached["meta"]
+        meta[label] = md
+        val_losses = cached["val_losses"]
+        train_losses = cached["train_losses"]
         if not val_losses:
             continue
-        md = meta[label]
+        tok_per_step = md["batch_size"] * md["accum"] * md["seq_len"]
         final_loss = tail_mean(val_losses, VAL_WINDOW_FRAC)
-        steps = len(result.step_loss.min_max_avg) * md["record_interval"]
-        tokens = steps * md["batch_size"] * md["accum"] * md["seq_len"]
+        steps = len(train_losses) * md["record_interval"]
+        tokens = steps * tok_per_step
         points.append({
             "label": label,
             "params": md["params"],
@@ -1433,6 +1556,26 @@ def scaling_laws():
             "val_loss": final_loss,
             "flops": 6 * md["params"] * tokens,
         })
+        curves[label] = {
+            "params": md["params"],
+            "train": [
+                {"step": (i + 1) * md["record_interval"],
+                 "tokens": (i + 1) * md["record_interval"] * tok_per_step,
+                 "loss": c,
+                 "flops": 6 * md["params"] * (i + 1) * md["record_interval"] * tok_per_step}
+                for i, c in enumerate(train_losses)
+            ],
+            "val": [
+                {"step": (i + 1) * md["val_interval"],
+                 "tokens": (i + 1) * md["val_interval"] * tok_per_step,
+                 "loss": c,
+                 "flops": 6 * md["params"] * (i + 1) * md["val_interval"] * tok_per_step}
+                for i, c in enumerate(val_losses)
+            ],
+        }
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    with open(get_output_path(dataset.name, f"scaling_laws_{stamp}.json"), "w") as f:
+        json.dump({"points": points, "curves": curves, "meta": meta}, f, indent=2)
     plot_scaling_laws(points, get_output_path(dataset.name, "scaling_laws.png"))
 
 
@@ -1501,6 +1644,7 @@ EXPERIMENTS = {
         embedding_scaling,
         ff_scaling,
         scaling_laws,
+        adam_8bit,
         long_running_training_v2,
     )
 }
@@ -1523,7 +1667,9 @@ if __name__ == "__main__":
         print("Debug mode enabled")
         torch.autograd.set_detect_anomaly(True)
     if IS_RUNNING_DISTRIBUTED:
-        dist.init_process_group("nccl")
+        local_rank = int(os.environ.get("LOCAL_RANK", os.environ.get("RANK", 0)))
+        torch.cuda.set_device(local_rank)
+        dist.init_process_group("nccl", device_id=torch.device(f"cuda:{local_rank}"))
     else:
         mp.set_start_method("spawn")
     train()

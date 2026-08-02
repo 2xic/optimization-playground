@@ -45,6 +45,7 @@ load_dotenv()
 
 RSYNC_MAX_ATTEMPTS = 5
 RSYNC_BACKOFF_BASE = 3.0
+RSYNC_NO_RETRY_CODES = {23, 24}
 
 
 def _run_rsync_with_retry(cmd, env, label):
@@ -55,6 +56,12 @@ def _run_rsync_with_retry(cmd, env, label):
             return
         except subprocess.CalledProcessError as e:
             last = e
+            if e.returncode in RSYNC_NO_RETRY_CODES:
+                print(
+                    f"[rsync] {label} failed (exit {e.returncode}, missing/vanished source) — not retrying",
+                    flush=True,
+                )
+                break
             if attempt == RSYNC_MAX_ATTEMPTS:
                 break
             delay = RSYNC_BACKOFF_BASE * (2 ** (attempt - 1))

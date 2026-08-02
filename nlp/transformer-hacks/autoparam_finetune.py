@@ -233,6 +233,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--max-consecutive-failures", type=int, default=5)
     parser.add_argument("--random-only", action="store_true")
+    parser.add_argument("--use-best", action="store_true",
+                        help="Resolve pretrain tag via best.json instead of latest.json")
     parser.add_argument("--check-spend", action="store_true")
     parser.add_argument(
         "--timeout-minutes", type=int,
@@ -248,6 +250,9 @@ if __name__ == "__main__":
         else:
             print(f"OpenRouter spend today: ${daily:.4f}")
         sys.exit(0)
+
+    if args.use_best:
+        os.environ["PRETRAIN_TAG_FILE"] = "best.json"
 
     init_tag = _resolve_init_tag(args)
     try:
